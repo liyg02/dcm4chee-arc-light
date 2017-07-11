@@ -47,6 +47,30 @@ export class StatisticsComponent implements OnInit {
     searchlist = "";
     elasticSearchIsRunning = true;
     dialogRef: MdDialogRef<any>;
+    activeTimeRange = "quick";
+    quickMode = "today";
+    quickModeOptions = [
+        {
+            value:"today",
+            label:"Today"
+        },
+        {
+            value:"thisweek",
+            label:"This week"
+        },
+        {
+            value:"thismonth",
+            label:"This month"
+        },
+        {
+            value:"last3month",
+            label:"Last 3 months"
+        },
+        {
+            value:"thisyear",
+            label:"This year"
+        }
+    ]
     constructor(
         private service:StatisticsService,
         public viewContainerRef: ViewContainerRef,
@@ -55,6 +79,10 @@ export class StatisticsComponent implements OnInit {
         public cfpLoadingBar: SlimLoadingBarService
     ) { }
 
+    ngOnInit() {
+        this.setTodayDate();
+        this.init(2);
+    }
     studyDateTimeChanged(e, mode){
         this.range[mode] = e;
     }
@@ -64,15 +92,44 @@ export class StatisticsComponent implements OnInit {
             to: undefined
         };
     }
-    ngOnInit() {
-        let $this = this;
-        var d = new Date();
+    changeActiveTimeRange(rangeType){
+        this.activeTimeRange = rangeType;
+        this.setTodayDate();
+    }
+
+
+    quickDateChange(mode){
+        let d = new Date();
+        switch(this.quickMode) {
+            case "thisweek":
+                console.log("d.getDay() ",d.getDate() );
+                d.setDate(d.getDate() - 7);
+                break;
+            case "thismonth":
+                console.log("d.getMonth() ",d.getMonth() );
+                d.setMonth(d.getMonth() - 1);
+                break;
+            case "last3month":
+                console.log("d.getMonth() ",d.getMonth() );
+                d.setMonth(d.getMonth() - 3);
+                break;
+            case "thisyear":
+                console.log("d.getFullYear() ",d.getFullYear() );
+                d.setFullYear(d.getFullYear() - 1);
+                break;
+            default:
+                console.log("d.getDate() ",d.getDate() );
+                d.setDate(d.getDate() - 1);
+        }
+        this.range.from = d;
+        this.range.to = new Date();
+    }
+    setTodayDate(){
+        let d = new Date();
         d.setDate(d.getDate() - 1);
         this.range.from = d;
         this.range.to = new Date();
-        this.init(2);
     }
-
     init(retries){
         let $this = this;
         this.service.checkIfElasticSearchIsRunning().subscribe(

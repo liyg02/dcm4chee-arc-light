@@ -5,6 +5,7 @@
 
 $green :#2FA6C1;
 $lightBlue:rgba(6, 29, 47, 0.84);
+$darkBlue:rgba(6, 29, 47, 0.94);
 $extremeLightBlue:rgba(55, 79, 96, 0.84);
 $lightBlueNoTransparence:#2c404f;
 $blue:#061d2f;
@@ -632,6 +633,26 @@ md-dialog-container{
     .help-block{
       color:#6d0000 !important;
     }
+  }
+}
+.btn-radio{
+  -webkit-border-radius:0;
+  -moz-border-radius:0;
+  border-radius:0;
+  border:1px solid $lightBlue;
+  color:black;
+  background: white;
+  &.active{
+    background:$lightBlue;
+    color: white;
+    &:hover{
+      background:$lightBlue;
+      color: white;
+    }
+  }
+  &:hover{
+    background:$darkBlue;
+    color: white;
   }
 }
 .queues,.monitoring{
@@ -1684,6 +1705,9 @@ md-dialog-container{
       }
     }
   }
+}
+.statistics .table_block .header{
+  margin-bottom: 0px;
 }
 .diagram_content{
   float: left;

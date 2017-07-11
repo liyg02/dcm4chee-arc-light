@@ -14,9 +14,17 @@
             <div class="main_filter_block">
                 <div class="col-md-3 block-1-1">
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">From date/time:</label>
+                        <label class="col-md-6 control-label">Time range</label>
+                        <label class="col-md-6 control-label">Date/time:</label>
+                    </div>
+                    <div class="row">
                         <div class="col-md-6">
+                            <button class="btn btn-radio submit col-md-12" title="Refresh" (click)="changeActiveTimeRange('quick')"
+                                    [ngClass]="{active: activeTimeRange === 'quick'}">Quick</button>
+                        </div>
+                        <div class="col-md-6" title="Start date/time">
                             <p-calendar
+                                    *ngIf="activeTimeRange === 'absolute'"
                                     [(ngModel)]="range.from"
                                     dateFormat="yy-mm-dd"
                                     showTime="showTime"
@@ -27,12 +35,18 @@
                                     placeholder="Start date/time"
                                     (ngModelChange)="studyDateTimeChanged($event,'from')"
                             ></p-calendar>
+                            <md-select *ngIf="activeTimeRange === 'quick'" [(ngModel)]="quickMode" (change)="quickDateChange($event)" placeholder="Quick time range" floatPlaceholder="never">
+                                <md-option value="{{modes.value}}" *ngFor="let modes of quickModeOptions">{{modes.label}}</md-option>
+                            </md-select>
                         </div>
                     </div>
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">To date/time:</label>
                         <div class="col-md-6">
+                            <button class="btn btn-radio submit col-md-12" [ngClass]="{active: activeTimeRange === 'absolute'}" (click)="changeActiveTimeRange('absolute')" title="Refresh">Absolute</button>
+                        </div>
+                        <div class="col-md-6" title="End date/time">
                             <p-calendar
+                                    *ngIf="activeTimeRange === 'absolute'"
                                     [(ngModel)]="range.to"
                                     dateFormat="yy-mm-dd"
                                     showTime="showTime"
@@ -43,10 +57,12 @@
                                     placeholder="End date/time"
                                     (ngModelChange)="studyDateTimeChanged($event,'to')"
                             ></p-calendar>
+
                         </div>
                     </div>
                 </div>
-                <div class="col-md-3 block-2-1 block_half">
+                <div class="col-md-3 block-1-1 block_half">
+                    <div class="row"></div>
                     <div class="row">
                         <div class="col-md-12">
                         </div>
