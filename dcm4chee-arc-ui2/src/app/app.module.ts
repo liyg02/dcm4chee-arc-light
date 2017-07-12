@@ -66,6 +66,8 @@ import {ChartsModule} from "ng2-charts";
 import { StatisticsComponent } from './monitoring/statistics/statistics.component';
 import {StatisticsService} from "./monitoring/statistics/statistics.service";
 import {DiffDetailViewService} from "./widgets/dialogs/diff-detail-view/diff-detail-view.service";
+import { LifecycleManagementComponent } from './pro/lifecycle-management/lifecycle-management.component';
+import { MonitoringTabsComponent } from './monitoring/monitoring-tabs.component';
 
 @NgModule({
     declarations: [
@@ -107,7 +109,9 @@ import {DiffDetailViewService} from "./widgets/dialogs/diff-detail-view/diff-det
         CustomValidatorDirective,
         StorageSystemsComponent,
         DiffProComponent,
-        StatisticsComponent
+        StatisticsComponent,
+        LifecycleManagementComponent,
+        MonitoringTabsComponent
     ],
     imports: [
         BrowserModule,
@@ -143,6 +147,7 @@ import {DiffDetailViewService} from "./widgets/dialogs/diff-detail-view/diff-det
             { path: 'monitoring/storage-systems', component: StorageSystemsComponent },
             { path: 'monitoring/diff', component: DiffProComponent },
             { path: 'monitoring/statistics', component: StatisticsComponent },
+            { path: 'monitoring/lifecycle-management', component: LifecycleManagementComponent },
             { path: 'device/devicelist', component: DevicesComponent },
             { path: 'device/aelist', component: AeListComponent },
             { path: 'device/edit/:device', component: DeviceConfiguratorComponent },
