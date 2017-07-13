@@ -68,6 +68,7 @@ import {StatisticsService} from "./monitoring/statistics/statistics.service";
 import {DiffDetailViewService} from "./widgets/dialogs/diff-detail-view/diff-detail-view.service";
 import { LifecycleManagementComponent } from './pro/lifecycle-management/lifecycle-management.component';
 import { MonitoringTabsComponent } from './monitoring/monitoring-tabs.component';
+import {LifecycleManagementService} from "./pro/lifecycle-management/lifecycle-management.service";
 
 @NgModule({
     declarations: [
@@ -179,7 +180,8 @@ import { MonitoringTabsComponent } from './monitoring/monitoring-tabs.component'
         WindowRefService,
         StudiesService,
         StatisticsService,
-        DiffDetailViewService
+        DiffDetailViewService,
+        LifecycleManagementService
     ],
     bootstrap: [AppComponent]
 })

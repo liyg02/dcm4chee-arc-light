@@ -1,3 +1,307 @@
-<p>
-  lifecycle-management works!
-</p>
+<div class="main_content monitoring lifecycle_management">
+    <monitoring-tabs></monitoring-tabs>
+    <div class="tab-content">
+        <div class="row filter">
+            <div class="main_filter_block">
+                <div class="col-md-3 block-1-1">
+                    <div class="row">
+                        <label class="col-md-6 text-right control-label">AET:</label>
+                        <div class="col-md-6">
+                            <md-select [(ngModel)]="aet" class="col-md-12">
+                                <md-option *ngFor="let ae of aets" [value]="ae.title" title="{{ae.description}}">{{ ae.title }}</md-option>
+                            </md-select>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <input id="PatientName" type="text" [(ngModel)]="filters.PatientName" placeholder="Patient name" title="Patient name" class="col-md-12" />
+                        </div>
+                        <div class="col-md-6">
+                            <label>
+                                <input type="checkbox" [(ngModel)]="filters.fuzzymatching"> Fuzzy Matching
+                            </label>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <input id="PatientID" type="text" [(ngModel)]="filters.PatientID" placeholder="Patient ID" title="Patient ID" class="col-md-12" />
+                        </div>
+                        <div class="col-md-6">
+                            <input autocomplete="off" id="IssuerOfPatientID" [disabled]="disabled.IssuerOfPatientID" type="text" [(ngModel)]="filters.IssuerOfPatientID" placeholder="Issuer of patient" title="Issuer of patient" class="col-md-12" (click)="conditionWarning($event, !filters.PatientID, 'Patient ID is empty, set first the patient ID!')" (keyup)="conditionWarning($event, !filters.PatientID, 'Patient ID is empty, set first the patient ID!')" />
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 block-1-1">
+                    <div class="row">
+                        <label class="col-md-6 text-right control-label">Start date:</label>
+                        <div class="col-md-6">
+                            <p-calendar
+                                    [(ngModel)]="StudyDateTime.from"
+                                    dateFormat="yy-mm-dd"
+                                    hourFormat="24"
+                                    monthNavigator="true"
+                                    yearNavigator="true"
+                                    yearRange="1800:2100"
+                                    placeholder="Start date"
+                                    (ngModelChange)="studyDateTimeChanged($event,'from')"
+                            ></p-calendar>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <label class="col-md-6 text-right control-label">End date:</label>
+                        <div class="col-md-6">
+                            <p-calendar
+                                    [(ngModel)]="StudyDateTime.to"
+                                    dateFormat="yy-mm-dd"
+                                    hourFormat="24"
+                                    monthNavigator="true"
+                                    yearNavigator="true"
+                                    yearRange="1800:2100"
+                                    placeholder="End date"
+                                    (ngModelChange)="studyDateTimeChanged($event,'to')"
+                            ></p-calendar>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3 block-2-1 block_half">
+                    <div class="row" title="(found / limit)">
+                        <span *ngIf="count" class="diff_count">
+                            {{count}} / {{filters.limit}}
+                        </span>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
+                            <button class="btn btn-default submit col-md-12" (click)="search()" title="Refresh">
+                                <span class="glyphicon glyphicon-refresh"></span>
+                                SUBMIT
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <a class="clearform_button" title="Clear all filters" href="" (click)="$event.preventDefault();clearForm()">
+                    Clear <span class="glyphicon glyphicon-remove"></span>
+                </a>
+            </div>
+            <!--            <div class="diff_more_filters">
+                            <a href="" (click)="$event.preventDefault();advancedConfig=true" *ngIf="!advancedConfig" class="more">Extended search<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                            <a href="" (click)="$event.preventDefault();advancedConfig=false" *ngIf="advancedConfig" class="more ng-hide">Close extended search<i class="glyphicon glyphicon-triangle-top"></i></a>
+                        </div>-->
+            <div *ngIf="advancedConfig" class="ng-hide">
+                <div class="row ng-hide filter hidden_filters" *ngIf="advancedConfig">
+                    <div class="col-md-3 block-2-1" >
+                        <div class="row">
+                            <div class="col-md-12">
+                                <!--<input id="dicomDeviceName" type="text" [(ngModel)]="homeAet" placeholder="Home AET" title="Home AET:" class="col-md-12" />-->
+                                <label class="col-md-6 text-right control-label">AET:</label>
+                                <div class="col-md-6">
+                                    <md-select [(ngModel)]="aet" class="col-md-12">
+                                        <md-option *ngFor="let ae of aets" [value]="ae.title" title="{{ae.description}}">{{ ae.title }}</md-option>
+                                    </md-select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="PatientName" type="text" [(ngModel)]="filters.PatientName" placeholder="Patient name" title="Patient name" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <label>
+                                    <input type="checkbox" [(ngModel)]="filters.fuzzymatching"> Fuzzy Matching
+                                </label>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="PatientID" type="text" [(ngModel)]="filters.PatientID" placeholder="Patient ID" title="Patient ID" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input autocomplete="off" id="IssuerOfPatientID" [disabled]="disabled.IssuerOfPatientID" type="text" [(ngModel)]="filters.IssuerOfPatientID" placeholder="Issuer of patient" title="Issuer of patient" class="col-md-12" (click)="conditionWarning($event, !filters.PatientID, 'Patient ID is empty, set first the patient ID!')" (keyup)="conditionWarning($event, !filters.PatientID, 'Patient ID is empty, set first the patient ID!')" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="AccessionNumber" type="text" [(ngModel)]="filters.AccessionNumber" placeholder="Accession number" title="Accession number" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="LocalNamespaceEntityID" type="text" [disabled]="disabled.LocalNamespaceEntityID" [(ngModel)]="filters['IssuerOfAccessionNumberSequence.LocalNamespaceEntityID']" placeholder="Issuer of accession number" title="Issuer of accession number" class="col-md-12"  (keyup)="conditionWarning($event, !filters.AccessionNumber, 'Accession Number is empty, set first the Accession Number!')" (click)="conditionWarning($event, !filters.AccessionNumber, 'Accession Number is empty, set first the Accession Number!')"/>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="StationName" type="text" [(ngModel)]="filters.StationName" placeholder="Station Name" title="Station Name" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="ReferringPhysicianName" type="text" [(ngModel)]="filters.ReferringPhysicianName" placeholder="Referring physician name" title="Referring physician name" class="col-md-12" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="dicomDeviceDescription" type="number" [(ngModel)]="filters.limit" placeholder="Limit" title="Limit" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+
+                                <input id="Modality" type="text" size="5"  [(ngModel)]="filters.ModalitiesInStudy" (click)="showModalitySelector = !showModalitySelector" placeholder="Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
+                                <div class="modality_selector [hidden]" *ngIf="showModalitySelector">
+                                    <a href="" (click)="showModalitySelector=false" class="close"><i class="glyphicon glyphicon-remove"></i></a>
+                                    <div class="common">
+                                        <a href="" *ngFor="let value of modalities.common | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
+                                    </div>
+                                    <button (click)="filters.ModalitiesInStudy='';showModalitySelector=false;" class="clear custom_button">Clear</button>
+                                    <!-- <div class="col-md-12"></div> -->
+                                    <a href="" (click)="$event.preventDefault();showMore=true" *ngIf="!showMore" class="more">more<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                                    <a href="" (click)="$event.preventDefault();showMore=false" *ngIf="showMore" class="more">less<i class="glyphicon glyphicon-triangle-top"></i></a>
+                                    <div class="more_block" *ngIf="showMore">
+                                        <a href="" *ngFor="let value of modalities.more | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
+                                        <div class="form-group">
+                                            <label>Custom modality code:</label>
+                                            <input [(ngModel)]="filters.ModalitiesInStudy" />
+                                            <button (click)="showModalitySelector=false" class="custom_button">Add</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <label>
+                                    Study created date/time:
+                                </label>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p-calendar (ngModelChange)="studyReceiveDateTimeChanged($event,'from')" [(ngModel)]="StudyReceiveDateTime.from" dateFormat="yy-mm-dd"  showTime="showTime" hourFormat="24" placeholder="from"></p-calendar>
+                            </div>
+                            <div class="col-md-6">
+                                <p-calendar (ngModelChange)="studyReceiveDateTimeChanged($event,'to')" [(ngModel)]="StudyReceiveDateTime.to" dateFormat="yy-mm-dd"  showTime="showTime" hourFormat="24" placeholder="to"></p-calendar>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input type="text" [(ngModel)]="filters.StudyInstanceUID" placeholder="Study Instance UID" title="Study instance UID" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <input type="text" [(ngModel)]="filters.StudyDescription" placeholder="Study Description" title="Study description" class="col-md-12" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="SeriesDescription" type="text" [(ngModel)]="filters.SeriesDescription" placeholder="Series Description" title="Series Description" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="StudyID" type="text" [(ngModel)]="filters.StudyID" placeholder="Study ID" title="Study ID" class="col-md-12" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="BodyPartExamined" type="text" [(ngModel)]="filters.BodyPartExamined" placeholder="Body Part Examined" title="Body Part Examined" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="SOPClassesInStudy" type="text" [(ngModel)]="filters.SOPClassesInStudy" placeholder="SOP classes in study" title="SOP classes in study" class="col-md-12 clearable" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 block-2-1">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="InstitutionName" type="text" [(ngModel)]="filters.InstitutionName" placeholder="Institution Name" title="Institution Name" class="col-md-12" />
+                            </div>
+                            <div class="col-md-6">
+                                <input id="SendingApplicationEntityTitleOfSeries" type="text" [(ngModel)]="filters.SendingApplicationEntityTitleOfSeries" placeholder="Sending Application Entity Title of Series" title="Sending Application Entity Title of Series" class="col-md-12 clearable" />
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <input id="InstitutionalDepartmentName" type="text" [(ngModel)]="filters.InstitutionalDepartmentName" placeholder="Institutional Department Name" title="Institutional Department Name" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-6">
+                                <!--<input id="StationName" type="text" [(ngModel)]="filters.StationName" placeholder="Station Name" title="Station Name" class="col-md-12" />-->
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="float_content">
+            <h2>
+                Lifecycle management
+            </h2>
+            <div class="bluebar" (click)="toggleBar('config')">
+                <span class="pull-left" >Lifecycle management configuration</span>
+            </div>
+            <div class="bluecontent config" *ngIf="toggle === 'config'">
+                <div class="dynamic_table ">
+                        Config part;
+                </div>
+            </div>
+            <div class="bluebar" (click)="toggleBar('expired')">
+                <span class="pull-left" >Expired studies</span>
+            </div>
+            <div class="bluecontent expired" *ngIf="toggle === 'expired'">
+                <div class="dynamic_table ">
+                    <div class="table_header">
+                        <div class="th" *ngFor="let header of table" title="{{header.description}}" [ngStyle]="{width: header.calculatedWidth}">
+                            <ng-container *ngIf="header.code != 'menu'">
+                                {{header.title}}
+                            </ng-container>
+                            <ng-container *ngIf="header.code === 'menu'">
+                                &nbsp;
+                            </ng-container>
+                        </div>
+                    </div>
+                    <div class="table_body">
+                        <div class="tr" *ngFor="let study of expiredStudies">
+                            <div class="td" *ngFor="let table_element of table" [ngStyle]="{width: table_element.calculatedWidth}">
+                                <ng-container *ngIf="table_element.code != 'menu'">
+                                    <span *ngIf="_.hasIn(study[table_element.code],'Value[0].Alphabetic')">{{study[table_element.code]?.Value[0].Alphabetic || ''}}</span>
+                                    <span *ngIf="!_.hasIn(study[table_element.code],'Value[0].Alphabetic') && _.hasIn(study[table_element.code],'Value[0]')">{{study[table_element.code]?.Value[0] || ''}}</span>
+                                </ng-container>
+                                <ng-container *ngIf="table_element.code === 'menu'">
+                                    <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">history</i></a>
+                                </ng-container>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="bluebar" (click)="toggleBar('all')">
+                <span class="pull-left" >All studies</span>
+            </div>
+            <div class="bluecontent all" *ngIf="toggle === 'all'">
+                <div class="dynamic_table ">
+                    <div class="table_header">
+                        <div class="th" *ngFor="let header of table" title="{{header.description}}" [ngStyle]="{width: header.calculatedWidth}">
+                            <ng-container *ngIf="header.code != 'menu'">
+                                {{header.title}}
+                            </ng-container>
+                            <ng-container *ngIf="header.code === 'menu'">
+                                &nbsp;
+                            </ng-container>
+                        </div>
+                    </div>
+                    <div class="table_body">
+                        <div class="tr" *ngFor="let study of allStudies">
+                            <div class="td" *ngFor="let table_element of table" [ngStyle]="{width: table_element.calculatedWidth}">
+                                <ng-container *ngIf="table_element.code != 'menu'">
+                                    <span *ngIf="_.hasIn(study[table_element.code],'Value[0].Alphabetic')">{{study[table_element.code]?.Value[0].Alphabetic || ''}}</span>
+                                    <span *ngIf="!_.hasIn(study[table_element.code],'Value[0].Alphabetic') && _.hasIn(study[table_element.code],'Value[0]')">{{study[table_element.code]?.Value[0] || ''}}</span>
+                                </ng-container>
+                                <ng-container *ngIf="table_element.code === 'menu'">
+                                    <a title="Set expired date" (click)="setExpiredDate(study)"><i class="material-icons">history</i></a>
+                                </ng-container>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

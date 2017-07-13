@@ -1,8 +1,56 @@
 import { Injectable } from '@angular/core';
+import {AppService} from "../../app.service";
+import {Http} from "@angular/http";
+import {WindowRefService} from "../../helpers/window-ref.service";
 
 @Injectable()
 export class LifecycleManagementService {
 
-  constructor() { }
+    constructor(
+        private $http:Http,
+        private mainservice:AppService,
+    ) { }
+    _config(params) {
+        return '?' + jQuery.param(params);
+    };
 
+    getStudies(aet, params, expired){
+        if(expired){
+            params['expired'] = params['expired'] || true;
+        }else{
+            params['expired'] = params['expired'] || false;
+            params['expired'] = false;
+        }
+        let url;
+        url =  `../aets/${aet}/rs/studies${this._config(params)}`;
+        return  this.$http.get(url).map(res => {
+            let resjson;
+            try{
+                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                if(pattern.exec(res.url)){
+                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                }
+                resjson = res.json();
+            }catch (e){
+                resjson = {};
+            }
+            return resjson;
+        });
+    }
+    getAets(){
+        return this.$http.get('../aets')
+            .map(res => {
+                let resjson;
+                try{
+                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                    if(pattern.exec(res.url)){
+                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                    }
+                    resjson = res.json();
+                }catch (e){
+                    resjson = {};
+                }
+                return resjson;
+            });
+    };
 }
