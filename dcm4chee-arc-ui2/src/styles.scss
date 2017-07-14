@@ -1815,7 +1815,18 @@ md-dialog-container{
     overflow: auto;
   }
 }
-.diff_count{
+.diff_count {
   float: right;
-  margin-right:20px;
+  margin-right: 20px;
+}
+.dropdownSearch{
+  position: absolute;
+  height: 28px;
+  -webkit-box-shadow: 3px 5px 5px rgba(0, 0, 0, 0.45);
+  -moz-box-shadow: 3px 5px 5px rgba(0, 0, 0, 0.45);
+  box-shadow: 3px 5px 5px rgba(0, 0, 0, 0.45);
+  width: 60%;
+  border: none;
+  top: -31px;
+  left: 1px;
 }
