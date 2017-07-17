@@ -1817,6 +1817,37 @@ md-dialog-container{
     font-size: 31px;
   }
 }
+.lifecycle_management{
+  .filter.row{
+    margin-left: 0;
+    border: 1px solid #ccc;
+    padding: 37px 15px 5px 15px;
+    border-top: none;
+  }
+  .filter .main_filter_block{
+    width:95%;
+  }
+  .block-1-1,.block-2-1,.block-1-2{
+    width: 26%;
+  }
+  .morefunctionblock{
+    width:26%;
+    .more{
+      width:46%;
+    }
+  }
+  .filters.hidden_filters{
+    padding: 0 16px;
+    float: left;
+    width: 92%;
+  }
+  .input-group{
+    padding-top: 4px;
+    input.inputpart{
+      width: 74%;
+    }
+  }
+}
 .diff,.statistics,.lifecycle_management{
   float: left;
   .diff_more_filters{

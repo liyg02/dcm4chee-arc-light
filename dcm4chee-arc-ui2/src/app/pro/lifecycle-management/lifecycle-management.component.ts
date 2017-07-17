@@ -5,6 +5,8 @@ import {ConfirmComponent} from "../../widgets/dialogs/confirm/confirm.component"
 import {MdDialogConfig, MdDialog, MdDialogRef} from "@angular/material";
 import {DeviceConfiguratorService} from "../../device-configurator/device-configurator.service";
 import {AppService} from "../../app.service";
+import {DatePipe} from "@angular/common";
+import {Globalvar} from "../../constants/globalvar";
 
 
 @Component({
@@ -15,7 +17,7 @@ export class LifecycleManagementComponent implements OnInit {
     filters = {
         ExporterID: undefined,
         offset: undefined,
-        limit: 3000,
+        limit: 20,
         StudyUID: undefined,
         updatedBefore: undefined,
         dicomDeviceName: undefined,
@@ -40,6 +42,7 @@ export class LifecycleManagementComponent implements OnInit {
         InstitutionalDepartmentName:undefined,
         StationName:undefined,
         InstitutionName:undefined,
+        retrievefailed:undefined,
     };
     _ = _;
     aes;
@@ -63,14 +66,16 @@ export class LifecycleManagementComponent implements OnInit {
         from: undefined,
         to: undefined
     };
-    StudyDateTime = {
-        from: undefined,
-        to: undefined
-    };
+    studyDate: any = { from: this.getTodayDate(), to: this.getTodayDate(), toObject: new Date(), fromObject: new Date()};
+    studyTime: any = { from: '', to: ''};
     groups;
     groupObject;
     Object = Object;
     toggle = '';
+    getTodayDate() {
+        let todayDate = new Date();
+        return this.datePipe.transform(todayDate, 'yyyyMMdd');
+    }
     schema = {
         "title": "Study Retention Policy",
         "description": "Study Retention Policy",
@@ -223,15 +228,16 @@ export class LifecycleManagementComponent implements OnInit {
     allStudies;
     archiveDevice;
     StudyRetentionPolicy;
+    ExternalRetrieveAETchecked;
     dialogRef: MdDialogRef<any>;
-
     constructor(
         private service:LifecycleManagementService,
         public viewContainerRef: ViewContainerRef ,
         public dialog: MdDialog,
         public config: MdDialogConfig,
         public deviceConfigService:DeviceConfiguratorService,
-        public mainservice:AppService
+        public mainservice:AppService,
+        private datePipe:DatePipe
     ) { }
 
     ngOnInit() {
@@ -241,11 +247,86 @@ export class LifecycleManagementComponent implements OnInit {
         // this.getArchiveDevice();
         this.getArchiveDevice(4);
         this.formObj = this.deviceConfigService.convertSchemaToForm({}, this.schema, {});
+        this.modalities = Globalvar.MODALITIES;
     };
 
+    selectModality(key){
+        this.filters.ModalitiesInStudy = key;
+        // this.filters['ScheduledProcedureStepSequence.Modality'] = key;
+        $('.Modality').show();
+        this.showModalitySelector = false;
+    };
+    conditionWarning($event, condition, msg){
+        let id = $event.currentTarget.id;
+        let $this = this;
+        if (condition){
+            this.disabled[id] = true;
+            this.mainservice.setMessage({
+                'title': 'Warning',
+                'text': msg,
+                'status': 'warning'
+            });
+            setTimeout(function() {
+                $this.disabled[id] = false;
+            }, 100);
+        }
+    };
+    appendFilter(filter, key, range, regex) {
+        let value = range.from.replace(regex, '');
+        if (range.to !== range.from)
+            value += '-' + range.to.replace(regex, '');
+        if (value.length)
+            filter[key] = value;
+    }
+    clearForm(){
+        _.forEach(this.filters, (m, i) => {
+            if (i != 'orderby' && i != 'limit'){
+                this.filters[i] = '';
+            }
+        });
+        $('.single_clear').hide();
+        this.clearStudyDate();
+        // localStorage.setItem("dateset",false);
+        this.studyDateChanged();
+        this.studyTime.fromObject = null;
+        this.studyTime.toObject = null;
+        this.ExternalRetrieveAETchecked = null;
+        this.studyTime.from = '';
+        this.studyTime.to = '';
+        this.StudyReceiveDateTime.from = undefined;
+        this.StudyReceiveDateTime.to = undefined;
+        // this.birthDate = {};
+        // this.birthDate.object = null;
+        // this.birthDate.opened = false;
+    };
+    studyReceiveDateTimeChanged(e, mode){
+        this.filters['StudyReceiveDateTime'] = this.filters['StudyReceiveDateTime'] || {};
+        this['StudyReceiveDateTime'][mode] = e;
+        if (this.StudyReceiveDateTime.from && this.StudyReceiveDateTime.to){
+            let datePipeEn = new DatePipe('us-US');
+            this.filters['StudyReceiveDateTime'] = datePipeEn.transform(this.StudyReceiveDateTime.from, 'yyyyMMddHHmmss') + '-' + datePipeEn.transform(this.StudyReceiveDateTime.to, 'yyyyMMddHHmmss');
+        }
+    }
+    studyDateChanged(){
+        console.log('on studydate changed', this.studyDate);
+        if (this.studyDate.from === '' && this.studyDate.to === ''){
+            localStorage.setItem('dateset', 'no');
+        }else if (this.studyDate.from != '' && this.studyDate.to != ''){
+            localStorage.setItem('dateset', 'yes');
+        }
+    }
+    clearStudyDate(){
+        this.studyDate.fromObject = null;
+        this.studyDate.toObject = null;
+        this.studyDate.from = '';
+        this.studyDate.to = '';
+    }
     confirm(confirmparameters){
-        this.config.viewContainerRef = this.viewContainerRef;
-        this.dialogRef = this.dialog.open(ConfirmComponent, this.config);
+        // this.config.viewContainerRef = this.viewContainerRef;
+        this.dialogRef = this.dialog.open(ConfirmComponent, {
+            height: 'auto',
+            width: '550px'
+        });
         this.dialogRef.componentInstance.parameters = confirmparameters;
         return this.dialogRef.afterClosed();
     };
@@ -323,8 +404,25 @@ export class LifecycleManagementComponent implements OnInit {
             if(result){
                 console.log("result",result);
                 console.log("result",(typeof result.pCalendar[0]));
-                //TODO
-                _.set(study,"77771023.Value[0]",$this.dateToString(result.pCalendar[0]));
+                let dateAsString = $this.dateToString(result.pCalendar[0]);
+                $this.service.setExpiredDate($this.aet, _.get(study,"0020000D.Value[0]"), dateAsString).subscribe(
+                    (res)=>{
+                        _.set(study,"77771023.Value[0]",$this.dateToString(result.pCalendar[0]));
+                        $this.getStudies(true);
+                        $this.mainservice.setMessage( {
+                            'title': 'Info',
+                            'text': 'Expired date set successfully!',
+                            'status': 'info'
+                        });
+                    },
+                    (err)=>{
+                        $this.mainservice.setMessage( {
+                            'title': 'Error ' + err.status,
+                            'text': err.statusText,
+                            'status': 'error'
+                        });
+                    }
+                );
                 // study["77771023"].Value[0] = result.pCalendar[0];
             }
         });
@@ -352,6 +450,8 @@ export class LifecycleManagementComponent implements OnInit {
     }
     createStudyFilterParams() {
         let filter = Object.assign({}, this.filters);
+        this.appendFilter(filter, 'StudyDate', this.studyDate, /-/g);
+        this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
         return filter;
     };
 
