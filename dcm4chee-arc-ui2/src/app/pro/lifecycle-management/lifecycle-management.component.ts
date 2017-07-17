@@ -3,6 +3,8 @@ import * as _ from 'lodash';
 import {LifecycleManagementService} from "./lifecycle-management.service";
 import {ConfirmComponent} from "../../widgets/dialogs/confirm/confirm.component";
 import {MdDialogConfig, MdDialog, MdDialogRef} from "@angular/material";
+import {DeviceConfiguratorService} from "../../device-configurator/device-configurator.service";
+import {AppService} from "../../app.service";
 
 
 @Component({
@@ -69,6 +71,53 @@ export class LifecycleManagementComponent implements OnInit {
     groupObject;
     Object = Object;
     toggle = '';
+    schema = {
+        "title": "Study Retention Policy",
+        "description": "Study Retention Policy",
+        "type": "object",
+        "required": [
+            "cn",
+            "dcmRetentionPeriod",
+            "dcmRulePriority",
+            "dcmExpireSeriesIndividually"
+        ],
+        "properties": {
+            "cn": {
+                "title": "Name",
+                "description": "Arbitrary/Meaningful name of the Study Retention Policy",
+                "type": "string"
+            },
+            "dcmRetentionPeriod": {
+                "title": "Study Retention Period",
+                "description": "Study Retention Period in ISO-8601 period format PnYnMnD or PnW",
+                "type": "string",
+                "format": "dcmPeriod"
+            },
+            "dcmRulePriority": {
+                "title": "Rule Priority",
+                "description": "Rule Priority.",
+                "type": "integer",
+                "minimum": 0,
+                "default": 0
+            },
+            "dcmProperty": {
+                "title": "Property",
+                "description": "Property in format <name>=<value>",
+                "type": "array",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "dcmExpireSeriesIndividually": {
+                "title": "Expire Series Individually",
+                "description": "Indicates if series should be expired individually or not.",
+                "type": "boolean",
+                "default": false
+            }
+        }
+    };
+    formObj;
+    model = {};
     table = [
         {
             title:"&nbsp;",
@@ -147,20 +196,51 @@ export class LifecycleManagementComponent implements OnInit {
             calculatedWidth:"20%"
         }
     ];
+    retentionPolicyTable = [
+        {
+            title:"Name",
+            code:"cn",
+            description:"Name of the Study Retention Policy",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },
+        {
+            title:"Retention Period",
+            code:"dcmRetentionPeriod",
+            description:"Period of the Retention Policy",
+            widthWeight:1,
+            calculatedWidth:"20%"
+        },
+        {
+            title:"Properties",
+            code:"dcmProperty",
+            description:"Properties of Retention Policy",
+            widthWeight:3,
+            calculatedWidth:"20%"
+        }
+    ];
     expiredStudies;
     allStudies;
+    archiveDevice;
+    StudyRetentionPolicy;
     dialogRef: MdDialogRef<any>;
 
     constructor(
         private service:LifecycleManagementService,
         public viewContainerRef: ViewContainerRef ,
         public dialog: MdDialog,
-        public config: MdDialogConfig
+        public config: MdDialogConfig,
+        public deviceConfigService:DeviceConfiguratorService,
+        public mainservice:AppService
     ) { }
 
     ngOnInit() {
         this.getAets(2);
-        this.calculateWidthOfTable();
+        this.calculateWidthOfTable('table');
+        this.calculateWidthOfTable('retentionPolicyTable');
+        // this.getArchiveDevice();
+        this.getArchiveDevice(4);
+        this.formObj = this.deviceConfigService.convertSchemaToForm({}, this.schema, {});
     };
 
     confirm(confirmparameters){
@@ -179,6 +259,43 @@ export class LifecycleManagementComponent implements OnInit {
             ((date.getMonth() < 9) ? '0' + (date.getMonth() + 1) : (date.getMonth() + 1)) + '' +
             ((date.getDate() < 10) ? '0' + date.getDate() : date.getDate())
         );
+    }
+/*    getArchiveDevice(){
+        let $this = this;
+        this.service.getArchiveDevice().subscribe(
+            (archiveDevice)=>{
+                console.log("archiveDevice",archiveDevice);
+                $this.archiveDevice = archiveDevice;
+            },
+            (err)=>{
+                console.error("err",err);
+            }
+        );
+    }*/
+    getArchiveDevice(retries){
+        let $this = this;
+        if(!this.mainservice.deviceName){
+            if(retries){
+                console.log("retry",retries);
+                setTimeout(()=>{
+                    $this.getArchiveDevice(retries-1);
+                },400);
+            }
+        }else{
+            this.service.getArchiveDevice(this.mainservice.deviceName).subscribe((res)=>{
+                $this.archiveDevice = res;
+                if(_.hasIn(res,"dcmArchiveDevice.dcmStudyRetentionPolicy")){
+                    $this.StudyRetentionPolicy = _.get(res,"dcmArchiveDevice.dcmStudyRetentionPolicy");
+                    console.log("$this.StudyRetentionPolicy ",$this.StudyRetentionPolicy );
+                }
+            },(err)=>{
+                if(retries)
+                    $this.getArchiveDevice(retries-1);
+            });
+        }
+    }
+    submitFunction(event){
+        console.log("in submitFunction",event);
     }
     setExpiredDate(study){
         let $this = this;
@@ -238,12 +355,12 @@ export class LifecycleManagementComponent implements OnInit {
         return filter;
     };
 
-    calculateWidthOfTable(){
+    calculateWidthOfTable(tableName){
         let summ = 0;
-        _.forEach(this.table,(m,i)=>{
+        _.forEach(this[tableName],(m,i)=>{
             summ += m.widthWeight;
         });
-        _.forEach(this.table,(m,i)=>{
+        _.forEach(this[tableName],(m,i)=>{
             m.calculatedWidth =  ((m.widthWeight * 100)/summ)+"%";
         });
     };

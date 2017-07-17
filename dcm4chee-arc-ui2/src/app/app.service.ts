@@ -9,7 +9,6 @@ export class AppService implements OnInit, OnDestroy{
     private _user: User;
     private _global;
     subscription: Subscription;
-
     constructor(public $http: Http) {
         this.subscription = this.globalSet$.subscribe(obj => {
             console.log('globalset subscribe ', obj);
@@ -17,7 +16,8 @@ export class AppService implements OnInit, OnDestroy{
             console.log('globalafterset', this._global);
         });
     }
-
+    private _deviceName;
+    private _archiveDevice;
     get global() {
         return this._global;
     }
@@ -46,7 +46,23 @@ export class AppService implements OnInit, OnDestroy{
         }
     };
 
-    // Observable string sources
+    get deviceName() {
+        return this._deviceName;
+    }
+
+    set deviceName(value) {
+        this._deviceName = value;
+    }
+
+    get archiveDevice() {
+        return this._archiveDevice;
+    }
+
+    set archiveDevice(value) {
+        this._archiveDevice = value;
+    }
+
+// Observable string sources
     private setMessageSource = new Subject<string>();
     private setGlobalSource = new Subject<string>();
     private createPatientSource = new Subject<string>();

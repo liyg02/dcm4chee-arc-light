@@ -228,6 +228,19 @@
 
                 </div>
             </div>
+            <div class="morefunctionblock">
+                <a href="" (click)="$event.preventDefault();advancedConfig=true" *ngIf="!advancedConfig" class="more">More filters<i class="glyphicon glyphicon-triangle-bottom"></i></a>
+                <a href="" (click)="$event.preventDefault();advancedConfig=false" *ngIf="advancedConfig" class="more [hidden]">Close more filters<i class="glyphicon glyphicon-triangle-top"></i></a>
+                <div class="more functions">
+                    <div class="mainbutton" (click)="moreFunctionsButtons = !moreFunctionsButtons">
+                        <span *ngIf="!moreFunctionsButtons" >More configurations<i class="glyphicon glyphicon-triangle-bottom"></i></span>
+                        <span *ngIf="moreFunctionsButtons">Close more configurations<i class="glyphicon glyphicon-triangle-top"></i></span>
+                    </div>
+                    <ul *ngIf="moreFunctionsButtons">
+                        <li (click)="moreFunctionsButtons = false;setDicomOperations()" title="Set the C-MOVE SCP and STORE-SCP AETs">Add Study Retention Policy</li>
+                    </ul>
+                </div>
+            </div>
         </div>
 
         <div class="float_content">
@@ -239,7 +252,31 @@
             </div>
             <div class="bluecontent config" *ngIf="toggle === 'config'">
                 <div class="dynamic_table ">
-                        Config part;
+                    <!--<dynamic-form [formelements]="formObj" [model]="model" (submitFunction)="submitFunction($event)"></dynamic-form>-->
+                    <div class="dynamic_table ">
+                        <div class="table_header">
+                            <div class="th" *ngFor="let header of retentionPolicyTable" title="{{header.description}}" [ngStyle]="{width: header.calculatedWidth}">
+                                <ng-container *ngIf="header.code != 'menu'">
+                                    {{header.title}}
+                                </ng-container>
+                                <ng-container *ngIf="header.code === 'menu'">
+                                    &nbsp;
+                                </ng-container>
+                            </div>
+                        </div>
+                        <div class="table_body">
+                            <div class="tr" *ngFor="let retention of StudyRetentionPolicy">
+                                <div class="td" *ngFor="let table_element of retentionPolicyTable" [ngStyle]="{width: table_element.calculatedWidth}">
+                                    <ng-container *ngIf="table_element.code != 'menu'">
+                                        <span *ngIf="_.hasIn(retention,[table_element.code])">{{retention[table_element.code] || ''}}</span>
+                                    </ng-container>
+                                    <ng-container *ngIf="table_element.code === 'menu'">
+                                        <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">history</i></a>
+                                    </ng-container>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="bluebar" (click)="toggleBar('expired')">
@@ -266,6 +303,8 @@
                                 </ng-container>
                                 <ng-container *ngIf="table_element.code === 'menu'">
                                     <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">history</i></a>
+                                    <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">done</i></a>
+                                    <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">lock</i></a>
                                 </ng-container>
                             </div>
                         </div>
@@ -296,6 +335,8 @@
                                 </ng-container>
                                 <ng-container *ngIf="table_element.code === 'menu'">
                                     <a title="Set expired date" (click)="setExpiredDate(study)"><i class="material-icons">history</i></a>
+                                    <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">done</i></a>
+                                    <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">lock</i></a>
                                 </ng-container>
                             </div>
                         </div>

@@ -37,6 +37,23 @@ export class LifecycleManagementService {
             return resjson;
         });
     }
+    getArchiveDevice(deviceName) {
+        let $this = this;
+        return this.$http.get(`../devices/${deviceName}`)
+            .map(res => {
+                let resjson;
+                try {
+                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                    if (pattern.exec(res.url)) {
+                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                    }
+                    resjson = res.json();
+                } catch (e) {
+                    resjson = {};
+                }
+                return resjson;
+            });
+    }
     getAets(){
         return this.$http.get('../aets')
             .map(res => {
