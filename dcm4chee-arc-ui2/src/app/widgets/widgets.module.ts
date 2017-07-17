@@ -25,6 +25,7 @@ import { UploadFilesComponent } from './dialogs/upload-files/upload-files.compon
 import { HistogramDialogComponent } from './dialogs/histogram-dialog/histogram-dialog.component';
 import { DiffDetailViewComponent } from './dialogs/diff-detail-view/diff-detail-view.component';
 import { DicomOperationsComponent } from './dialogs/dicom-operations/dicom-operations.component';
+import { SpecificCharPickerComponent } from './specific-char-picker/specific-char-picker.component';
 
 
 @NgModule({
@@ -59,5 +60,6 @@ export const WidgetsComponents = [
     UploadFilesComponent,
     HistogramDialogComponent,
     DiffDetailViewComponent,
-    DicomOperationsComponent
+    DicomOperationsComponent,
+    SpecificCharPickerComponent
 ];
