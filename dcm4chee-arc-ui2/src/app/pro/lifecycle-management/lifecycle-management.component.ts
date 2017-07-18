@@ -7,6 +7,7 @@ import {DeviceConfiguratorService} from "../../device-configurator/device-config
 import {AppService} from "../../app.service";
 import {DatePipe} from "@angular/common";
 import {Globalvar} from "../../constants/globalvar";
+import {RetentionPolicyDialogComponent} from "../../widgets/dialogs/retention-policy-dialog/retention-policy-dialog.component";
 
 
 @Component({
@@ -203,6 +204,12 @@ export class LifecycleManagementComponent implements OnInit {
     ];
     retentionPolicyTable = [
         {
+            title:"&nbsp;",
+            code:"menu",
+            widthWeight:0.2,
+            calculatedWidth:"20%"
+        },
+        {
             title:"Name",
             code:"cn",
             description:"Name of the Study Retention Policy",
@@ -271,6 +278,22 @@ export class LifecycleManagementComponent implements OnInit {
             }, 100);
         }
     };
+    editRetentionPolicy(retention){
+        this.dialogRef = this.dialog.open(RetentionPolicyDialogComponent, {
+            height: 'auto',
+            width: '80%'
+        });
+        this.dialogRef.componentInstance.title = "Edit Study Retention Policy";
+        this.dialogRef.componentInstance.formObj = this.deviceConfigService.convertSchemaToForm(retention, this.schema, {});
+        this.dialogRef.afterClosed().subscribe(
+            (res)=>{
+                if(res){
+                    console.log("retention",retention);
+                    console.log("retention",res);
+                }
+            }
+        );
+    }
     appendFilter(filter, key, range, regex) {
         let value = range.from.replace(regex, '');
         if (range.to !== range.from)
@@ -378,21 +401,47 @@ export class LifecycleManagementComponent implements OnInit {
     submitFunction(event){
         console.log("in submitFunction",event);
     }
+    setInfinitExpiredDate(study){
+
+        this.setExpiredDateQuery(study,true);
+    }
     setExpiredDate(study){
+        this.setExpiredDateQuery(study,false);
+    }
+    selectTime(state){
+        let obj = state + 'Object';
+        try{
+            let n = this.studyTime[obj].getHours();
+            let m = (this.studyTime[obj].getMinutes() < 10 ? '0' : '') + this.studyTime[obj].getMinutes();
+            this.studyTime[state] = n + ':' + m;
+        }catch (e){
+            console.log('in catch ', this.studyTime);
+        }
+    }
+    setExpiredDateQuery(study, infinit){
         let $this = this;
         let expiredDate;
-        if(_.hasIn(study,"77771023.Value.0") && study["77771023"].Value[0] != ""){
-            console.log("va",study["77771023"].Value[0]);
-            let expiredDateString = study["77771023"].Value[0];
-            expiredDate = new Date(expiredDateString.substring(0, 4)+ '.' + expiredDateString.substring(4, 6) + '.' + expiredDateString.substring(6, 8));
-        }else{
+        let yearRange = "1800:2100";
+        if(infinit){
             expiredDate = new Date();
+            expiredDate.setDate(31);
+            expiredDate.setMonth(11);
+            expiredDate.setFullYear(9999);
+            yearRange = "2017:9999";
+        }else{
+            if(_.hasIn(study,"77771023.Value.0") && study["77771023"].Value[0] != ""){
+                console.log("va",study["77771023"].Value[0]);
+                let expiredDateString = study["77771023"].Value[0];
+                expiredDate = new Date(expiredDateString.substring(0, 4)+ '.' + expiredDateString.substring(4, 6) + '.' + expiredDateString.substring(6, 8));
+            }else{
+                expiredDate = new Date();
+            }
         }
         let parameters: any = {
             content: 'Set expired date',
             pCalendar: [{
                 dateFormat:"dd.mm.yy",
-                yearRange:"1800:2100",
+                yearRange:yearRange,
                 monthNavigator:true,
                 yearNavigator:true,
                 placeholder:"Expired date"

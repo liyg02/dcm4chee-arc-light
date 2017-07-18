@@ -1,10 +1,10 @@
 <div>
-    <input placeholder="Search in this part..." [(ngModel)]="partSearch" (keyup)="filterFormElements()">
+    <input *ngIf="!dontShowSearch" placeholder="Search in this part..." [(ngModel)]="partSearch" (keyup)="filterFormElements()">
     <form (ngSubmit)="onSubmit()" [formGroup]="form">
         <div *ngFor="let formelement of formelements" class="form-row">
             <df-element [formelement]="formelement" [formelements]="formelements" [form]="form" [partSearch]="partSearch"></df-element>
         </div>
-        <div class="form-row submit_button_block">
+        <div class="form-row submit_button_block" *ngIf="!dontShowSave">
             <button class="btn btn-default submit" type="submit" [disabled]="!form.valid">Save</button>
         </div>
     </form>

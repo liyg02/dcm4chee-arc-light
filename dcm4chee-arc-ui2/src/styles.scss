@@ -1839,12 +1839,24 @@ md-dialog-container{
   .filters.hidden_filters{
     padding: 0 16px;
     float: left;
-    width: 92%;
+    width: 97%;
   }
   .input-group{
     padding-top: 4px;
     input.inputpart{
       width: 74%;
+    }
+  }
+  .btn-default.submit{
+    background:$lightBlue;
+    color:white;
+    -webkit-border-radius:0;
+    -moz-border-radius:0;
+    border-radius:0;
+    padding: 3px 5px;
+    margin-top: 3px;
+    &:hover{
+      background: $lightBlue;
     }
   }
 }
@@ -1859,7 +1871,7 @@ md-dialog-container{
     }
   }
   .block_half{
-    width:16%;
+    width:13%;
   }
   .clearform_button{
     right:auto;

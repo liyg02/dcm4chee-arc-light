@@ -26,6 +26,7 @@ import { HistogramDialogComponent } from './dialogs/histogram-dialog/histogram-d
 import { DiffDetailViewComponent } from './dialogs/diff-detail-view/diff-detail-view.component';
 import { DicomOperationsComponent } from './dialogs/dicom-operations/dicom-operations.component';
 import { SpecificCharPickerComponent } from './specific-char-picker/specific-char-picker.component';
+import { RetentionPolicyDialogComponent } from './dialogs/retention-policy-dialog/retention-policy-dialog.component';
 
 
 @NgModule({
@@ -61,5 +62,6 @@ export const WidgetsComponents = [
     HistogramDialogComponent,
     DiffDetailViewComponent,
     DicomOperationsComponent,
-    SpecificCharPickerComponent
+    SpecificCharPickerComponent,
+    RetentionPolicyDialogComponent
 ];

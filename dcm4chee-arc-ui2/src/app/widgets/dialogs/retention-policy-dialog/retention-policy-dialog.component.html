@@ -1,0 +1,8 @@
+<div class="vex vex-theme-os retention" xmlns="http://www.w3.org/1999/html">
+    <div class="vex-dialog-form">
+        <h5>{{title}}</h5>
+        <div class="content">
+            <dynamic-form [formelements]="formObj" [dontShowSearch]="true" [dontGroup]="true" (submitFunction)="submitFunction($event)"></dynamic-form>
+        </div>
+    </div>
+</div>
