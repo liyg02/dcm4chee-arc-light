@@ -30,6 +30,22 @@ export class LifecycleManagementService {
         });
     }
 
+    saveArchivDevice(deviceObject){
+        let url = `../devices/${deviceObject.dicomDeviceName}`;
+        return this.$http.put(url, deviceObject).map(res => {
+            let resjson;
+            try{
+                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                if(pattern.exec(res.url)){
+                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                }
+                resjson = res.json();
+            }catch (e){
+                resjson = {};
+            }
+            return resjson;
+        });
+    }
     getStudies(aet, params, expired){
         if(expired){
             params['expired'] = params['expired'] || true;

@@ -769,6 +769,7 @@ export class Globalvar {
             ]
         };
     }
+
     public static get EXPORT_STUDY_EXTERNAL_URL(): any{
         ///aets/{aet}/dimse/{externalAET}/studies/{StudyInstanceUID}/export/dicom:{destinationAET}
         return (aet,externalAET,StudyInstanceUID,destinationAET) => `../aets/${aet}/dimse/${externalAET}/studies/${StudyInstanceUID}/export/dicom:${destinationAET}`;

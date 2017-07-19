@@ -8,6 +8,8 @@ import {AppService} from "../../app.service";
 import {DatePipe} from "@angular/common";
 import {Globalvar} from "../../constants/globalvar";
 import {RetentionPolicyDialogComponent} from "../../widgets/dialogs/retention-policy-dialog/retention-policy-dialog.component";
+import {ControlService} from "../../control/control.service";
+import {SlimLoadingBarService} from "ng2-slim-loading-bar";
 
 
 @Component({
@@ -236,6 +238,7 @@ export class LifecycleManagementComponent implements OnInit {
     archiveDevice;
     StudyRetentionPolicy;
     ExternalRetrieveAETchecked;
+    retentionPolicyArchiveDevicePath = "dcmArchiveDevice.dcmStudyRetentionPolicy";
     dialogRef: MdDialogRef<any>;
     constructor(
         private service:LifecycleManagementService,
@@ -244,7 +247,9 @@ export class LifecycleManagementComponent implements OnInit {
         public config: MdDialogConfig,
         public deviceConfigService:DeviceConfiguratorService,
         public mainservice:AppService,
-        private datePipe:DatePipe
+        private datePipe:DatePipe,
+        private controlService: ControlService,
+        public cfpLoadingBar: SlimLoadingBarService
     ) { }
 
     ngOnInit() {
@@ -278,7 +283,8 @@ export class LifecycleManagementComponent implements OnInit {
             }, 100);
         }
     };
-    editRetentionPolicy(retention){
+    editRetentionPolicy(retention,index){
+        let $this = this;
         this.dialogRef = this.dialog.open(RetentionPolicyDialogComponent, {
             height: 'auto',
             width: '80%'
@@ -286,10 +292,57 @@ export class LifecycleManagementComponent implements OnInit {
         this.dialogRef.componentInstance.title = "Edit Study Retention Policy";
         this.dialogRef.componentInstance.formObj = this.deviceConfigService.convertSchemaToForm(retention, this.schema, {});
         this.dialogRef.afterClosed().subscribe(
-            (res)=>{
-                if(res){
-                    console.log("retention",retention);
-                    console.log("retention",res);
+            (confirm)=>{
+                if(confirm){
+                    $this.cfpLoadingBar.start();
+                    if(_.hasIn($this.archiveDevice,"dicomDeviceName") && $this.archiveDevice.dicomDeviceName != ''){
+                        _.set($this.archiveDevice,$this.retentionPolicyArchiveDevicePath + `[${index}]`,confirm);
+                        $this.service.saveArchivDevice($this.archiveDevice).subscribe(
+                            (res)=>{
+                                $this.mainservice.setMessage({
+                                    'title': 'Info ',
+                                    'text': `Study Retention Policy saved successfully to the archive device <b>${$this.archiveDevice.dicomDeviceName}</b>`,
+                                    'status': 'info'
+                                });
+                                $this.StudyRetentionPolicy[index] = confirm;
+                                $this.controlService.reloadArchive().subscribe((reloadres) => {
+                                        $this.mainservice.setMessage({
+                                            'title': 'Info',
+                                            'text': 'Reload successful',
+                                            'status': 'info'
+                                        });
+                                        $this.cfpLoadingBar.complete();
+                                    }, (err) => {
+                                        $this.cfpLoadingBar.complete();
+                                    }
+                                );
+                            },
+                            (err)=>{
+                                $this.StudyRetentionPolicy[index] = retention;
+                                $this.cfpLoadingBar.complete();
+                                try{
+                                    $this.mainservice.setMessage({
+                                        'title': 'Error ' + err.status,
+                                        'text': JSON.parse(err._body).errorMessage,
+                                        'status': 'error'
+                                    });
+
+                                }catch (e){
+                                    $this.mainservice.setMessage({
+                                        'title': 'Error ' + err.status,
+                                        'text': err.statusText,
+                                        'status': 'error'
+                                    });
+                                }
+                            }
+                        );
+                    }else{
+                        $this.mainservice.setMessage( {
+                            'title': 'Error',
+                            'text': "Device not found, please reload the page and try gain!",
+                            'status': 'error'
+                        });
+                    }
                 }
             }
         );
@@ -364,18 +417,6 @@ export class LifecycleManagementComponent implements OnInit {
             ((date.getDate() < 10) ? '0' + date.getDate() : date.getDate())
         );
     }
-/*    getArchiveDevice(){
-        let $this = this;
-        this.service.getArchiveDevice().subscribe(
-            (archiveDevice)=>{
-                console.log("archiveDevice",archiveDevice);
-                $this.archiveDevice = archiveDevice;
-            },
-            (err)=>{
-                console.error("err",err);
-            }
-        );
-    }*/
     getArchiveDevice(retries){
         let $this = this;
         if(!this.mainservice.deviceName){
@@ -389,7 +430,8 @@ export class LifecycleManagementComponent implements OnInit {
             this.service.getArchiveDevice(this.mainservice.deviceName).subscribe((res)=>{
                 $this.archiveDevice = res;
                 if(_.hasIn(res,"dcmArchiveDevice.dcmStudyRetentionPolicy")){
-                    $this.StudyRetentionPolicy = _.get(res,"dcmArchiveDevice.dcmStudyRetentionPolicy");
+                    $this.archiveDevice = res;
+                    $this.StudyRetentionPolicy = _.get(res,$this.retentionPolicyArchiveDevicePath);
                     console.log("$this.StudyRetentionPolicy ",$this.StudyRetentionPolicy );
                 }
             },(err)=>{
@@ -451,8 +493,7 @@ export class LifecycleManagementComponent implements OnInit {
         };
         this.confirm(parameters).subscribe(result => {
             if(result){
-                console.log("result",result);
-                console.log("result",(typeof result.pCalendar[0]));
+                $this.cfpLoadingBar.start();
                 let dateAsString = $this.dateToString(result.pCalendar[0]);
                 $this.service.setExpiredDate($this.aet, _.get(study,"0020000D.Value[0]"), dateAsString).subscribe(
                     (res)=>{
@@ -463,6 +504,7 @@ export class LifecycleManagementComponent implements OnInit {
                             'text': 'Expired date set successfully!',
                             'status': 'info'
                         });
+                        $this.cfpLoadingBar.complete();
                     },
                     (err)=>{
                         $this.mainservice.setMessage( {
@@ -470,6 +512,7 @@ export class LifecycleManagementComponent implements OnInit {
                             'text': err.statusText,
                             'status': 'error'
                         });
+                        $this.cfpLoadingBar.complete();
                     }
                 );
                 // study["77771023"].Value[0] = result.pCalendar[0];

@@ -236,12 +236,12 @@
                         </div>
                         <div class="table_body">
                             <div class="tr" *ngFor="let retention of StudyRetentionPolicy">
-                                <div class="td" *ngFor="let table_element of retentionPolicyTable" [ngStyle]="{width: table_element.calculatedWidth}">
+                                <div class="td" *ngFor="let table_element of retentionPolicyTable;let index = index" [ngStyle]="{width: table_element.calculatedWidth}">
                                     <ng-container *ngIf="table_element.code != 'menu'">
                                         <span *ngIf="_.hasIn(retention,[table_element.code])">{{retention[table_element.code] || ''}}</span>
                                     </ng-container>
                                     <ng-container *ngIf="table_element.code === 'menu'">
-                                        <a title="Change expired date" (click)="editRetentionPolicy(retention)"><i class="material-icons">create</i></a>
+                                        <a title="Edit retention policy" (click)="editRetentionPolicy(retention,index)"><i class="material-icons">create</i></a>
                                     </ng-container>
                                 </div>
                             </div>
@@ -274,7 +274,7 @@
                                 </ng-container>
                                 <ng-container *ngIf="table_element.code === 'menu'">
                                     <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">history</i></a>
-                                    <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">done</i></a>
+                                    <!--<a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">done</i></a>-->
                                     <a title="Lock the study by adding as expired date 31.12.9999" (click)="setInfinitExpiredDate(study)"><i class="material-icons">lock</i></a>
                                 </ng-container>
                             </div>
@@ -307,7 +307,7 @@
                                 </ng-container>
                                 <ng-container *ngIf="table_element.code === 'menu'">
                                     <a title="Set expired date" (click)="setExpiredDate(study)"><i class="material-icons">history</i></a>
-                                    <a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">done</i></a>
+                                    <!--<a title="Change expired date" (click)="setExpiredDate(study)"><i class="material-icons">done</i></a>-->
                                     <a title="Lock the study by adding as expired date 31.12.9999" (click)="setInfinitExpiredDate(study)"><i class="material-icons">lock</i></a>
                                 </ng-container>
                             </div>
