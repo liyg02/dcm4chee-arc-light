@@ -283,20 +283,39 @@ export class LifecycleManagementComponent implements OnInit {
             }, 100);
         }
     };
+    addRetentionPolicy(){
+        this.modifyetentionPolicy(null,null, 'new');
+    }
     editRetentionPolicy(retention,index){
+        this.modifyetentionPolicy(retention,index, 'edit');
+    }
+    modifyetentionPolicy(retention,index, mode){
         let $this = this;
+        let modalTitle = "Edit Study Retention Policy";
+        if(mode === "new"){
+            modalTitle = "Add new Study Retention Policy";
+        }
         this.dialogRef = this.dialog.open(RetentionPolicyDialogComponent, {
             height: 'auto',
             width: '80%'
         });
-        this.dialogRef.componentInstance.title = "Edit Study Retention Policy";
+        this.dialogRef.componentInstance.title = modalTitle;
         this.dialogRef.componentInstance.formObj = this.deviceConfigService.convertSchemaToForm(retention, this.schema, {});
         this.dialogRef.afterClosed().subscribe(
-            (confirm)=>{
-                if(confirm){
+            (newRetentionObject)=>{
+                if(newRetentionObject){
                     $this.cfpLoadingBar.start();
                     if(_.hasIn($this.archiveDevice,"dicomDeviceName") && $this.archiveDevice.dicomDeviceName != ''){
-                        _.set($this.archiveDevice,$this.retentionPolicyArchiveDevicePath + `[${index}]`,confirm);
+                        if(mode === "new"){
+                            if(_.hasIn($this.archiveDevice,$this.retentionPolicyArchiveDevicePath)){
+                                let retentionPart:any = _.get($this.archiveDevice,$this.retentionPolicyArchiveDevicePath);
+                                retentionPart.push(newRetentionObject);
+                            }else{
+                                _.set($this.archiveDevice,$this.retentionPolicyArchiveDevicePath + `[0]`,newRetentionObject);
+                            }
+                        }else{
+                            _.set($this.archiveDevice,$this.retentionPolicyArchiveDevicePath + `[${index}]`,newRetentionObject);
+                        }
                         $this.service.saveArchivDevice($this.archiveDevice).subscribe(
                             (res)=>{
                                 $this.mainservice.setMessage({
@@ -304,7 +323,7 @@ export class LifecycleManagementComponent implements OnInit {
                                     'text': `Study Retention Policy saved successfully to the archive device <b>${$this.archiveDevice.dicomDeviceName}</b>`,
                                     'status': 'info'
                                 });
-                                $this.StudyRetentionPolicy[index] = confirm;
+                                $this.StudyRetentionPolicy[index] = newRetentionObject;
                                 $this.controlService.reloadArchive().subscribe((reloadres) => {
                                         $this.mainservice.setMessage({
                                             'title': 'Info',

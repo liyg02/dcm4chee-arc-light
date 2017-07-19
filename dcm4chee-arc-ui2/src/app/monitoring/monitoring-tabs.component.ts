@@ -11,6 +11,7 @@ import { Component, OnInit } from '@angular/core';
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/storage-systems" routerLinkActive="active">Storage systems</a></li>
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/diff" routerLinkActive="active">Diff</a></li>
         <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/statistics" routerLinkActive="active">Statistics</a></li>
+        <li role="presentation" routerLinkActive="active"><a role="tab" routerLink="/monitoring/lifecycle-management" routerLinkActive="active">Lifecycle managements</a></li>
     </ul>
   `
 })
