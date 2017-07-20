@@ -92,7 +92,6 @@ export class StudiesService {
         }
     }
     _config = function(params) {
-        console.log('jquery params', jQuery.param(params));
         return '?' + jQuery.param(params);
     };
 
@@ -139,6 +138,23 @@ export class StudiesService {
         return object;
     };
 
+    setExpiredDate(aet,studyUID, expiredDate){
+        let url = `../aets/${aet}/rs/studies/${studyUID}/expire/${expiredDate}`
+        return this.$http.put(url,{}).map(res => {
+            let resjson;
+            try{
+                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                if(pattern.exec(res.url)){
+                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                }
+                resjson = res.json();
+            }catch (e){
+                resjson = {};
+            }
+            return resjson;
+        });
+    }
+
     queryPatients = function(url, params) {
         console.log('this._config(aparms', this._config(params));
 
@@ -166,7 +182,7 @@ export class StudiesService {
             resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
     };
     queryDiffs = function(url, params) {
-        console.log('in querystudies');
+        params["missing"] = params["missing"] || true;
         return this.$http.get(
             url + this._config(params),
             {
