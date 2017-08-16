@@ -453,7 +453,7 @@ export class DiffProComponent implements OnInit {
         let $this = this;
         this.service.getAes().subscribe(
             (aes)=>{
-                $this.aes = aes;
+                $this.aes = _.sortBy(aes,['dicomAETitle']);
             },
             (err)=>{
                 if (retries){
