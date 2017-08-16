@@ -64,6 +64,7 @@ export class LifecycleManagementComponent implements OnInit {
     };
     diffAttributes;
     modalities;
+    moreFunctionsButtons = false;
     showModalitySelector;
     StudyReceiveDateTime = {
         from: undefined,
