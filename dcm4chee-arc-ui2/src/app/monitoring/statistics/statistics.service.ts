@@ -9,8 +9,8 @@ export class StatisticsService {
 
     constructor(private $http:Http) { }
 
-    queryGet(params){
-        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/_search?source=`+JSON.stringify(params))
+    queryGet(params, url){
+        return this.$http.get(`${url}/_search?source=`+JSON.stringify(params))
             .map(res => {
                 let resjson;
                 try{
@@ -25,6 +25,22 @@ export class StatisticsService {
                 return resjson;
             });
     };
+    getElasticsearchUrl(){
+        return this.$http.get("../elasticsearch")
+            .map(res => {
+                let resjson;
+                try{
+                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                    if(pattern.exec(res.url)){
+                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                    }
+                    resjson = res.json();
+                }catch (e){
+                    resjson = [];
+                }
+                return resjson;
+            });
+    }
     setRangeToParams(params,convertedRange, errorText){
         try{
             params.query.bool.must.push({
@@ -53,8 +69,8 @@ export class StatisticsService {
             }
         }
     }
-    checkIfElasticSearchIsRunning(){
-        return this.$http.get(`${Globalvar.ELASTICSEARCHDOMAIN}/?pretty`)
+    checkIfElasticSearchIsRunning(url){
+        return this.$http.get(`${url}/?pretty`)
             .map(res => {
                 let resjson;
                 try{
@@ -69,70 +85,70 @@ export class StatisticsService {
                 return resjson;
             });
     }
-    getQueriesUserID(range){
+    getQueriesUserID(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.QUERIESUSERID_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Queries UserID ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getRetrievUserID(range){
+    getRetrievUserID(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.RETRIEVESUSERID_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieves UserID ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getStudiesStoredSopClass(range){
+    getStudiesStoredSopClass(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDSOPCLASS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Studies Stored / SOPClass ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getStudiesStoredUserID(range){
+    getStudiesStoredUserID(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDUSERID_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Studies Stored / UserID ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getStudiesStoredReceivingAET(range){
+    getStudiesStoredReceivingAET(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDRECIVINGAET_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Studies Stored / Receiving AET UserID ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getStudiesStoredCounts(range){
+    getStudiesStoredCounts(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.STUDIESSTOREDCOUNTS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Stored Counts ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getRetrieveCounts(range){
+    getRetrieveCounts(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.RETRIEVCOUNTS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Retrieve Counts ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getErrorCounts(range){
+    getErrorCounts(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.ERRORSCOUNTS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Error Counts ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getWildflyErrorCounts(range){
+    getWildflyErrorCounts(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.WILDFLYERRORCOUNTS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Application Error Counts ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getQueriesCounts(range){
+    getQueriesCounts(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.QUERIESCOUNTS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Queries Counts ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
-    getAuditEvents(range){
+    getAuditEvents(range, url){
         let convertedRange = this.getRangeConverted(range);
         let params = Globalvar.AUDITEVENTS_PARAMETERS;
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Audit Event ");
-        return this.queryGet(params);
+        return this.queryGet(params, url);
     }
 }

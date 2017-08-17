@@ -70,7 +70,8 @@ export class StatisticsComponent implements OnInit {
             value:"thisyear",
             label:"This year"
         }
-    ]
+    ];
+    url;
     constructor(
         private service:StatisticsService,
         public viewContainerRef: ViewContainerRef,
@@ -81,7 +82,7 @@ export class StatisticsComponent implements OnInit {
 
     ngOnInit() {
         this.setTodayDate();
-        this.init(2);
+        this.getElasticsearchUrl(2);
     }
     studyDateTimeChanged(e, mode){
         this.range[mode] = e;
@@ -130,16 +131,32 @@ export class StatisticsComponent implements OnInit {
         this.range.from = d;
         this.range.to = new Date();
     }
-    init(retries){
+    getElasticsearchUrl(retries){
         let $this = this;
-        this.service.checkIfElasticSearchIsRunning().subscribe(
+        this.service.getElasticsearchUrl().subscribe(
+            (res)=>{
+                $this.url = res.url;
+                $this.checkIfElasticSearchIsRunning(2);
+            },
+            (err)=>{
+                if (retries){
+                    $this.getElasticsearchUrl(retries-1);
+                }else{
+                    $this.elasticSearchIsRunning = false;
+                }
+            }
+        );
+    }
+    checkIfElasticSearchIsRunning(retries){
+        let $this = this;
+        this.service.checkIfElasticSearchIsRunning(this.url).subscribe(
             (res)=>{
                 $this.elasticSearchIsRunning = true;
                 $this.search();
             },
             (err)=>{
                 if (retries){
-                    $this.init(retries-1);
+                    $this.checkIfElasticSearchIsRunning(retries-1);
                 }else{
                     $this.elasticSearchIsRunning = false;
                 }
@@ -408,7 +425,7 @@ export class StatisticsComponent implements OnInit {
     }
     getQueriesUserID(){
         let $this = this;
-        this.service.getQueriesUserID(this.range).subscribe(
+        this.service.getQueriesUserID(this.range, this.url).subscribe(
             (res)=>{
                 $this.prepareHistogramData(res,'querieUserID');
                 try {
@@ -424,7 +441,7 @@ export class StatisticsComponent implements OnInit {
     }
     getRetrievUserID(){
         let $this = this;
-        this.service.getRetrievUserID(this.range).subscribe(
+        this.service.getRetrievUserID(this.range, this.url).subscribe(
             (res)=>{
                 console.log("userid queries =",res);
                 $this.prepareHistogramData(res,'retrievesUserID');
@@ -443,7 +460,7 @@ export class StatisticsComponent implements OnInit {
     }
     getStudiesStoredSopClass(){
         let $this = this;
-        this.service.getStudiesStoredSopClass(this.range).subscribe(
+        this.service.getStudiesStoredSopClass(this.range, this.url).subscribe(
             (res)=>{
                 console.log("userid queries =",res);
                 $this.prepareHistogramData(res,'studyStoredSopClass');
@@ -457,7 +474,7 @@ export class StatisticsComponent implements OnInit {
     }
     getStudiesStoredUserID(){
         let $this = this;
-        this.service.getStudiesStoredUserID(this.range).subscribe(
+        this.service.getStudiesStoredUserID(this.range, this.url).subscribe(
             (res)=>{
                 console.log("userid queries =",res);
                 $this.prepareHistogramData(res,'studyStoredUserID');
@@ -471,7 +488,7 @@ export class StatisticsComponent implements OnInit {
     }
     getStudiesStoredReceivingAET(){
         let $this = this;
-        this.service.getStudiesStoredReceivingAET(this.range).subscribe(
+        this.service.getStudiesStoredReceivingAET(this.range, this.url).subscribe(
             (res)=>{
                 console.log("userid queries =",res);
                 $this.prepareHistogramData(res,'studyStoredReceivingAET');
@@ -485,7 +502,7 @@ export class StatisticsComponent implements OnInit {
     }
     getAuditEvents(){
         let $this = this;
-        this.service.getAuditEvents(this.range).subscribe((res)=>{
+        this.service.getAuditEvents(this.range, this.url).subscribe((res)=>{
             $this.auditEvents = res.hits.hits.map((audit)=>{
                 return {
                     AuditSourceID:(_.hasIn(audit,"_source.AuditSource.AuditSourceID"))?audit._source.AuditSource.AuditSourceID:'-',
@@ -504,7 +521,7 @@ export class StatisticsComponent implements OnInit {
     }
     getStudiesStoredCounts(){
         let $this = this;
-        this.service.getStudiesStoredCounts(this.range).subscribe(
+        this.service.getStudiesStoredCounts(this.range, this.url).subscribe(
             (res)=>{
                 try {
                     $this.studieStored.count = res.hits.total;
@@ -519,7 +536,7 @@ export class StatisticsComponent implements OnInit {
     }
     getWildflyErrorCounts(){
         let $this = this;
-        this.service.getWildflyErrorCounts(this.range).subscribe(
+        this.service.getWildflyErrorCounts(this.range, this.url).subscribe(
             (res)=>{
                 try {
                     $this.wildflError.count = res.hits.total;
@@ -534,7 +551,7 @@ export class StatisticsComponent implements OnInit {
     }
     getRetrieveCounts(){
         let $this = this;
-        this.service.getRetrieveCounts(this.range).subscribe(
+        this.service.getRetrieveCounts(this.range, this.url).subscribe(
             (res)=>{
                 try {
                     $this.retriev.count = res.hits.total;
@@ -568,7 +585,7 @@ export class StatisticsComponent implements OnInit {
     }
     // getQueriesCounts(){
     //     let $this = this;
-    //     this.service.getQueriesCounts(this.range).subscribe(
+    //     this.service.getQueriesCounts(this.range, this.url).subscribe(
     //         (res)=>{
     //             try {
     //                 $this.queries.count = res.hits.total;
@@ -584,7 +601,7 @@ export class StatisticsComponent implements OnInit {
     // }
     getErrorCounts(){
         let $this = this;
-        this.service.getErrorCounts(this.range).subscribe(
+        this.service.getErrorCounts(this.range, this.url).subscribe(
             (res)=>{
                 try {
                     $this.errors.count = res.hits.total;
