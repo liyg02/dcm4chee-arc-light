@@ -53,6 +53,8 @@ import org.dcm4che3.util.ByteUtils;
 import org.dcm4che3.util.Property;
 import org.dcm4che3.util.TagUtils;
 import org.dcm4chee.arc.conf.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
@@ -71,6 +73,8 @@ import java.util.regex.Pattern;
  * @since Jul 2015
  */
 class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
+
+    private static final Logger LOG = LoggerFactory.getLogger(LdapArchiveConfiguration.class);
 
     @Override
     protected void storeTo(Device device, Attributes attrs) {
@@ -95,6 +99,10 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 ext.isPersonNameComponentOrderInsensitiveMatching(), false);
         LdapUtils.storeNotDef(attrs, "dcmSendPendingCGet", ext.isSendPendingCGet(), false);
         LdapUtils.storeNotNullOrDef(attrs, "dcmSendPendingCMoveInterval", ext.getSendPendingCMoveInterval(), null);
+        LdapUtils.storeNotNullOrDef(attrs, "dcmSpanningCFindSCP", ext.getSpanningCFindSCP(), null);
+        LdapUtils.storeNotEmpty(attrs, "dcmSpanningCFindSCPRetrieveAET", ext.getSpanningCFindSCPRetrieveAETitles());
+        LdapUtils.storeNotNullOrDef(attrs, "dcmSpanningCFindSCPPolicy",
+                ext.getSpanningCFindSCPPolicy(), SpanningCFindSCPPolicy.REPLACE);
         LdapUtils.storeNotNullOrDef(attrs, "dcmFallbackCMoveSCP", ext.getFallbackCMoveSCP(), null);
         LdapUtils.storeNotNullOrDef(attrs, "dcmFallbackCMoveSCPDestination", ext.getFallbackCMoveSCPDestination(), null);
         LdapUtils.storeNotNullOrDef(attrs, "dcmFallbackCMoveSCPLeadingCFindSCP", ext.getFallbackCMoveSCPLeadingCFindSCP(), null);
@@ -237,6 +245,10 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 LdapUtils.booleanValue(attrs.get("dcmPersonNameComponentOrderInsensitiveMatching"), false));
         ext.setSendPendingCGet(LdapUtils.booleanValue(attrs.get("dcmSendPendingCGet"), false));
         ext.setSendPendingCMoveInterval(toDuration(attrs.get("dcmSendPendingCMoveInterval"), null));
+        ext.setSpanningCFindSCP(LdapUtils.stringValue(attrs.get("dcmSpanningCFindSCP"), null));
+        ext.setSpanningCFindSCPRetrieveAETitles(LdapUtils.stringArray(attrs.get("dcmSpanningCFindSCPRetrieveAET")));
+        ext.setSpanningCFindSCPPolicy(LdapUtils.enumValue(
+                SpanningCFindSCPPolicy.class, attrs.get("dcmSpanningCFindSCPPolicy"), SpanningCFindSCPPolicy.REPLACE));
         ext.setFallbackCMoveSCP(LdapUtils.stringValue(attrs.get("dcmFallbackCMoveSCP"), null));
         ext.setFallbackCMoveSCPDestination(LdapUtils.stringValue(attrs.get("dcmFallbackCMoveSCPDestination"), null));
         ext.setFallbackCMoveSCPRetries(LdapUtils.intValue(attrs.get("dcmFallbackCMoveSCPRetries"), 0));
@@ -405,6 +417,12 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         LdapUtils.storeDiff(mods, "dcmSendPendingCGet", aa.isSendPendingCGet(), bb.isSendPendingCGet(), false);
         LdapUtils.storeDiffObject(mods, "dcmSendPendingCMoveInterval",
                 aa.getSendPendingCMoveInterval(), bb.getSendPendingCMoveInterval(), null);
+        LdapUtils.storeDiffObject(mods, "dcmSpanningCFindSCP",
+                aa.getSpanningCFindSCP(), bb.getSpanningCFindSCP(), null);
+        LdapUtils.storeDiff(mods, "dcmSpanningCFindSCPRetrieveAET",
+                aa.getSpanningCFindSCPRetrieveAETitles(), bb.getSpanningCFindSCPRetrieveAETitles());
+        LdapUtils.storeDiffObject(mods, "dcmSpanningCFindSCPPolicy",
+                aa.getSpanningCFindSCPPolicy(), bb.getSpanningCFindSCPPolicy(), SpanningCFindSCPPolicy.REPLACE);
         LdapUtils.storeDiffObject(mods, "dcmFallbackCMoveSCP", aa.getFallbackCMoveSCP(), bb.getFallbackCMoveSCP(), null);
         LdapUtils.storeDiffObject(mods, "dcmFallbackCMoveSCPDestination",
                 aa.getFallbackCMoveSCPDestination(), bb.getFallbackCMoveSCPDestination(), null);
@@ -642,7 +660,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         loadExportRules(arcdev.getExportRules(), deviceDN);
         loadCompressionRules(arcdev.getCompressionRules(), deviceDN);
         loadStoreAccessControlIDRules(arcdev.getStoreAccessControlIDRules(), deviceDN);
-        loadAttributeCoercions(arcdev.getAttributeCoercions(), deviceDN);
+        loadAttributeCoercions(arcdev.getAttributeCoercions(), deviceDN, device);
         loadQueryRetrieveViews(arcdev, deviceDN);
         loadRejectNotes(arcdev, deviceDN);
         loadStudyRetentionPolicies(arcdev.getStudyRetentionPolicies(), deviceDN);
@@ -650,7 +668,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         loadHL7ForwardRules(arcdev.getHL7ForwardRules(), deviceDN, config);
         loadRSForwardRules(arcdev.getRSForwardRules(), deviceDN);
         loadAttributeSet(arcdev, deviceDN);
-        loadScheduledStations(arcdev.getHL7OrderScheduledStations(), deviceDN, config);
+        loadScheduledStations(arcdev.getHL7OrderScheduledStations(), deviceDN, config, device);
         loadHL7OrderSPSStatus(arcdev.getHL7OrderSPSStatuses(), deviceDN, config);
     }
 
@@ -709,6 +727,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 ext.getPersonNameComponentOrderInsensitiveMatching(), null);
         LdapUtils.storeNotNullOrDef(attrs, "dcmSendPendingCGet", ext.getSendPendingCGet(), null);
         LdapUtils.storeNotNullOrDef(attrs, "dcmSendPendingCMoveInterval", ext.getSendPendingCMoveInterval(), null);
+        LdapUtils.storeNotNullOrDef(attrs, "dcmSpanningCFindSCP", ext.getSpanningCFindSCP(), null);
+        LdapUtils.storeNotEmpty(attrs, "dcmSpanningCFindSCPRetrieveAET", ext.getSpanningCFindSCPRetrieveAETitles());
+        LdapUtils.storeNotNullOrDef(attrs, "dcmSpanningCFindSCPPolicy", ext.getSpanningCFindSCPPolicy(), null);
         LdapUtils.storeNotNullOrDef(attrs, "dcmFallbackCMoveSCP", ext.getFallbackCMoveSCP(), null);
         LdapUtils.storeNotNullOrDef(attrs, "dcmFallbackCMoveSCPDestination", ext.getFallbackCMoveSCPDestination(), null);
         LdapUtils.storeNotNull(attrs, "dcmFallbackCMoveSCPRetries", ext.getFallbackCMoveSCPRetries());
@@ -773,6 +794,10 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 LdapUtils.booleanValue(attrs.get("dcmPersonNameComponentOrderInsensitiveMatching"), null));
         ext.setSendPendingCGet(LdapUtils.booleanValue(attrs.get("dcmSendPendingCGet"), null));
         ext.setSendPendingCMoveInterval(toDuration(attrs.get("dcmSendPendingCMoveInterval"), null));
+        ext.setSpanningCFindSCP(LdapUtils.stringValue(attrs.get("dcmSpanningCFindSCP"), null));
+        ext.setSpanningCFindSCPRetrieveAETitles(LdapUtils.stringArray(attrs.get("dcmSpanningCFindSCPRetrieveAET")));
+        ext.setSpanningCFindSCPPolicy(LdapUtils.enumValue(
+                SpanningCFindSCPPolicy.class, attrs.get("dcmSpanningCFindSCPPolicy"), null));
         ext.setFallbackCMoveSCP(LdapUtils.stringValue(attrs.get("dcmFallbackCMoveSCP"), null));
         ext.setFallbackCMoveSCPDestination(LdapUtils.stringValue(attrs.get("dcmFallbackCMoveSCPDestination"), null));
         ext.setFallbackCMoveSCPRetries(LdapUtils.intValue(attrs.get("dcmFallbackCMoveSCPRetries"), null));
@@ -857,6 +882,12 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         LdapUtils.storeDiffObject(mods, "dcmSendPendingCGet", aa.getSendPendingCGet(), bb.getSendPendingCGet(), null);
         LdapUtils.storeDiffObject(mods, "dcmSendPendingCMoveInterval",
                 aa.getSendPendingCMoveInterval(), bb.getSendPendingCMoveInterval(), null);
+        LdapUtils.storeDiffObject(mods, "dcmSpanningCFindSCP",
+                aa.getSpanningCFindSCP(), bb.getSpanningCFindSCP(), null);
+        LdapUtils.storeDiff(mods, "dcmSpanningCFindSCPRetrieveAET",
+                aa.getSpanningCFindSCPRetrieveAETitles(), bb.getSpanningCFindSCPRetrieveAETitles());
+        LdapUtils.storeDiffObject(mods, "dcmSpanningCFindSCPPolicy",
+                aa.getSpanningCFindSCPPolicy(), bb.getSpanningCFindSCPPolicy(), null);
         LdapUtils.storeDiffObject(mods, "dcmFallbackCMoveSCP", aa.getFallbackCMoveSCP(), bb.getFallbackCMoveSCP(), null);
         LdapUtils.storeDiffObject(mods, "dcmFallbackCMoveSCPDestination",
                 aa.getFallbackCMoveSCPDestination(), bb.getFallbackCMoveSCPDestination(), null);
@@ -934,7 +965,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     }
 
     @Override
-    protected void loadChilds(ApplicationEntity ae, String aeDN) throws NamingException {
+    protected void loadChilds(ApplicationEntity ae, String aeDN) throws NamingException, ConfigurationException {
         ArchiveAEExtension aeExt = ae.getAEExtension(ArchiveAEExtension.class);
         if (aeExt == null)
             return;
@@ -942,7 +973,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         loadExportRules(aeExt.getExportRules(), aeDN);
         loadCompressionRules(aeExt.getCompressionRules(), aeDN);
         loadStoreAccessControlIDRules(aeExt.getStoreAccessControlIDRules(), aeDN);
-        loadAttributeCoercions(aeExt.getAttributeCoercions(), aeDN);
+        loadAttributeCoercions(aeExt.getAttributeCoercions(), aeDN, ae.getDevice());
         loadStudyRetentionPolicies(aeExt.getStudyRetentionPolicies(), aeDN);
         loadRSForwardRules(aeExt.getRSForwardRules(), aeDN);
     }
@@ -1702,7 +1733,8 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     private static Attributes storeTo(HL7OrderScheduledStation station, BasicAttributes attrs, LdapDicomConfiguration config) {
         attrs.put("objectclass", "hl7OrderScheduledStation");
         attrs.put("cn", station.getCommonName());
-        LdapUtils.storeNotNullOrDef(attrs, "hl7OrderScheduledStationDeviceReference", config.deviceRef(station.getDeviceName()), null);
+        LdapUtils.storeNotNullOrDef(attrs, "hl7OrderScheduledStationDeviceReference",
+                scheduledStationDeviceRef(station, config), null);
         LdapUtils.storeNotDef(attrs, "dcmRulePriority", station.getPriority(), 0);
         LdapUtils.storeNotEmpty(attrs, "dcmProperty", toStrings(station.getConditions().getMap()));
         return attrs;
@@ -1791,7 +1823,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     }
 
     protected static void loadScheduledStations(
-            Collection<HL7OrderScheduledStation> stations, String parentDN, LdapDicomConfiguration config)
+            Collection<HL7OrderScheduledStation> stations, String parentDN, LdapDicomConfiguration config, Device device)
             throws NamingException, ConfigurationException {
         NamingEnumeration<SearchResult> ne = config.search(parentDN, "(objectclass=hl7OrderScheduledStation)");
         try {
@@ -1799,14 +1831,26 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 SearchResult sr = ne.next();
                 Attributes attrs = sr.getAttributes();
                 HL7OrderScheduledStation station = new HL7OrderScheduledStation(LdapUtils.stringValue(attrs.get("cn"), null));
-                station.setDevice(config.loadDevice(
-                        LdapUtils.stringValue(attrs.get("hl7OrderScheduledStationDeviceReference"), null)));
+                String scheduledStationDeviceRef = LdapUtils.stringValue(attrs.get("hl7OrderScheduledStationDeviceReference"), null);
+                station.setDevice(parentDN.equals(scheduledStationDeviceRef)
+                                    ? device
+                                    : loadScheduledStation(scheduledStationDeviceRef, config));
                 station.setPriority(LdapUtils.intValue(attrs.get("dcmRulePriority"), 0));
                 station.setConditions(new HL7Conditions(LdapUtils.stringArray(attrs.get("dcmProperty"))));
                 stations.add(station);
             }
         } finally {
             LdapUtils.safeClose(ne);
+        }
+    }
+
+    private static Device loadScheduledStation(String scheduledStationDeviceRef, LdapDicomConfiguration config) {
+        try {
+            return config.loadDevice(scheduledStationDeviceRef);
+        } catch (ConfigurationException e) {
+            LOG.info("Failed to load Scheduled Station device "
+                    + scheduledStationDeviceRef + " referenced by HL7 Order Scheduled Station", e);
+            return null;
         }
     }
 
@@ -1918,7 +1962,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (prevStation == null)
                 config.createSubcontext(dn, storeTo(station, new BasicAttributes(true), config));
             else
-                config.modifyAttributes(dn, storeDiffs(prevStation, station, new ArrayList<ModificationItem>()));
+                config.modifyAttributes(dn, storeDiffs(prevStation, station, new ArrayList<ModificationItem>(), config));
         }
     }
 
@@ -1996,9 +2040,11 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         return mods;
     }
 
-    private static List<ModificationItem> storeDiffs(
-            HL7OrderScheduledStation prev, HL7OrderScheduledStation station, ArrayList<ModificationItem> mods) {
-        LdapUtils.storeDiffObject(mods, "hl7OrderScheduledStationDeviceReference", prev.getDeviceName(), station.getDeviceName(), null);
+    private static List<ModificationItem> storeDiffs(HL7OrderScheduledStation prev, HL7OrderScheduledStation station,
+                                                     ArrayList<ModificationItem> mods, LdapDicomConfiguration config) {
+        LdapUtils.storeDiffObject(mods, "hl7OrderScheduledStationDeviceReference",
+                scheduledStationDeviceRef(prev, config),
+                scheduledStationDeviceRef(station, config), null);
         LdapUtils.storeDiff(mods, "dcmRulePriority", prev.getPriority(), station.getPriority(), 0);
         return mods;
     }
@@ -2152,7 +2198,6 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         LdapUtils.storeNotNullOrDef(attrs, "dcmURI", coercion.getXSLTStylesheetURI(), null);
         LdapUtils.storeNotDef(attrs, "dcmNoKeywords", coercion.isNoKeywords(), false);
         LdapUtils.storeNotNullOrDef(attrs, "dcmLeadingCFindSCP", coercion.getLeadingCFindSCP(), null);
-        storeNotEmptyTags(attrs, "dcmTag", coercion.getLeadingCFindSCPReturnKeys());
         LdapUtils.storeNotNullOrDef(attrs, "dcmMergeMWLTemplateURI",
                 coercion.getMergeMWLTemplateURI(), null);
         LdapUtils.storeNotNullOrDef(attrs, "dcmMergeMWLMatchingKey",
@@ -2160,11 +2205,13 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         LdapUtils.storeNotNullOrDef(attrs, "dcmAttributeUpdatePolicy",
                 coercion.getAttributeUpdatePolicy(), org.dcm4che3.data.Attributes.UpdatePolicy.MERGE);
         LdapUtils.storeNotDef(attrs, "dcmRulePriority", coercion.getPriority(), 0);
+        LdapUtils.storeNotNullOrDef(attrs, "dcmSupplementFromDeviceReference",
+               supplementDeviceRef(coercion), null);
         return attrs;
     }
 
-    private void loadAttributeCoercions(Collection<ArchiveAttributeCoercion> coercions, String parentDN)
-            throws NamingException {
+    private void loadAttributeCoercions(Collection<ArchiveAttributeCoercion> coercions, String parentDN, Device device)
+            throws NamingException, ConfigurationException {
         NamingEnumeration<SearchResult> ne = config.search(parentDN, "(objectclass=dcmArchiveAttributeCoercion)");
         try {
             while (ne.hasMore()) {
@@ -2181,7 +2228,6 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 coercion.setXSLTStylesheetURI(LdapUtils.stringValue(attrs.get("dcmURI"), null));
                 coercion.setNoKeywords(LdapUtils.booleanValue(attrs.get("dcmNoKeywords"), false));
                 coercion.setLeadingCFindSCP(LdapUtils.stringValue(attrs.get("dcmLeadingCFindSCP"), null));
-                coercion.setLeadingCFindSCPReturnKeys(tags(attrs.get("dcmTag")));
                 coercion.setMergeMWLTemplateURI(
                         LdapUtils.stringValue(attrs.get("dcmMergeMWLTemplateURI"), null));
                 coercion.setMergeMWLMatchingKey(
@@ -2190,6 +2236,10 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 coercion.setAttributeUpdatePolicy(LdapUtils.enumValue(org.dcm4che3.data.Attributes.UpdatePolicy.class,
                         attrs.get("dcmAttributeUpdatePolicy"), org.dcm4che3.data.Attributes.UpdatePolicy.MERGE));
                 coercion.setPriority(LdapUtils.intValue(attrs.get("dcmRulePriority"), 0));
+                String supplementDeviceDN = LdapUtils.stringValue(attrs.get("dcmSupplementFromDeviceReference"), null);
+                coercion.setSupplementFromDevice(parentDN.equals(supplementDeviceDN)
+                        ? device
+                        : loadSupplementFromDevice(supplementDeviceDN));
                 coercions.add(coercion);
             }
         } finally {
@@ -2197,6 +2247,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         }
     }
 
+    private Device loadSupplementFromDevice(String supplementDeviceRef) {
+        try {
+            return supplementDeviceRef != null
+                    ? config.loadDevice(supplementDeviceRef)
+                    : null;
+        } catch (ConfigurationException e) {
+            LOG.info("Failed to load Supplement Device Reference "
+                    + supplementDeviceRef + " referenced by Attribute Coercion", e);
+            return null;
+        }
+    }
 
     private List<ModificationItem> storeDiffs(
             ArchiveAttributeCoercion prev, ArchiveAttributeCoercion coercion, ArrayList<ModificationItem> mods) {
@@ -2208,7 +2269,6 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         LdapUtils.storeDiffObject(mods, "dcmURI", prev.getXSLTStylesheetURI(), coercion.getXSLTStylesheetURI(), null);
         LdapUtils.storeDiff(mods, "dcmNoKeywords", prev.isNoKeywords(), coercion.isNoKeywords(), false);
         LdapUtils.storeDiffObject(mods, "dcmLeadingCFindSCP", prev.getLeadingCFindSCP(), coercion.getLeadingCFindSCP(), null);
-        storeDiffTags(mods, "dcmTag", prev.getLeadingCFindSCPReturnKeys(), coercion.getLeadingCFindSCPReturnKeys());
         LdapUtils.storeDiffObject(mods, "dcmMergeMWLTemplateURI",
                 prev.getMergeMWLTemplateURI(),
                 coercion.getMergeMWLTemplateURI(), null);
@@ -2220,6 +2280,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 coercion.getAttributeUpdatePolicy(),
                 org.dcm4che3.data.Attributes.UpdatePolicy.MERGE);
         LdapUtils.storeDiff(mods, "dcmRulePriority", prev.getPriority(), coercion.getPriority(), 0);
+        LdapUtils.storeDiffObject(mods, "dcmSupplementFromDeviceReference",
+                supplementDeviceRef(prev),
+                supplementDeviceRef(coercion), null);
         return mods;
     }
 
@@ -2378,4 +2441,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         return mods;
     }
 
+    private String supplementDeviceRef(ArchiveAttributeCoercion a) {
+        Device supplementDevice = a.getSupplementFromDevice();
+        return supplementDevice != null
+                ? config.deviceRef(supplementDevice.getDeviceName())
+                : null;
+    }
+
+    private static String scheduledStationDeviceRef(HL7OrderScheduledStation scheduledStation, LdapDicomConfiguration config) {
+        Device scheduledStationDevice = scheduledStation.getDevice();
+        return scheduledStationDevice != null
+                ? config.deviceRef(scheduledStationDevice.getDeviceName())
+                : null;
+    }
 }

@@ -43,7 +43,6 @@ package org.dcm4chee.arc.delete.impl;
 
 import org.dcm4che3.data.Code;
 import org.dcm4che3.net.ApplicationEntity;
-import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.AllowDeleteStudyPermanently;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.delete.*;
@@ -81,9 +80,6 @@ public class DeletionServiceImpl implements DeletionService {
 
     @Inject
     private PatientService patientService;
-
-    @Inject
-    private Device device;
 
     @Inject
     private Event<StudyDeleteContext> studyDeletedEvent;
@@ -163,6 +159,7 @@ public class DeletionServiceImpl implements DeletionService {
                 try {
                     sCtx = createStudyDeleteContext(study.getPk(), ctx.getHttpRequest());
                     studyDeleted(sCtx, study, AllowDeleteStudyPermanently.REJECTED);
+                    LOG.info("Successfully delete {} from database", study);
                 } catch (Exception e) {
                     LOG.warn("Failed to delete {} on {}", study, e);
                     ctx.setException(e);
@@ -170,8 +167,10 @@ public class DeletionServiceImpl implements DeletionService {
                 }
             }
         }
-        patientService.deletePatientFromUI(ctx);
-        LOG.info("Successfully delete {} from database", ctx.getPatient());
+        if (ctx.getException() == null) {
+            patientService.deletePatientFromUI(ctx);
+            LOG.info("Successfully delete {} from database", ctx.getPatient());
+        }
     }
 
     private boolean studyDeleted(StudyDeleteContext ctx, Study study, AllowDeleteStudyPermanently allowDeleteStudy) {
@@ -188,10 +187,5 @@ public class DeletionServiceImpl implements DeletionService {
         }
         else
             return false;
-    }
-
-    @Override
-    public void deleteInstances(List<Location> locations) {
-        ejb.deleteInstances(locations);
     }
 }

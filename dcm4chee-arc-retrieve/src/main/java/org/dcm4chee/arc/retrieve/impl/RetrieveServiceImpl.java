@@ -209,9 +209,9 @@ public class RetrieveServiceImpl implements RetrieveService {
 
     @Override
     public RetrieveContext newRetrieveContextWADO(
-            HttpServletRequest request, String localAET, String studyUID, String seriesUID, String objectUID) {
+            HttpServletRequestInfo httpServletRequestInfo, String localAET, String studyUID, String seriesUID, String objectUID) {
         RetrieveContext ctx = newRetrieveContext(localAET, studyUID, seriesUID, objectUID);
-        ctx.setHttpRequest(request);
+        ctx.setHttpServletRequestInfo(httpServletRequestInfo);
         return ctx;
     }
 
@@ -872,23 +872,10 @@ public class RetrieveServiceImpl implements RetrieveService {
         }
         String leadingCFindSCP = rule.getLeadingCFindSCP();
         if (leadingCFindSCP != null) {
-            int[] returnKeys = rule.getLeadingCFindSCPReturnKeys();
-            if (returnKeys.length == 0)
-                returnKeys = patAndStudyTags(aeExt.getArchiveDeviceExtension());
-            coercion = new CFindSCUAttributeCoercion(ctx.getLocalApplicationEntity(), leadingCFindSCP, returnKeys,
+            coercion = new CFindSCUAttributeCoercion(ctx.getLocalApplicationEntity(), leadingCFindSCP,
                     rule.getAttributeUpdatePolicy(), cfindscu, leadingCFindSCPQueryCache, coercion);
         }
         return coercion;
-    }
-
-    private int[] patAndStudyTags(ArchiveDeviceExtension arcDev) {
-        int[] patTags = arcDev.getAttributeFilter(Entity.Patient).getSelection();
-        int[] studyTags = arcDev.getAttributeFilter(Entity.Study).getSelection();
-        int[] tags = new int[patTags.length + studyTags.length];
-        System.arraycopy(patTags, 0, tags, 0, patTags.length);
-        System.arraycopy(studyTags, 0, tags, patTags.length, studyTags.length);
-        Arrays.sort(tags);
-        return tags;
     }
 
     private boolean isAccessable(ArchiveDeviceExtension arcDev, InstanceLocations match) {

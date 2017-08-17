@@ -126,7 +126,6 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
             if (ctx.isOnlyStgCmt()
                     || !ctx.isOnlyIAN() && ctx.getOutcome().getStatus() == QueueMessage.Status.COMPLETED)
                 triggerStorageCommit(ctx, descriptor, stgCmtSCPAETitle);
-        return;
     }
 
     private void triggerStorageCommit(ExportContext ctx, ExporterDescriptor descriptor, String stgCmtSCPAETitle) {
@@ -135,13 +134,9 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
     }
 
     private Attributes createActionInfo(ExportContext ctx) {
-        try {
-            ApplicationEntity ae = aeCache.findApplicationEntity(ctx.getAETitle());
-            return queryService.createActionInfo(
-                    ctx.getStudyInstanceUID(), ctx.getSeriesInstanceUID(), ctx.getSopInstanceUID(), ae);
-        } catch (Exception e) {
-            return null;
-        }
+        ApplicationEntity ae = device.getApplicationEntity(ctx.getAETitle(), true);
+        return queryService.createActionInfo(
+                ctx.getStudyInstanceUID(), ctx.getSeriesInstanceUID(), ctx.getSopInstanceUID(), ae);
     }
 
     private void onNActionRQ(Association as, PresentationContext pc, Attributes rq, Attributes actionInfo)

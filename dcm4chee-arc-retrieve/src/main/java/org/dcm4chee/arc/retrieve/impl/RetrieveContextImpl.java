@@ -113,6 +113,7 @@ class RetrieveContextImpl implements RetrieveContext {
     private Date patientUpdatedTime;
     private boolean retryFailedRetrieve;
     private AttributeSet metadataFilter;
+    private HttpServletRequestInfo httpServletRequestInfo;
 
     RetrieveContextImpl(RetrieveService retrieveService, ArchiveAEExtension arcAE, String localAETitle,
                         QueryRetrieveView qrView) {
@@ -284,8 +285,8 @@ class RetrieveContextImpl implements RetrieveContext {
 
     @Override
     public String getRequestorHostName() {
-        return httpRequest != null
-                ? httpRequest.getRemoteHost()
+        return httpServletRequestInfo != null
+                ? httpServletRequestInfo.requesterHost
                 : requestAssociation != null
                     ? requestAssociation.getSocket().getInetAddress().getHostName()
                     : null;
@@ -293,23 +294,13 @@ class RetrieveContextImpl implements RetrieveContext {
 
     @Override
     public String getDestinationHostName() {
-        return httpRequest != null
-                ? httpRequest.getRemoteHost()
-                : storeAssociation != null
-                    ? storeAssociation.getSocket().getInetAddress().getHostName()
-                    : destinationAE != null && !destinationAE.getConnections().isEmpty()
-                        ? destinationAE.getConnections().get(0).getHostname()
+        return destinationAE != null && !destinationAE.getConnections().isEmpty()
+                ? destinationAE.getConnections().get(0).getHostname()
+                : httpServletRequestInfo != null
+                    ? httpServletRequestInfo.requesterHost
+                    : storeAssociation != null
+                        ? storeAssociation.getSocket().getInetAddress().getHostName()
                         : null;
-    }
-
-    @Override
-    public boolean isDestinationRequestor() {
-        return httpRequest != null || requestAssociation == storeAssociation;
-    }
-
-    @Override
-    public boolean isLocalRequestor() {
-        return httpRequest == null && requestAssociation == null;
     }
 
     @Override
@@ -639,5 +630,15 @@ class RetrieveContextImpl implements RetrieveContext {
     @Override
     public boolean isRetrieveMetadata() {
         return objectType == null;
+    }
+
+    @Override
+    public HttpServletRequestInfo getHttpServletRequestInfo() {
+        return httpServletRequestInfo;
+    }
+
+    @Override
+    public void setHttpServletRequestInfo(HttpServletRequestInfo httpServletRequestInfo) {
+        this.httpServletRequestInfo = httpServletRequestInfo;
     }
 }

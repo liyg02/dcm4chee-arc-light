@@ -528,6 +528,17 @@ hl7AcceptedMessageType: OMG^O19
 hl7AcceptedMessageType: ORU^R01
 hl7ApplicationName: *
 
+dn: dcmQueueName=CMoveSCU,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+dicomDescription: External Dicom Export Tasks
+dcmQueueName: CMoveSCU
+dcmMaxRetries: 10
+dcmRetryDelayMultiplier: 200
+dcmRetryDelay: PT30S
+objectClass: dcmQueue
+dcmMaxRetryDelay: PT10M
+dcmPurgeQueueMessageCompletedDelay: P1D
+dcmJndiName: jms/queue/CMoveSCU
+
 dn: dcmQueueName=RSClient,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
 dicomDescription: RESTful Forward Tasks
 dcmQueueName: RSClient
@@ -600,14 +611,6 @@ dn: cn=Image Writer Factory,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Con
 objectClass: dcmImageWriterFactory
 cn: Image Writer Factory
 
-dn: dcmExporterID=DCM4CHEE:,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
-dcmExporterID: DCM4CHEE:
-dicomDescription: Generic DICOM Exporter (Unrejected Instances & Rejection Notes except Retention Expired)
-dcmQueueName: Export1
-objectClass: dcmExporter
-dicomAETitle: DCM4CHEE
-dcmURI: dicom
-
 dn: dcmSPSStatus=DISCONTINUED,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
 dcmSPSStatus: DISCONTINUED
 hl7OrderControlStatus: DC_CA
@@ -646,14 +649,6 @@ dn: dcmIDGeneratorName=PatientID,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICO
 dcmIDGeneratorName: PatientID
 dcmIDGeneratorFormat: P-%08d
 objectClass: dcmIDGenerator
-
-dn: dcmExporterID=DCM4CHEE_ADMIN:,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
-dcmExporterID: DCM4CHEE_ADMIN:
-dicomDescription: Generic DICOM Exporter (Unrejected Instances & Rejection Notes)
-dcmQueueName: Export1
-objectClass: dcmExporter
-dicomAETitle: DCM4CHEE_ADMIN
-dcmURI: dicom
 
 dn: dcmRejectionNoteLabel=Quality,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
 dcmRejectionNoteLabel: Quality
@@ -805,7 +800,31 @@ dcmAttributeSetID: patient
 objectClass: dcmAttributeSet
 dcmAttributeSetNumber: 2
 
+dn: dcmAttributeSetID=*+dcmAttributeSetType=LEADING_CFIND_SCP,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+dcmAttributeSetTitle: Default
+dcmTag: 00080020
+dcmTag: 00080030
+dcmTag: 00080050
+dcmTag: 00080051
+dcmTag: 00080090
+dcmTag: 00081030
+dcmTag: 00081032
+dcmTag: 00100010
+dcmTag: 00100020
+dcmTag: 00100021
+dcmTag: 00100030
+dcmTag: 00100040
+dcmTag: 00101010
+dcmTag: 00101020
+dcmTag: 00101030
+dcmTag: 0020000D
+dcmTag: 00200010
+dcmAttributeSetType: LEADING_CFIND_SCP
+dcmAttributeSetID: *
+objectClass: dcmAttributeSet
+
 dn: dcmAttributeSetID=AttributeFilters+dcmAttributeSetType=WADO_RS,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+dcmAttributeSetTitle: Attribute Filters
 dcmTag: 00080005
 dcmTag: 00080008
 dcmTag: 00080012
@@ -929,6 +948,13 @@ dcmTag: 00700084
 dcmAttributeSetType: WADO_RS
 dcmAttributeSetID: AttributeFilters
 objectClass: dcmAttributeSet
+
+dn: cn=Suppress Query from own Archive AE,cn=Audit Logger,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+dcmAuditUserID: DCM4CHEE
+dcmAuditUserIsRequestor: TRUE
+dcmAuditEventID: (110112, DCM, "Query")
+objectClass: dcmAuditSuppressCriteria
+cn: Suppress Query from own Archive AE
 
 dn: cn=RT Dose Storage SCP,dicomAETitle=DCM4CHEE,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
 dicomSOPClass: 1.2.840.10008.5.1.4.1.1.481.2

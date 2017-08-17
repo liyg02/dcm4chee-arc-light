@@ -122,6 +122,7 @@ public class PatientServiceEJB {
 
     public Patient updatePatient(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException {
+        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
         Patient pat = findPatient(ctx.getPatientID());
         if (pat == null) {
             if (ctx.isNoPatientCreate()) {
@@ -130,8 +131,7 @@ public class PatientServiceEJB {
             }
             return createPatient(ctx);
         }
-        if (updatePatient(pat, ctx))
-            ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
+        updatePatient(pat, ctx);
         return pat;
     }
 
@@ -156,44 +156,41 @@ public class PatientServiceEJB {
         return pat;
     }
 
-    private boolean updatePatient(Patient pat, PatientMgtContext ctx) {
+    private void updatePatient(Patient pat, PatientMgtContext ctx) {
         Attributes.UpdatePolicy updatePolicy = ctx.getAttributeUpdatePolicy();
         AttributeFilter filter = ctx.getAttributeFilter();
         Attributes attrs = pat.getAttributes();
         Attributes newAttrs = new Attributes(ctx.getAttributes(), filter.getSelection());
         if (updatePolicy == Attributes.UpdatePolicy.REPLACE) {
-            if (attrs.equals(newAttrs)) {
-                return false;
-            }
+            if (attrs.equals(newAttrs))
+                return;
+
             attrs = newAttrs;
-        } else if (!attrs.update(updatePolicy, newAttrs, null)) {
-            return false;
-        }
+        } else if (!attrs.update(updatePolicy, newAttrs, null))
+            return;
+
         pat.setAttributes(attrs, filter, ctx.getFuzzyStr());
         em.createNamedQuery(Series.SCHEDULE_METADATA_UPDATE_FOR_PATIENT)
                 .setParameter(1, pat)
                 .executeUpdate();
-        return true;
     }
 
     public Patient mergePatient(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException {
+        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
         Patient pat = findPatient(ctx.getPatientID());
         Patient prev = findPatient(ctx.getPreviousPatientID());
         if (pat == null && prev == null && ctx.isNoPatientCreate()) {
             logSuppressPatientCreate(ctx);
             return null;
         }
-        if (pat == null) {
+        if (pat == null)
             pat = createPatient(ctx);
-        }
-        else {
+        else
             updatePatient(pat, ctx);
-            ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
-        }
         if (prev == null) {
             prev = createPatient(ctx, ctx.getPreviousPatientID(), ctx.getPreviousAttributes());
-            ctx.setPreviousAttributes(null); // suppress audit message for deletion of merge patient
+            suppressMergedPatientDeletionAudit(ctx);
         } else {
             moveStudies(prev, pat);
             moveMPPS(prev, pat);
@@ -208,15 +205,20 @@ public class PatientServiceEJB {
         return pat;
     }
 
+    private void suppressMergedPatientDeletionAudit(PatientMgtContext ctx) {
+        ctx.setPreviousAttributes(null);
+    }
+
     public Patient changePatientID(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException, PatientAlreadyExistsException {
+        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
         Patient pat = findPatient(ctx.getPreviousPatientID());
         if (pat == null) {
             if (ctx.isNoPatientCreate()) {
                 logSuppressPatientCreate(ctx);
                 return null;
             }
-            ctx.setPreviousAttributes(null); // suppress audit message for deletion of merge patient
+            suppressMergedPatientDeletionAudit(ctx);
             return createPatient(ctx);
         }
 
@@ -227,9 +229,8 @@ public class PatientServiceEJB {
         else if (pat2 == pat)
             updateIssuer(pat.getPatientID(), patientID.getIssuer());
         else
-            throw new PatientAlreadyExistsException("Patient with Patient ID " + patientID + "already exists");
+            throw new PatientAlreadyExistsException("Patient with Patient ID " + pat2.getPatientID() + "already exists");
         updatePatient(pat, ctx);
-        ctx.setEventActionCode(AuditMessages.EventActionCode.Create);
         return pat;
     }
 

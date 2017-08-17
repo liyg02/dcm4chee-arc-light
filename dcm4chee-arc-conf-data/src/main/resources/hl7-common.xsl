@@ -250,8 +250,8 @@
       <xsl:with-param name="sqtag" select="$seqTag"/>
       <xsl:with-param name="code">
         <xsl:choose>
-          <xsl:when test="$offset"><xsl:value-of select="$codedEntry/component[$offset]"/></xsl:when>
-          <xsl:otherwise><xsl:value-of select="$codedEntry"/></xsl:otherwise>
+          <xsl:when test="$offset != 0"><xsl:value-of select="$codedEntry/component[$offset]"/></xsl:when>
+          <xsl:otherwise><xsl:value-of select="$codedEntry/text()"/></xsl:otherwise>
         </xsl:choose>
       </xsl:with-param>
       <xsl:with-param name="scheme" select="$codedEntry/component[$offset+2]"/>
@@ -264,16 +264,28 @@
     <xsl:param name="seqTag"/>
     <xsl:param name="codedEntry"/>
     <xsl:param name="offset" select="0"/>
-    <xsl:call-template name="attr">
-      <xsl:with-param name="tag" select="$descTag"/>
-      <xsl:with-param name="vr" select="'LO'"/>
-      <xsl:with-param name="val" select="substring($codedEntry/component[$offset+1]/text(),1,64)"/>
-    </xsl:call-template>
-    <xsl:call-template name="ce2codeItem">
-      <xsl:with-param name="seqTag" select="$seqTag"/>
-      <xsl:with-param name="codedEntry" select="$codedEntry"/>
-      <xsl:with-param name="offset" select="$offset"/>
-    </xsl:call-template>
+    <xsl:variable name="desc" select="$codedEntry/component[$offset+1]/text()"/>
+    <xsl:choose>
+        <xsl:when test="$desc">
+          <xsl:call-template name="attr">
+            <xsl:with-param name="tag" select="$descTag"/>
+            <xsl:with-param name="vr" select="'LO'"/>
+            <xsl:with-param name="val" select="substring($desc,1,64)"/>
+          </xsl:call-template>
+          <xsl:call-template name="ce2codeItem">
+            <xsl:with-param name="seqTag" select="$seqTag"/>
+            <xsl:with-param name="codedEntry" select="$codedEntry"/>
+            <xsl:with-param name="offset" select="$offset"/>
+          </xsl:call-template>
+        </xsl:when>
+        <xsl:when test="$offset = 0">
+          <xsl:call-template name="attr">
+            <xsl:with-param name="tag" select="$descTag"/>
+            <xsl:with-param name="vr" select="'LO'"/>
+            <xsl:with-param name="val" select="$codedEntry/text()"/>
+          </xsl:call-template>
+        </xsl:when>
+    </xsl:choose>
   </xsl:template>
 
   <xsl:template match="PID">
@@ -395,10 +407,11 @@
   </xsl:template>
   <xsl:template name="ei2attr">
     <xsl:param name="tag"/>
+    <xsl:param name="vr"/>
     <xsl:param name="sqtag"/>
     <xsl:param name="ei"/>
     <xsl:if test="$ei/text()">
-      <DicomAttribute tag="{$tag}" vr="LO">
+      <DicomAttribute tag="{$tag}" vr="{$vr}">
         <Value number="1">
           <xsl:value-of select="$ei/text()"/>
         </Value>

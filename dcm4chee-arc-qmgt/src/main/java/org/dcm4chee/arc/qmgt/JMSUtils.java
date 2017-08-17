@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -38,24 +38,21 @@
  * *** END LICENSE BLOCK *****
  */
 
-package org.dcm4chee.arc.common.rs;
+package org.dcm4chee.arc.qmgt;
 
-import org.dcm4che3.conf.api.ConfigurationNotFoundException;
-import javax.ws.rs.core.Response;
-import javax.ws.rs.ext.ExceptionMapper;
-import javax.ws.rs.ext.Provider;
+import javax.jms.JMSException;
+import javax.jms.Message;
+import javax.jms.ObjectMessage;
 
 /**
- * @author Vrinda Nayak <vrinda.nayak@j4care.com>
- * @since Aug 2016
+ * @since Aug 2017
  */
 
-@Provider
-public class ConfigurationNotFoundExceptionMapper implements ExceptionMapper<ConfigurationNotFoundException> {
+public class JMSUtils {
 
-    public Response toResponse(ConfigurationNotFoundException e) {
-        return Response.status(Response.Status.NOT_FOUND)
-                .entity(BuildHTTPResponseStatus.getStatus(e.getMessage())).build();
+    public static void setStringNotNull(Message msg, String key, String val) throws JMSException {
+        if (val != null)
+            msg.setStringProperty(key, val);
     }
 
 }

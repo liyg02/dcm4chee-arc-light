@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2017
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -38,23 +38,34 @@
  * *** END LICENSE BLOCK *****
  */
 
-package org.dcm4chee.arc.common.rs;
+package org.dcm4chee.arc.conf.rs;
 
+import org.dcm4che3.net.Device;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
+import org.jboss.resteasy.annotations.cache.NoCache;
 
-
-import javax.ws.rs.core.Response;
+import javax.enterprise.context.RequestScoped;
+import javax.inject.Inject;
+import javax.ws.rs.GET;
+import javax.ws.rs.Path;
+import javax.ws.rs.Produces;
 
 
 /**
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
- * @since Aug 2016
+ * @since Aug 2017
  */
+@Path("elasticsearch")
+@RequestScoped
+public class QueryElasticSearch {
 
+    @Inject
+    private Device device;
 
-public class BuildHTTPResponseStatus {
-
-    public static Object getStatus(String errorMessage) {
-        return "{\"errorMessage\":\"" + errorMessage + "\"}";
+    @GET
+    @NoCache
+    @Produces("application/json")
+    public String getElasticSearchURL() throws Exception {
+        return "{\"url\":\"" + device.getDeviceExtension(ArchiveDeviceExtension.class).getElasticSearchURL() + "\"}";
     }
-
 }

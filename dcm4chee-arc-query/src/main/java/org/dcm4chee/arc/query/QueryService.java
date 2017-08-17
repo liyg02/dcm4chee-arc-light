@@ -41,15 +41,18 @@
 package org.dcm4chee.arc.query;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.AttributesCoercion;
 import org.dcm4che3.data.Code;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
+import org.dcm4che3.net.DimseRSP;
 import org.dcm4che3.net.QueryOption;
 import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
 import org.dcm4chee.arc.conf.RejectionNote;
 import org.dcm4chee.arc.entity.SeriesQueryAttributes;
 import org.dcm4chee.arc.entity.StudyQueryAttributes;
+import org.dcm4chee.arc.query.scu.CFindSCU;
 import org.dcm4chee.arc.query.util.QueryParam;
 
 import javax.servlet.http.HttpServletRequest;
@@ -118,4 +121,8 @@ public interface QueryService {
     List<Object[]> getSOPInstanceUIDs(String studyUID, String seriesUID);
 
     ZipInputStream openZipInputStream(QueryContext ctx, String storageID, String storagePath) throws IOException;
+
+    AttributesCoercion getAttributesCoercion(QueryContext ctx);
+
+    CFindSCU cfindSCU();
 }

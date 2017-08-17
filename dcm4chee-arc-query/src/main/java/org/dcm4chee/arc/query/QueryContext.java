@@ -50,7 +50,6 @@ import org.dcm4chee.arc.query.util.QueryParam;
 import org.dcm4chee.arc.storage.Storage;
 
 import javax.servlet.http.HttpServletRequest;
-import java.io.Closeable;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -74,6 +73,8 @@ public interface QueryContext {
     String getRemoteHostName();
 
     String getSOPClassUID();
+
+    void setSOPClassUID(String sopClassUID);
 
     String getSearchMethod();
 

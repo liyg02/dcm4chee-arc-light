@@ -18,9 +18,10 @@
     },
     "dcmDIMSE": {
       "title": "DIMSE",
-      "description": "DICOM Message Element.",
+      "description": "DICOM Message Element on which this Attribute Coercion shall be applied",
       "type": "string",
       "enum": [
+        "N_CREATE_RQ",
         "C_STORE_RQ",
         "C_FIND_RQ",
         "C_FIND_RSP"
@@ -28,7 +29,7 @@
     },
     "dicomTransferRole": {
       "title": "DICOM Transfer Role",
-      "description": "DICOM Transfer Role.",
+      "description": "DICOM Transfer Role of peer DICOM AE.",
       "type": "string",
       "enum": [
         "SCU",
@@ -44,15 +45,15 @@
     },
     "dcmAETitle": {
       "title": "AE Title",
-      "description": "Application Entity (AE) title",
+      "description": "Application Entity (AE) title of peer DICOM AE for which this Attribute Coercion shall be applied. Apply on any if absent.",
       "type": "array",
       "items": {
         "type": "string"
       }
     },
     "dcmHostname": {
-      "title": "Host Name",
-      "description": "DNS hostname",
+      "title": "Hostname",
+      "description": "DNS hostname of peer DICOM AE for which this Attribute Coercion shall be applied. Apply on any if absent.",
       "type": "array",
       "items": {
         "type": "string"
@@ -60,7 +61,7 @@
     },
     "dcmSOPClass": {
       "title": "SOP Class UID",
-      "description": "A SOP Class UID",
+      "description": "UID of SOP Class for which this Attribute Coercion shall be applied. Apply on any if absent.",
       "type": "array",
       "items": {
         "type": "string"
@@ -68,13 +69,13 @@
       "format": "dcmSOPClass"
     },
     "dcmURI": {
-      "title": "URI",
-      "description": "Specifies URI of the style sheet for Attribute Coercion",
+      "title": "XSL Stylesheet URI",
+      "description": "Specifies URI of the XSL style sheet for Attribute Coercion",
       "type": "string"
     },
     "dcmNoKeywords": {
-      "title": "No Keywords",
-      "description": "Indicates if keywords shall be omitted in generated DICOM XML or JSON presentations",
+      "title": "No Attribute Keyword",
+      "description": "Indicates if attribute keywords shall be omitted in DICOM XML passed to XSLT",
       "type": "boolean",
       "default": false
     },
@@ -95,16 +96,9 @@
     },
     "dcmLeadingCFindSCP": {
       "title": "Leading C-FIND SCP",
-      "description": "AE Title of external C-FIND SCP for Attribute Coercion with Patient and Study attributes fetched from this AE.",
+      "description": "AE Title of external C-FIND SCP for Attribute Coercion with Patient and Study attributes fetched from this AE. If no particular Attribute Set is specified for the C-FIND SCP, all Attributes of the configured Patient and Study Attribute Filter will be fetched.",
       "type": "string",
       "format": "dcmAETitle"
-    },
-    "dcmTag": {
-      "title": "Leading C-FIND SCP return keys",
-      "description": "DICOM Tag as hex string of attributes fetched from external C-FIND SCP for Attribute Coercion. If absent, all Patient and Study Attributes extracted into the DB - configured by the Patient and Study Attribute Filter - are fetched.",
-      "type": "array",
-      "items" : { "type": "string" },
-      "format": "dcmTag"
     },
     "dcmAttributeUpdatePolicy": {
       "title": "Attribute Update Policy",
@@ -116,6 +110,12 @@
         "MERGE",
         "OVERWRITE"
       ]
+    },
+    "dcmSupplementFromDeviceName": {
+      "title": "Supplement from Device",
+      "description": "Name of Device from which Assigning Authorities and other information is taken to supplement received Composite Objects and MPPS.",
+      "type": "string",
+      "format": "dicomDeviceName"
     }
   }
 }

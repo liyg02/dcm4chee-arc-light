@@ -41,9 +41,6 @@
 package org.dcm4chee.arc.realm.rs;
 
 import org.jboss.resteasy.annotations.cache.NoCache;
-import org.keycloak.KeycloakPrincipal;
-import org.keycloak.KeycloakSecurityContext;
-import org.keycloak.representations.IDToken;
 
 import javax.enterprise.context.RequestScoped;
 import javax.servlet.http.HttpServletRequest;
@@ -51,15 +48,14 @@ import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
-import javax.ws.rs.core.SecurityContext;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.security.Principal;
-import java.util.Arrays;
-import java.util.Set;
+
+import org.dcm4chee.arc.keycloak.KeycloakUtils;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -70,7 +66,7 @@ import java.util.Set;
 public class RealmRS {
 
     @Context
-    private SecurityContext sc;
+    private HttpServletRequest request;
 
     @GET
     @NoCache
@@ -80,31 +76,25 @@ public class RealmRS {
             @Override
             public void write(OutputStream out) throws IOException {
                 Writer w = new OutputStreamWriter(out, "UTF-8");
-                Principal principal = sc.getUserPrincipal();
-                if (principal == null)
-                    w.write("{\"user\":null,\"roles\":[]}");
+                Principal principal = request.getUserPrincipal();
+                if (principal == null) {
+                    w.write("{\"auth-server-url\":null,\"realm\":null,\"token\":null,\"user\":null,\"roles\":[]}");
+                }
                 else {
-                    w.append("{\"user\":\"").append(user(principal)).append("\",\"roles\":[");
-                    int count = 0;
-                    for (String role : roles(principal)) {
-                        if (count++ > 0)
-                            w.write(',');
-                        w.append('\"').append(role).append('\"');
-                    }
+                    w.append("{\"auth-server-url\":\"").append(System.getProperty("auth-server-url", "/auth"))
+                     .append("\",\"realm\":\"").append(System.getProperty("realm-name"))
+                     .append("\",\"token\":\"").append(KeycloakUtils.getTokenString(request))
+                     .append("\",\"user\":\"").append(KeycloakUtils.getUserName(request)).append("\",\"roles\":[");
+                        int count = 0;
+                        for (String role : KeycloakUtils.getUserRoles(request)) {
+                            if (count++ > 0)
+                                w.write(',');
+                            w.append('\"').append(role).append('\"');
+                        }
                     w.write("]}");
                 }
                 w.flush();
             }
         };
-    }
-
-    private String user(Principal principal) {
-        KeycloakPrincipal<KeycloakSecurityContext> kp1 = (KeycloakPrincipal<KeycloakSecurityContext>) principal;
-        return kp1.getKeycloakSecurityContext().getIdToken().getPreferredUsername();
-    }
-
-    private Iterable<String> roles(Principal principal) {
-        KeycloakPrincipal<KeycloakSecurityContext> kp1 = (KeycloakPrincipal<KeycloakSecurityContext>) principal;
-        return kp1.getKeycloakSecurityContext().getToken().getRealmAccess().getRoles();
     }
 }

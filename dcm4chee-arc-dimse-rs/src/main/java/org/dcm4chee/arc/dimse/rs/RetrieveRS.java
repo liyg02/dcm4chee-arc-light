@@ -41,13 +41,17 @@ package org.dcm4chee.arc.dimse.rs;
 import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
+import org.dcm4che3.data.VR;
 import org.dcm4che3.net.*;
+import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.TagUtils;
+import org.dcm4chee.arc.retrieve.ExternalRetrieveContext;
 import org.dcm4chee.arc.retrieve.scu.CMoveSCU;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
+import javax.enterprise.event.Event;
 import javax.inject.Inject;
 import javax.json.Json;
 import javax.json.stream.JsonGenerator;
@@ -76,6 +80,9 @@ public class RetrieveRS {
     @Inject
     private Device device;
 
+    @Inject
+    private Event<ExternalRetrieveContext> instancesRetrievedEvent;
+
     @PathParam("AETitle")
     private String aet;
 
@@ -85,6 +92,9 @@ public class RetrieveRS {
     @QueryParam("priority")
     @Pattern(regexp = "0|1|2")
     private String priority;
+
+    @QueryParam("queue")
+    private boolean queue;
 
     @Inject
     private CMoveSCU moveSCU;
@@ -134,12 +144,26 @@ public class RetrieveRS {
 
     private Response export(String destAET, String... uids) throws Exception {
         LOG.info("Process POST {} from {}@{}", this, request.getRemoteUser(), request.getRemoteHost());
+        Attributes keys = toKeys(uids);
+        return queue ? queueExport(destAET, keys) : export(destAET, keys);
+    }
+
+    private Response queueExport(String destAET, Attributes keys) {
+        moveSCU.scheduleCMove(priority(), toInstancesRetrieved(destAET, keys));
+        return Response.accepted().build();
+    }
+
+    private Response export(String destAET, Attributes keys) throws Exception {
         ApplicationEntity localAE = getApplicationEntity();
         Association as = moveSCU.openAssociation(localAE, externalAET);
         try {
-            final DimseRSP rsp = moveSCU.cmove(as, priority(), destAET, uids);
+            final DimseRSP rsp = moveSCU.cmove(as, priority(), destAET, keys);
             while (rsp.next());
             Attributes cmd = rsp.getCommand();
+            instancesRetrievedEvent.fire(
+                    toInstancesRetrieved(destAET, keys)
+                    .setRemoteHostName(as.getSocket().getInetAddress().getHostName())
+                    .setResponse(cmd));
             return status(cmd).entity(entity(cmd)).build();
         } finally {
             try {
@@ -148,6 +172,28 @@ public class RetrieveRS {
                 LOG.info("{}: Failed to release association:\\n", as, e);
             }
         }
+    }
+
+    private ExternalRetrieveContext toInstancesRetrieved(String destAET, Attributes keys) {
+        return new ExternalRetrieveContext()
+                .setLocalAET(aet)
+                .setRemoteAET(externalAET)
+                .setDestinationAET(destAET)
+                .setRequestInfo(request)
+                .setKeys(keys);
+    }
+
+    private static Attributes toKeys(String[] iuids) {
+        int n = iuids.length;
+        Attributes keys = new Attributes(n + 1);
+        keys.setString(Tag.QueryRetrieveLevel, VR.CS, QueryRetrieveLevel2.values()[n].name());
+        keys.setString(Tag.StudyInstanceUID, VR.UI, iuids[0]);
+        if (n > 1) {
+            keys.setString(Tag.SeriesInstanceUID, VR.UI, iuids[1]);
+            if (n > 2)
+                keys.setString(Tag.SOPInstanceUID, VR.UI, iuids[2]);
+        }
+        return keys;
     }
 
     private Response.ResponseBuilder status(Attributes cmd) {

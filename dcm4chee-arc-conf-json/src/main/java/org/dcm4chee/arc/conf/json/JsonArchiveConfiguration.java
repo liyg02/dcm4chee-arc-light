@@ -52,6 +52,8 @@ import org.dcm4che3.net.*;
 import org.dcm4che3.util.Property;
 import org.dcm4che3.util.TagUtils;
 import org.dcm4chee.arc.conf.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.json.stream.JsonParser;
 import java.lang.reflect.Array;
@@ -69,6 +71,8 @@ import java.util.regex.Pattern;
  * @since Jan 2016
  */
 public class JsonArchiveConfiguration extends JsonConfigurationExtension {
+
+    private static final Logger LOG = LoggerFactory.getLogger(JsonArchiveConfiguration.class);
 
     @Override
     protected void storeTo(Device device, JsonWriter writer) {
@@ -109,6 +113,10 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
         writer.writeNotDef("dcmIanOnTimeout", arcDev.isIanOnTimeout(), false);
         writer.writeNotNullOrDef("dcmIanTaskPollingInterval", arcDev.getIanTaskPollingInterval(), null);
         writer.writeNotDef("dcmIanTaskFetchSize", arcDev.getIanTaskFetchSize(), 100);
+        writer.writeNotNullOrDef("dcmSpanningCFindSCP", arcDev.getSpanningCFindSCP(), null);
+        writer.writeNotEmpty("dcmSpanningCFindSCPRetrieveAET", arcDev.getSpanningCFindSCPRetrieveAETitles());
+        writer.writeNotNullOrDef("dcmSpanningCFindSCPPolicy",
+                arcDev.getSpanningCFindSCPPolicy(), SpanningCFindSCPPolicy.REPLACE);
         writer.writeNotNullOrDef("dcmFallbackCMoveSCP", arcDev.getFallbackCMoveSCP(), null);
         writer.writeNotNullOrDef("dcmFallbackCMoveSCPDestination", arcDev.getFallbackCMoveSCPDestination(), null);
         writer.writeNotDef("dcmFallbackCMoveSCPRetries", arcDev.getFallbackCMoveSCPRetries(), 0);
@@ -420,13 +428,17 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
             writer.writeNotDef("dcmNoKeywords", aac.isNoKeywords(), false);
             writer.writeNotNullOrDef("dcmURI", aac.getXSLTStylesheetURI(), null);
             writer.writeNotNullOrDef("dcmLeadingCFindSCP", aac.getLeadingCFindSCP(), null);
-            writer.writeNotEmpty("dcmTag", TagUtils.toHexStrings(aac.getLeadingCFindSCPReturnKeys()));
             writer.writeNotNullOrDef("dcmMergeMWLMatchingKey", aac.getMergeMWLMatchingKey(), null);
             writer.writeNotNullOrDef("dcmMergeMWLTemplateURI", aac.getMergeMWLTemplateURI(), null);
             writer.writeNotNullOrDef("dcmAttributeUpdatePolicy", aac.getAttributeUpdatePolicy(), null);
+            writer.writeNotNullOrDef("dcmSupplementFromDeviceName", deviceNameOf(aac.getSupplementFromDevice()), null);
             writer.writeEnd();
         }
         writer.writeEnd();
+    }
+
+    private static String deviceNameOf(Device device) {
+        return device != null ? device.getDeviceName() : null;
     }
 
     protected void writeRejectionNote(JsonWriter writer, Collection<RejectionNote> rejectionNoteList) {
@@ -478,7 +490,7 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
         for (HL7OrderScheduledStation station : stations) {
             writer.writeStartObject();
             writer.writeNotNullOrDef("cn", station.getCommonName(), null);
-            writer.writeNotNullOrDef("hl7OrderScheduledStationDeviceReference", station.getDeviceName(), null);
+            writer.writeNotNullOrDef("hl7OrderScheduledStationDeviceName", deviceNameOf(station.getDevice()), null);
             writer.writeNotDef("dcmRulePriority", station.getPriority(), 0);
             writer.writeNotEmpty("dcmProperty", toStrings(station.getConditions().getMap()));
             writer.writeEnd();
@@ -556,6 +568,9 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
         writer.writeNotNullOrDef("dcmIanDelay", arcAE.getIanDelay(), null);
         writer.writeNotNullOrDef("dcmIanTimeout", arcAE.getIanTimeout(), null);
         writer.writeNotNull("dcmIanOnTimeout", arcAE.getIanOnTimeout());
+        writer.writeNotNullOrDef("dcmSpanningCFindSCP", arcAE.getSpanningCFindSCP(), null);
+        writer.writeNotEmpty("dcmSpanningCFindSCPRetrieveAET", arcAE.getSpanningCFindSCPRetrieveAETitles());
+        writer.writeNotNullOrDef("dcmSpanningCFindSCPPolicy", arcAE.getSpanningCFindSCPPolicy(), null);
         writer.writeNotNullOrDef("dcmFallbackCMoveSCP", arcAE.getFallbackCMoveSCP(), null);
         writer.writeNotNullOrDef("dcmFallbackCMoveSCPDestination", arcAE.getFallbackCMoveSCPDestination(), null);
         writer.writeNotNull("dcmFallbackCMoveSCPRetries", arcAE.getFallbackCMoveSCPRetries());
@@ -703,6 +718,15 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
                     break;
                 case "dcmIanTaskFetchSize":
                     arcDev.setIanTaskFetchSize(reader.intValue());
+                    break;
+                case "dcmSpanningCFindSCP":
+                    arcDev.setSpanningCFindSCP(reader.stringValue());
+                    break;
+                case "dcmSpanningCFindSCPRetrieveAET":
+                    arcDev.setSpanningCFindSCPRetrieveAETitles(reader.stringArray());
+                    break;
+                case "dcmSpanningCFindSCPPolicy":
+                    arcDev.setSpanningCFindSCPPolicy(SpanningCFindSCPPolicy.valueOf(reader.stringValue()));
                     break;
                 case "dcmFallbackCMoveSCP":
                     arcDev.setFallbackCMoveSCP(reader.stringValue());
@@ -979,7 +1003,7 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
                     loadStoreAccessControlIDRule(arcDev.getStoreAccessControlIDRules(), reader);
                     break;
                 case "dcmArchiveAttributeCoercion":
-                    loadArchiveAttributeCoercion(arcDev.getAttributeCoercions(), reader);
+                    loadArchiveAttributeCoercion(arcDev.getAttributeCoercions(), reader, config);
                     break;
                 case "dcmRejectionNote":
                     loadRejectionNoteFrom(arcDev, reader);
@@ -1371,7 +1395,8 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
         reader.expect(JsonParser.Event.END_ARRAY);
     }
 
-    private void loadArchiveAttributeCoercion(Collection<ArchiveAttributeCoercion> coercions, JsonReader reader) {
+    private void loadArchiveAttributeCoercion(Collection<ArchiveAttributeCoercion> coercions, JsonReader reader,
+                                              ConfigurationDelegate config) throws ConfigurationException {
         reader.next();
         reader.expect(JsonParser.Event.START_ARRAY);
         while (reader.next() == JsonParser.Event.START_OBJECT) {
@@ -1409,9 +1434,6 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
                     case "dcmLeadingCFindSCP":
                         aac.setLeadingCFindSCP(reader.stringValue());
                         break;
-                    case "dcmTag":
-                        aac.setLeadingCFindSCPReturnKeys(TagUtils.fromHexStrings(reader.stringArray()));
-                        break;
                     case "dcmMergeMWLMatchingKey":
                         aac.setMergeMWLMatchingKey(MergeMWLMatchingKey.valueOf(reader.stringValue()));
                         break;
@@ -1421,6 +1443,9 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
                     case "dcmAttributeUpdatePolicy":
                         aac.setAttributeUpdatePolicy(Attributes.UpdatePolicy.valueOf(reader.stringValue()));
                         break;
+                    case "dcmSupplementFromDeviceName":
+                        aac.setSupplementFromDevice(loadSupplementFromDevice(config, reader.stringValue()));
+                        break;
                     default:
                         reader.skipUnknownProperty();
                 }
@@ -1429,6 +1454,28 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
             coercions.add(aac);
         }
         reader.expect(JsonParser.Event.END_ARRAY);
+    }
+
+    private Device loadSupplementFromDevice(ConfigurationDelegate config, String supplementDeviceRef) throws ConfigurationException {
+        try {
+            return supplementDeviceRef != null
+                    ? config.findDevice(supplementDeviceRef)
+                    : null;
+        } catch (ConfigurationException e) {
+            LOG.info("Failed to load Supplement Device Reference "
+                    + supplementDeviceRef + " referenced by Attribute Coercion", e);
+            return null;
+        }
+    }
+
+    private static Device loadScheduledStation(ConfigurationDelegate config, String scheduledStationDeviceRef) throws ConfigurationException {
+        try {
+            return config.findDevice(scheduledStationDeviceRef);
+        } catch (ConfigurationException e) {
+            LOG.info("Failed to load Scheduled Station Device Reference "
+                    + scheduledStationDeviceRef + " referenced by HL7 Order Scheduled Station", e);
+            return null;
+        }
     }
 
     private void loadRejectionNoteFrom(ArchiveDeviceExtension arcDev, JsonReader reader) {
@@ -1551,8 +1598,8 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
                     case "cn":
                         station.setCommonName(reader.stringValue());
                         break;
-                    case "hl7OrderScheduledStationDeviceReference":
-                        station.setDevice(config.findDevice(reader.stringValue()));
+                    case "hl7OrderScheduledStationDeviceName":
+                        station.setDevice(loadScheduledStation(config, reader.stringValue()));
                         break;
                     case "dcmRulePriority":
                         station.setPriority(reader.intValue());
@@ -1649,20 +1696,22 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
     }
 
     @Override
-    public boolean loadApplicationEntityExtension(Device device, ApplicationEntity ae, JsonReader reader) {
+    public boolean loadApplicationEntityExtension(Device device, ApplicationEntity ae, JsonReader reader,
+                                                  ConfigurationDelegate config) throws ConfigurationException {
         if (!reader.getString().equals("dcmArchiveNetworkAE"))
             return false;
 
         reader.next();
         reader.expect(JsonParser.Event.START_OBJECT);
         ArchiveAEExtension arcAE = new ArchiveAEExtension();
-        loadFrom(arcAE, reader);
+        loadFrom(arcAE, reader, config);
         ae.addAEExtension(arcAE);
         reader.expect(JsonParser.Event.END_OBJECT);
         return true;
     }
 
-    private void loadFrom(ArchiveAEExtension arcAE, JsonReader reader) {
+    private void loadFrom(ArchiveAEExtension arcAE, JsonReader reader, ConfigurationDelegate config)
+        throws ConfigurationException {
         while (reader.next() == JsonParser.Event.KEY_NAME) {
             switch (reader.getString()) {
                 case "dcmObjectStorageID":
@@ -1733,6 +1782,15 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
                     break;
                 case "dcmIanOnTimeout":
                     arcAE.setIanOnTimeout(reader.booleanValue());
+                    break;
+                case "dcmSpanningCFindSCP":
+                    arcAE.setSpanningCFindSCP(reader.stringValue());
+                    break;
+                case "dcmSpanningCFindSCPRetrieveAET":
+                    arcAE.setSpanningCFindSCPRetrieveAETitles(reader.stringArray());
+                    break;
+                case "dcmSpanningCFindSCPPolicy":
+                    arcAE.setSpanningCFindSCPPolicy(SpanningCFindSCPPolicy.valueOf(reader.stringValue()));
                     break;
                 case "dcmFallbackCMoveSCP":
                     arcAE.setFallbackCMoveSCP(reader.stringValue());
@@ -1835,7 +1893,7 @@ public class JsonArchiveConfiguration extends JsonConfigurationExtension {
                     loadStoreAccessControlIDRule(arcAE.getStoreAccessControlIDRules(), reader);
                     break;
                 case "dcmArchiveAttributeCoercion":
-                    loadArchiveAttributeCoercion(arcAE.getAttributeCoercions(), reader);
+                    loadArchiveAttributeCoercion(arcAE.getAttributeCoercions(), reader, config);
                     break;
                 case "dcmStudyRetentionPolicy":
                     loadStudyRetentionPolicy(arcAE.getStudyRetentionPolicies(), reader);

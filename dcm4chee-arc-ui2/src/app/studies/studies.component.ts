@@ -2213,7 +2213,8 @@ export class StudiesComponent implements OnDestroy{
             if (result){
                 $this.cfpLoadingBar.start();
                 if (result.exportType === 'dicom'){
-                    id = result.dicomPrefix + result.selectedAet;
+                    //id = result.dicomPrefix + result.selectedAet;
+                    id = 'dicom:' + result.selectedAet;
                 }else{
                     id = result.selectedExporter;
                 }
@@ -2225,15 +2226,16 @@ export class StudiesComponent implements OnDestroy{
                     (result) => {
                         $this.mainservice.setMessage({
                             'title': 'Info',
-                            'text': 'Command executed successfully!',
+                            'text': $this.service.getMsgFromResponse(result,'Command executed successfully!'),
                             'status': 'info'
                         });
                         $this.cfpLoadingBar.complete();
                     },
                     (err) => {
+                        console.log("err",err);
                         $this.mainservice.setMessage({
                             'title': 'Error ' + err.status,
-                            'text': err.statusText,
+                            'text': $this.service.getMsgFromResponse(err),
                             'status': 'error'
                         });
                         $this.cfpLoadingBar.complete();
@@ -2251,7 +2253,7 @@ export class StudiesComponent implements OnDestroy{
         let $this = this;
         this.service.queryMwl(
             this.rsURL(),
-            this.createQueryParams(offset, this.limit + 1, this.createStudyFilterParams())
+            this.createQueryParams(offset, this.limit + 1, this.createMwlFilterParams())
         ).subscribe((res) => {
                 $this.patients = [];
                 //           $this.studies = [];
@@ -2987,6 +2989,14 @@ export class StudiesComponent implements OnDestroy{
     createStudyFilterParams() {
         let filter = Object.assign({}, this.filter);
         this.appendFilter(filter, 'StudyDate', this.studyDate, /-/g);
+        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
+        this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
+        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);
+        return filter;
+    }
+    createMwlFilterParams() {
+        let filter = Object.assign({}, this.filter);
+        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.studyDate, /-/g);
         this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
         this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
         this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);

@@ -5,6 +5,9 @@ changetype: modify
 replace: dicomSoftwareVersion
 dicomSoftwareVersion: 5.10.5
 -
+replace: dicomVendorData
+dicomVendorData:< file:vendor-data.zip
+-
 
 dn: dicomAETitle=UNKNOWN,dicomDeviceName=unknown,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
 changetype: delete
@@ -19,6 +22,7 @@ dn: dicomAETitle=UNKNOWN,cn=Unique AE Titles Registry,cn=DICOM Configuration,dc=
 changetype: delete
 
 dn: dicomAETitle=SCHEDULEDSTATION,cn=Unique AE Titles Registry,cn=DICOM Configuration,dc=dcm4che,dc=org
+changetype: add
 objectClass: dicomUniqueAETitle
 dicomAETitle: SCHEDULEDSTATION
 
@@ -56,4 +60,60 @@ dn: hl7ApplicationName=*,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Config
 changetype: modify
 add: dicomDescription
 dicomDescription: Default HL7 Receiver
+-
+
+dn: cn=Suppress Query from own Archive AE,cn=Audit Logger,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+changetype: add
+dcmAuditUserID: DCM4CHEE
+dcmAuditUserIsRequestor: TRUE
+dcmAuditEventID: (110112, DCM, "Query")
+objectClass: dcmAuditSuppressCriteria
+cn: Suppress Query from own Archive AE
+
+dn: dcmQueueName=CMoveSCU,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+changetype: add
+dicomDescription: External Dicom Export Tasks
+dcmQueueName: CMoveSCU
+dcmMaxRetries: 10
+dcmRetryDelayMultiplier: 200
+dcmRetryDelay: PT30S
+objectClass: dcmQueue
+dcmMaxRetryDelay: PT10M
+dcmPurgeQueueMessageCompletedDelay: P1D
+dcmJndiName: jms/queue/CMoveSCU
+
+dn: dcmExporterID=DCM4CHEE:,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+changetype: delete
+
+dn: dcmExporterID=DCM4CHEE_ADMIN:,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+changetype: delete
+
+dn: dcmAttributeSetID=*+dcmAttributeSetType=LEADING_CFIND_SCP,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+changetype: add
+dcmAttributeSetTitle: Default
+dcmTag: 00080020
+dcmTag: 00080030
+dcmTag: 00080050
+dcmTag: 00080051
+dcmTag: 00080090
+dcmTag: 00081030
+dcmTag: 00081032
+dcmTag: 00100010
+dcmTag: 00100020
+dcmTag: 00100021
+dcmTag: 00100030
+dcmTag: 00100040
+dcmTag: 00101010
+dcmTag: 00101020
+dcmTag: 00101030
+dcmTag: 0020000D
+dcmTag: 00200010
+dcmAttributeSetType: LEADING_CFIND_SCP
+dcmAttributeSetID: *
+objectClass: dcmAttributeSet
+
+dn: dcmAttributeSetID=AttributeFilters+dcmAttributeSetType=WADO_RS,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
+changetype: modify
+replace: dcmAttributeSetTitle
+dcmAttributeSetTitle: Attribute Filters
 -

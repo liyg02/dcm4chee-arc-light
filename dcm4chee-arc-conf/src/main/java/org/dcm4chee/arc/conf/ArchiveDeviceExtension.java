@@ -49,6 +49,7 @@ import java.time.LocalTime;
 
 import org.dcm4che3.net.DeviceExtension;
 import org.dcm4che3.soundex.FuzzyStr;
+import org.dcm4che3.util.ByteUtils;
 import org.dcm4che3.util.StringUtils;
 
 import javax.servlet.http.HttpServletRequest;
@@ -100,6 +101,9 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     private boolean ianOnTimeout;
     private Duration ianTaskPollingInterval;
     private int ianTaskFetchSize = 100;
+    private String spanningCFindSCP;
+    private String[] spanningCFindSCPRetrieveAETitles = {};
+    private SpanningCFindSCPPolicy spanningCFindSCPPolicy = SpanningCFindSCPPolicy.REPLACE;
     private String fallbackCMoveSCP;
     private String fallbackCMoveSCPDestination;
     private String fallbackCMoveSCPLeadingCFindSCP;
@@ -495,6 +499,30 @@ public class ArchiveDeviceExtension extends DeviceExtension {
 
     public void setIanTaskFetchSize(int ianTaskFetchSize) {
         this.ianTaskFetchSize = greaterZero(ianTaskFetchSize, "ianTaskFetchSize");
+    }
+
+    public String getSpanningCFindSCP() {
+        return spanningCFindSCP;
+    }
+
+    public void setSpanningCFindSCP(String spanningCFindSCP) {
+        this.spanningCFindSCP = spanningCFindSCP;
+    }
+
+    public String[] getSpanningCFindSCPRetrieveAETitles() {
+        return spanningCFindSCPRetrieveAETitles;
+    }
+
+    public void setSpanningCFindSCPRetrieveAETitles(String[] spanningCFindSCPRetrieveAETitles) {
+        this.spanningCFindSCPRetrieveAETitles = spanningCFindSCPRetrieveAETitles;
+    }
+
+    public SpanningCFindSCPPolicy getSpanningCFindSCPPolicy() {
+        return spanningCFindSCPPolicy;
+    }
+
+    public void setSpanningCFindSCPPolicy(SpanningCFindSCPPolicy spanningCFindSCPPolicy) {
+        this.spanningCFindSCPPolicy = spanningCFindSCPPolicy;
     }
 
     public String getFallbackCMoveSCP() {
@@ -1065,6 +1093,28 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return attributeFilters;
     }
 
+    public int[] returnKeysForLeadingCFindSCP(String aet) {
+        Map<String, AttributeSet> map = getAttributeSet(AttributeSet.Type.LEADING_CFIND_SCP);
+        AttributeSet attributeSet = map.get(aet);
+        if (attributeSet == null)
+            attributeSet = map.get("*");
+
+        return attributeSet != null
+                ? attributeSet.getSelection()
+                : catAttributeFilters(Entity.Patient, Entity.Study);
+    }
+
+    private int[] catAttributeFilters(Entity... entities) {
+        int[] tags = ByteUtils.EMPTY_INTS;
+        for (Entity entity : entities) {
+            int[] src = getAttributeFilter(entity).getSelection();
+            int[] dest = Arrays.copyOf(tags, tags.length + src.length);
+            System.arraycopy(src, 0, dest, tags.length, src.length);
+            tags = dest;
+        }
+        return tags;
+    }
+
     public void addAttributeSet(AttributeSet tags) {
         Map<String, AttributeSet> map = attributeSet.get(tags.getType());
         if (map == null)
@@ -1191,26 +1241,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     }
 
     public ExporterDescriptor getExporterDescriptor(String exporterID) {
-        ExporterDescriptor descriptor = exporterDescriptorMap.get(exporterID);
-        if (descriptor == null) {
-            for (Map.Entry<String, ExporterDescriptor> entry : exporterDescriptorMap.entrySet()) {
-                String key = entry.getKey();
-                int schemeLen = key.length() - 1;
-                if (schemeLen > 0 && key.charAt(schemeLen) == ':' && exporterID.startsWith(key)) {
-                    try {
-                        ExporterDescriptor prototype = entry.getValue();
-                        URI exportURI = new URI(
-                                prototype.getExportURI().getSchemeSpecificPart() + exporterID.substring(schemeLen));
-                        descriptor = new ExporterDescriptor(prototype);
-                        descriptor.setExporterID(exporterID);
-                        descriptor.setExportURI(exportURI);
-                        break;
-                    } catch (URISyntaxException e) {
-                    }
-                }
-            }
-        }
-        return descriptor;
+        return exporterDescriptorMap.get(exporterID);
     }
 
     public ExporterDescriptor getExporterDescriptorNotNull(String exporterID) {
@@ -1606,6 +1637,9 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         ianOnTimeout = arcdev.ianOnTimeout;
         ianTaskPollingInterval = arcdev.ianTaskPollingInterval;
         ianTaskFetchSize = arcdev.ianTaskFetchSize;
+        spanningCFindSCP = arcdev.spanningCFindSCP;
+        spanningCFindSCPRetrieveAETitles = arcdev.spanningCFindSCPRetrieveAETitles;
+        spanningCFindSCPPolicy = arcdev.spanningCFindSCPPolicy;
         fallbackCMoveSCP = arcdev.fallbackCMoveSCP;
         fallbackCMoveSCPDestination = arcdev.fallbackCMoveSCPDestination;
         fallbackCMoveSCPLeadingCFindSCP = arcdev.fallbackCMoveSCPLeadingCFindSCP;

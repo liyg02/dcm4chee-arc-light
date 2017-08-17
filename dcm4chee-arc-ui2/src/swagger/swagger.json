@@ -176,6 +176,29 @@
         }
       }
     },
+    "/elasticsearch": {
+      "get": {
+        "tags": [
+          "CONFIG-RS"
+        ],
+        "summary": "Get Access URL of Elastic Search",
+        "operationId": "getElasticSearchURL",
+        "produces": [
+          "application/json"
+        ],
+        "responses": {
+          "200": {
+            "description": "Access URL of Elastic Search",
+            "schema": {
+              "$ref": "#/definitions/URL"
+            }
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      }
+    },
     "/devicename": {
       "get": {
         "tags": [
@@ -500,10 +523,7 @@
             "name": "body",
             "in": "body",
             "description": "updated device vendor data",
-            "required": true,
-            "schema": {
-              "type": "file"
-            }
+            "required": true
           }
         ],
         "responses": {
@@ -1865,6 +1885,13 @@
             "type": "integer",
             "enum": [ 0, 1, 2 ],
             "default": 0
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "description": "queue request",
+            "type": "boolean",
+            "default": false
           }
         ],
         "responses": {
@@ -1873,6 +1900,9 @@
             "schema": {
               "$ref": "export.schema.json"
             }
+          },
+          "204": {
+            "description": "request successfully queued for processing"
           },
           "206": {
             "description": "One or more Failures",
@@ -1949,6 +1979,13 @@
             "type": "integer",
             "enum": [ 0, 1, 2 ],
             "default": 0
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "description": "queue request",
+            "type": "boolean",
+            "default": false
           }
         ],
         "responses": {
@@ -1957,6 +1994,9 @@
             "schema": {
               "$ref": "export.schema.json"
             }
+          },
+          "204": {
+            "description": "request successfully queued for processing"
           },
           "206": {
             "description": "One or more Failures",
@@ -2040,6 +2080,13 @@
             "type": "integer",
             "enum": [ 0, 1, 2 ],
             "default": 0
+          },
+          {
+            "name": "queue",
+            "in": "query",
+            "description": "queue request",
+            "type": "boolean",
+            "default": false
           }
         ],
         "responses": {
@@ -2048,6 +2095,9 @@
             "schema": {
               "$ref": "export.schema.json"
             }
+          },
+          "204": {
+            "description": "request successfully queued for processing"
           },
           "206": {
             "description": "One or more Failures",
@@ -2923,6 +2973,126 @@
     "/aets/{aet}/rs/mwlitems/{studyUID}/{spsID}": {
       "delete": {
         "tags": [
+          "MWL-RS"
+        ],
+        "summary": "Delete Scheduled Procedure Step",
+        "operationId": "DeleteSPS",
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "studyUID",
+            "in": "path",
+            "description": "Unique Identifier of the Study",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "spsID",
+            "in": "path",
+            "description": "Identifier of the Scheduled Procedure Step",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "successful operation"
+          },
+          "404": {
+            "description": "no such SPS"
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      }
+    },
+    "/aets/{aet}/rs/mwlitems/{studyUID}/{spsID}/move/{codeValue}^{codingSchemeDesignator}": {
+      "post": {
+        "tags": [
+          "IOCM-RS",
+          "MWL-RS"
+        ],
+        "summary": "Move Instances to MWL Item",
+        "operationId": "MoveInstancesMWL",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "parameters": [
+          {
+            "name": "aet",
+            "in": "path",
+            "description": "Archive AE Title",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "studyUID",
+            "in": "path",
+            "description": "Unique Identifier of Target Study",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "spsID",
+            "in": "path",
+            "description": "Identifier of Target Scheduled Procedure Step",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "codeValue",
+            "in": "path",
+            "description": "Code Value of Rejection Note",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "codingSchemeDesignator",
+            "in": "path",
+            "description": "Coding Scheme Designator of Rejection Note",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "instanceRefs",
+            "in": "body",
+            "description": "References to Source Instances",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/HierarchicalSOPInstanceReference"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "successful operation",
+            "schema": {
+              "type": "file"
+            }
+          },
+          "404": {
+            "description": "no such MWL Item"
+          },
+          "default": {
+            "description": "unexpected error"
+          }
+        }
+      }
+    },
+    "/aets/{aet}/rs/mwlitems/{studyUID}/{spsID}/move": {
+      "delete": {
+        "tags": [
+          "IOCM-RS",
           "MWL-RS"
         ],
         "summary": "Delete Scheduled Procedure Step",
@@ -4081,11 +4251,22 @@
   "definitions": {
     "Realm": {
       "type": "object",
-      "required": [
-        "user",
-        "roles"
-      ],
       "properties": {
+        "auth-server-url": {
+          "title": "auth server url",
+          "description": "The base URL of the Keycloak server",
+          "type": "string"
+        },
+        "realm": {
+          "title": "realm",
+          "description": "Name of the realm",
+          "type": "string"
+        },
+        "token": {
+          "title": "token",
+          "description": "OAuth Bearer Token",
+          "type": "string"
+        },
         "user": {
           "title": "user",
           "description": "user name",
