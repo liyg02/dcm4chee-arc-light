@@ -1657,13 +1657,23 @@ md-dialog-container{
     }
   }
 }
-.bluecontent{
+.bluecontent {
   float: left;
-  width:100%;
-  border:1px solid $lightBlue;
-  border-top:none;
+  width: 100%;
+  border: 1px solid $lightBlue;
+  border-top: none;
   box-sizing: border-box;
   //padding:20px 10px;
+}
+.input_group_dropdown{
+  input{
+    width:65%;
+  }
+  md-select, select{
+    width:35%;
+    float: right;
+    border-left:none;
+  }
 }
 .form-row.submit_button_block{
 
