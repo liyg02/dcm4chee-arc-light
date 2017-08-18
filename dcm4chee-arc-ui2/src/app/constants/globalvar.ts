@@ -911,4 +911,7 @@ export class Globalvar {
         ]
 
     }
+    public static get HL7_LIST_LINK(): string{
+        return "../hl7apps";
+    }
 }

@@ -69,6 +69,8 @@ import {DiffDetailViewService} from "./widgets/dialogs/diff-detail-view/diff-det
 import { LifecycleManagementComponent } from './pro/lifecycle-management/lifecycle-management.component';
 import { MonitoringTabsComponent } from './monitoring/monitoring-tabs.component';
 import {LifecycleManagementService} from "./pro/lifecycle-management/lifecycle-management.service";
+import { Hl7ApplicationsComponent } from './hl7-applications/hl7-applications.component';
+import {Hl7ApplicationsService} from "./hl7-applications/hl7-applications.service";
 
 @NgModule({
     declarations: [
@@ -112,7 +114,8 @@ import {LifecycleManagementService} from "./pro/lifecycle-management/lifecycle-m
         DiffProComponent,
         StatisticsComponent,
         LifecycleManagementComponent,
-        MonitoringTabsComponent
+        MonitoringTabsComponent,
+        Hl7ApplicationsComponent
     ],
     imports: [
         BrowserModule,
@@ -151,6 +154,7 @@ import {LifecycleManagementService} from "./pro/lifecycle-management/lifecycle-m
             { path: 'monitoring/lifecycle-management', component: LifecycleManagementComponent },
             { path: 'device/devicelist', component: DevicesComponent },
             { path: 'device/aelist', component: AeListComponent },
+            { path: 'device/hl7applications', component: Hl7ApplicationsComponent },
             { path: 'device/edit/:device', component: DeviceConfiguratorComponent },
             { path: 'device/edit/:device/:devicereff', component: DeviceConfiguratorComponent },
             { path: 'device/edit/:device/:devicereff/:schema', component: DeviceConfiguratorComponent },
@@ -181,7 +185,8 @@ import {LifecycleManagementService} from "./pro/lifecycle-management/lifecycle-m
         StudiesService,
         StatisticsService,
         DiffDetailViewService,
-        LifecycleManagementService
+        LifecycleManagementService,
+        Hl7ApplicationsService
     ],
     bootstrap: [AppComponent]
 })
