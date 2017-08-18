@@ -240,6 +240,12 @@
             <ng-container *ngFor="let attributes of diffAttributes">
                 <div class="bluebar" (click)="toggleBar(attributes.id)">
                     <span class="pull-left" title="{{attributes.description}}">{{attributes.title}}</span>
+                    <md-progress-spinner
+                            *ngIf="showLoader[attributes.id]"
+                            class="pull-right"
+                            [color]="'primary'"
+                            [mode]="'indeterminate'"
+                    ></md-progress-spinner>
                     <span class="pull-right" *ngIf="counts[attributes.id] > 0 && counts[attributes.id] != groupResults[attributes.id]?.length">{{groupResults[attributes.id]?.length}} / {{counts[attributes.id]}}</span>
                     <span class="pull-right" *ngIf="counts[attributes.id] == 0 || counts[attributes.id] == groupResults[attributes.id]?.length">{{groupResults[attributes.id]?.length}}</span>
                 </div>

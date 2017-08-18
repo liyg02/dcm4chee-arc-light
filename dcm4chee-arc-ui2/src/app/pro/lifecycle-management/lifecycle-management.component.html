@@ -249,6 +249,9 @@
                     </div>
                 </div>
             </div>
+            <div class="bluecontent config no_data" *ngIf="toggle === 'config' && (!StudyRetentionPolicy || (StudyRetentionPolicy.length && StudyRetentionPolicy.length === 0))">
+                <h3>No configuration found,<a (click)="$event.preventDefault();addRetentionPolicy()"> click here to add one</a></h3>
+            </div>
             <div class="bluebar" (click)="toggleBar('expired')">
                 <span class="pull-left" >Expired studies</span>
                 <span class="pull-right" *ngIf="expiredStudies?.length">{{expiredStudies?.length}}</span>
@@ -281,6 +284,9 @@
                         </div>
                     </div>
                 </div>
+            </div>
+            <div class="bluecontent expired no_data" *ngIf="toggle === 'expired' && (!expiredStudies || (expiredStudies.length && expiredStudies.length === 0))">
+                <h3>No expired studies found, change the filters and try again!</h3>
             </div>
             <div class="bluebar" (click)="toggleBar('all')">
                 <span class="pull-left" >All studies</span>

@@ -1447,6 +1447,14 @@ md-dialog-container{
   &:hover{
     cursor: pointer;
   }
+  md-progress-spinner.mat-progress-spinner{
+    height:15px;
+    width:15px;
+    path{
+      color:white;
+      stroke: white;
+    }
+  }
 }
 .vex.vex-theme-os.diff{
   width:100%;
@@ -1752,6 +1760,19 @@ md-dialog-container{
   }
   &[hidden]{
     display: none;
+  }
+}
+.no_data{
+  h3{
+    font-size: 20px;
+    text-align: center;
+    vertical-align: middle;
+    line-height: 100px;
+    a{
+      &:hover{
+        cursor: pointer;
+      }
+    }
   }
 }
 .diff_content{

@@ -398,6 +398,7 @@ export class DiffProComponent implements OnInit {
         return params;
     };
     counts ={};
+    showLoader = {};
     search(){
         let $this = this;
         this.cfpLoadingBar.start();
@@ -412,6 +413,11 @@ export class DiffProComponent implements OnInit {
             if(!this.aet1){
                 this.aet1 = this.homeAet;
             }
+            _.forEach($this.diffAttributes,(m,i)=>{
+                $this.counts[m.id] = null;
+                $this.groupResults[m.id] = [];
+                $this.showLoader[m.id] = true;
+            });
             let queryParameters = this.createQueryParams(this.filters.limit + 1, this.createStudyFilterParams());
             _.forEach($this.diffAttributes,(m,i)=>{
                 if(m.id === "missing"){
@@ -424,11 +430,13 @@ export class DiffProComponent implements OnInit {
                         (partDiff)=>{
                             $this.groupResults[m.id] = partDiff ? partDiff:[];
                             $this.counts[m.id] = partDiff ? partDiff.length : 0;
+                            $this.showLoader[m.id] = false;
                             $this.toggle = '';
                             $this.cfpLoadingBar.complete();
                         },
                         (err)=>{
                             $this.cfpLoadingBar.complete();
+                            $this.showLoader[m.id] = false;
                         });
                 }else{
                     $this.cfpLoadingBar.start();
@@ -439,9 +447,11 @@ export class DiffProComponent implements OnInit {
                             $this.counts[m.id] = partDiff ? partDiff.length : 0;
                             $this.toggle = '';
                             $this.groupResults[m.id] = partDiff ? partDiff:[];
+                            $this.showLoader[m.id] = false;
                         },
                         (err)=>{
                             $this.cfpLoadingBar.complete();
+                            $this.showLoader[m.id] = false;
                         });
                 }
             });
