@@ -437,6 +437,11 @@ export class DiffProComponent implements OnInit {
                         (err)=>{
                             $this.cfpLoadingBar.complete();
                             $this.showLoader[m.id] = false;
+                            $this.mainservice.setMessage({
+                                'title': 'Error ' + err.status,
+                                'text': 'Error getting ' + m.title + ' (' + err.statusText + ')',
+                                'status': 'error'
+                            });
                         });
                 }else{
                     $this.cfpLoadingBar.start();
@@ -452,6 +457,11 @@ export class DiffProComponent implements OnInit {
                         (err)=>{
                             $this.cfpLoadingBar.complete();
                             $this.showLoader[m.id] = false;
+                            $this.mainservice.setMessage({
+                                'title': 'Error ' + err.status,
+                                'text': 'Error getting ' + m.title + ' (' + err.statusText + ')',
+                                'status': 'error'
+                            });
                         });
                 }
             });
