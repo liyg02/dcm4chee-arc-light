@@ -27,7 +27,7 @@
                 <div class="header">
                     <h3>{{aet2}}</h3>
                 </div>
-                <div class="diff_content second_table"  (mouseenter)="setActiveTable('SECOND')" (mouseleave)="clearActiveTable()">
+                <div class="diff_content edytatabel"  (mouseenter)="setActiveTable('SECOND')" (mouseleave)="clearActiveTable()">
                     <table>
                         <tr *ngFor="let secondaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.secondary[secondaryKey].diff,active:activeTr === secondaryKey}" (mouseenter)="activateTr(secondaryKey)" (mouseleave)="clearTr()">
                             <td>{{DCM4CHE.elementName.forTag(secondaryKey,privateCreator(secondaryKey))}}</td>

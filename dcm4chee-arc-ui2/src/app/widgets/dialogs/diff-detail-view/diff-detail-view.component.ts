@@ -58,16 +58,18 @@ export class DiffDetailViewComponent implements OnInit {
     ngOnInit() {
         let $this = this;
         this.prepareStudyWithIndex(this._index);
-        $('.first_table').on('scroll', function () {
-            if($this.activeTable === 'FIRST'){
-                $('.second_table').scrollTop($('.first_table').scrollTop());
-            }
-        });
-        $('.second_table').on('scroll', function () {
-            if($this.activeTable === 'SECOND'){
-                $('.first_table').scrollTop($('.second_table').scrollTop());
-            }
-        });
+        setTimeout(function() {
+            $('.first_table').on('scroll', function () {
+                if($this.activeTable === 'FIRST'){
+                    $('.edytatabel').scrollTop($('.first_table').scrollTop());
+                }
+            });
+            $('.edytatabel').on('scroll', function () {
+                if ($this.activeTable === 'SECOND') {
+                    $('.first_table').scrollTop($('.edytatabel').scrollTop());
+                }
+            });
+        },1000);
         if(this._groupName === "missing"){
             this.buttonLabel = "SEND STUDY TO SECONDARY AE";
             this.titleLabel = "Missing study in " + this._aet2;
