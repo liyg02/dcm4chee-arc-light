@@ -5,7 +5,7 @@
             <div class="main_filter_block">
                 <div class="col-md-3 block-1-1">
                     <div class="row">
-                        <label class="col-md-6 text-right control-label">Primare AE:</label>
+                        <label class="col-md-6 text-right control-label">Primary AE:</label>
                         <div class="col-md-6">
                             <md-select [(ngModel)]="aet1" class="col-md-12" (change)="aetChanged('aet1')">
                                 <md-option *ngFor="let ae of aes" [value]="ae.dicomAETitle" title="{{ae.dicomDeviceName}} {{ ae.dicomAETitle }}">{{ ae.dicomAETitle }}</md-option>
