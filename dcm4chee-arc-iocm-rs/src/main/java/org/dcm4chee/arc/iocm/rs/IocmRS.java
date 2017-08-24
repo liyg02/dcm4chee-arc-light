@@ -288,7 +288,7 @@ public class IocmRS {
                 patientService.changePatientID(ctx);
             }
             rsForward.forward(RSOperation.UpdatePatient, arcAE, attrs, request);
-            String msgType = ctx.getEventActionCode() == AuditMessages.EventActionCode.Create
+            String msgType = ctx.getEventActionCode().equals(AuditMessages.EventActionCode.Create)
                     ? newPatient
                         ? "ADT^A28^ADT_A05" : "ADT^A47^ADT_A30"
                     : "ADT^A31^ADT_A05";
@@ -325,15 +325,14 @@ public class IocmRS {
     }
 
     @POST
-    @Path("/patients/{patientID}/merge/{priorPatientID}")
-    public void mergePatient(@PathParam("patientID") IDWithIssuer patientID,
-                             @PathParam("priorPatientID") IDWithIssuer priorPatientID) throws Exception {
+    @Path("/patients/{priorPatientID}/merge/{patientID}")
+    public void mergePatient(@PathParam("priorPatientID") IDWithIssuer priorPatientID,
+                             @PathParam("patientID") IDWithIssuer patientID) throws Exception {
         logRequest();
         try {
-            Attributes priorPatAttr = new Attributes(2);
+            Attributes priorPatAttr = new Attributes(3);
             priorPatAttr.setString(Tag.PatientID, VR.LO, priorPatientID.getID());
-            if (priorPatientID.getIssuer() != null)
-                priorPatAttr.setString(Tag.IssuerOfPatientID, VR.LO, priorPatientID.getIssuer().toString());
+            setIssuer(priorPatientID, priorPatAttr);
             mergePatient(patientID, priorPatAttr);
             rsForward.forward(RSOperation.MergePatient, getArchiveAE(), null, request);
         } catch (Exception e) {
@@ -346,10 +345,9 @@ public class IocmRS {
         try {
             PatientMgtContext patMgtCtx = patientService.createPatientMgtContextWEB(request, getArchiveAE().getApplicationEntity());
             patMgtCtx.setPatientID(patientID);
-            Attributes patAttr = new Attributes(2);
+            Attributes patAttr = new Attributes(3);
             patAttr.setString(Tag.PatientID, VR.LO, patientID.getID());
-            if (patientID.getIssuer() != null)
-                patAttr.setString(Tag.IssuerOfPatientID, VR.LO, patientID.getIssuer().toString());
+            setIssuer(patientID, patAttr);
             patMgtCtx.setAttributes(patAttr);
             patMgtCtx.setPreviousAttributes(priorPatAttr);
             patientService.mergePatient(patMgtCtx);
@@ -360,15 +358,12 @@ public class IocmRS {
     }
 
     @POST
-    @Path("/patients/{patientID}/changeid/{priorPatientID}")
-    public void changePatientID(@PathParam("patientID") String pID,
-                                @PathParam("priorPatientID") String priorPID) throws Exception {
+    @Path("/patients/{priorPatientID}/changeid/{patientID}")
+    public void changePatientID(@PathParam("priorPatientID") IDWithIssuer priorPatientID,
+                                @PathParam("patientID") IDWithIssuer patientID) throws Exception {
         logRequest();
         ArchiveAEExtension arcAE = getArchiveAE();
         try {
-            IDWithIssuer priorPatientID = new IDWithIssuer(priorPID);
-            IDWithIssuer patientID = new IDWithIssuer(pID);
-
             PatientMgtContext ctx = patientService.createPatientMgtContextWEB(request, arcAE.getApplicationEntity());
             Patient priorPatient = patientService.findPatient(priorPatientID);
             if (priorPatient == null)
