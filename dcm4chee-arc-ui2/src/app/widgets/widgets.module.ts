@@ -27,6 +27,7 @@ import { DiffDetailViewComponent } from './dialogs/diff-detail-view/diff-detail-
 import { DicomOperationsComponent } from './dialogs/dicom-operations/dicom-operations.component';
 import { SpecificCharPickerComponent } from './specific-char-picker/specific-char-picker.component';
 import { RetentionPolicyDialogComponent } from './dialogs/retention-policy-dialog/retention-policy-dialog.component';
+import { DictionaryPickerComponent } from './dictionary-picker/dictionary-picker.component';
 
 
 @NgModule({
@@ -63,5 +64,7 @@ export const WidgetsComponents = [
     DiffDetailViewComponent,
     DicomOperationsComponent,
     SpecificCharPickerComponent,
-    RetentionPolicyDialogComponent
+    RetentionPolicyDialogComponent,
+    SpecificCharPickerComponent,
+    DictionaryPickerComponent
 ];
