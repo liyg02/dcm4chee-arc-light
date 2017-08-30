@@ -28,6 +28,7 @@ import { DicomOperationsComponent } from './dialogs/dicom-operations/dicom-opera
 import { SpecificCharPickerComponent } from './specific-char-picker/specific-char-picker.component';
 import { RetentionPolicyDialogComponent } from './dialogs/retention-policy-dialog/retention-policy-dialog.component';
 import { DictionaryPickerComponent } from './dictionary-picker/dictionary-picker.component';
+import { TimePickerComponent } from './time-picker/time-picker.component';
 
 
 @NgModule({
@@ -66,5 +67,6 @@ export const WidgetsComponents = [
     SpecificCharPickerComponent,
     RetentionPolicyDialogComponent,
     SpecificCharPickerComponent,
-    DictionaryPickerComponent
+    DictionaryPickerComponent,
+    TimePickerComponent
 ];
