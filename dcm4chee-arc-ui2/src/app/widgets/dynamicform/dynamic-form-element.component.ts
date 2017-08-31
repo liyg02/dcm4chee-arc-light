@@ -382,18 +382,21 @@ export class DynamicFormElementComponent{
         // this.activetab = 'tab_'+(orderId-1);
     }
     onValueChange(e, formelement, formcontrol,i){
-        if(formelement.controlType === "arrayelement"){
-            // (<FormArray>this.form.controls[formelement.key]).insert(i, new FormControl(e))
-            formcontrol[i].setValue(e);
-            formelement.value[i] = e;
-        }else{
+        if(e && e != ""){
+            if(formelement.controlType === "arrayelement"){
+                // (<FormArray>this.form.controls[formelement.key]).insert(i, new FormControl(e))
+                formcontrol[i].setValue(e);
+                formelement.value[i] = e;
+            }else{
 
-            formcontrol.setValue(e);
-            formelement.value = e;
-            console.log("in value change",e);
+                formcontrol.setValue(e);
+                formelement.value = e;
+                console.log("in value change",e);
+            }
         }
         formelement.showPicker = false;
         formelement.showTimePicker = false;
+        formelement.showDurationPicker = false;
     }
 
     onFocuse(formelement,i=null) {
@@ -414,6 +417,14 @@ export class DynamicFormElementComponent{
                     formelement.showTimePicker[i] = true;
                 }else{
                     formelement.showTimePicker = true;
+                }
+            }
+            if(formelement.format === 'dcmDuration' || formelement.format === 'dcmPeriod'){
+                if(i != null){
+                    formelement.showDurationPicker = formelement.showDurationPicker || {};
+                    formelement.showDurationPicker[i] = true;
+                }else{
+                    formelement.showDurationPicker = true;
                 }
             }
         }

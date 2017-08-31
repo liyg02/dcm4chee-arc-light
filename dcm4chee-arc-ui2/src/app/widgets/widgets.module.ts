@@ -29,6 +29,7 @@ import { SpecificCharPickerComponent } from './specific-char-picker/specific-cha
 import { RetentionPolicyDialogComponent } from './dialogs/retention-policy-dialog/retention-policy-dialog.component';
 import { DictionaryPickerComponent } from './dictionary-picker/dictionary-picker.component';
 import { TimePickerComponent } from './time-picker/time-picker.component';
+import { DurationPickerComponent } from './duration-picker/duration-picker.component';
 
 
 @NgModule({
@@ -68,5 +69,6 @@ export const WidgetsComponents = [
     RetentionPolicyDialogComponent,
     SpecificCharPickerComponent,
     DictionaryPickerComponent,
-    TimePickerComponent
+    TimePickerComponent,
+    DurationPickerComponent
 ];
