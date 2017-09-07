@@ -57,6 +57,7 @@ import org.dcm4chee.arc.delete.StudyNotFoundException;
 import org.dcm4chee.arc.id.IDService;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.patient.PatientService;
+import org.dcm4chee.arc.patient.PatientTrackingNotAllowedException;
 import org.dcm4chee.arc.procedure.ProcedureContext;
 import org.dcm4chee.arc.procedure.ProcedureService;
 import org.dcm4chee.arc.query.QueryService;
@@ -281,8 +282,8 @@ public class IocmRS {
         } catch (JsonParsingException e) {
             throw new WebApplicationException(
                     getResponse(e.getMessage() + " at location : " + e.getLocation(), Response.Status.BAD_REQUEST));
-        } catch (Exception e) {
-            throw new WebApplicationException(getResponse(e.getMessage(), Response.Status.BAD_REQUEST));
+        } catch (PatientTrackingNotAllowedException e) {
+            throw new WebApplicationException(e.getMessage(), Response.Status.CONFLICT);
         }
     }
 

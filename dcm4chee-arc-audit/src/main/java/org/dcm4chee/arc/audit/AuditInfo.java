@@ -74,11 +74,11 @@ class AuditInfo {
 
     private final String[] fields;
 
-    AuditInfo(BuildAuditInfo i) {
+    AuditInfo(AuditInfoBuilder i) {
         fields = new String[] {
                 i.callingHost,
-                i.callingAET,
-                i.calledAET,
+                i.callingUserID,
+                i.calledUserID,
                 i.calledHost,
                 i.studyUID,
                 i.accNum,
