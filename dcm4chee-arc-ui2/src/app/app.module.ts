@@ -38,7 +38,6 @@ import {QueuesService} from './monitoring/queues/queues.service';
 import { DevicesComponent } from './devices/devices.component';
 import {DevicesService} from './devices/devices.service';
 import { DeviceConfiguratorComponent } from './device-configurator/device-configurator.component';
-// import {REACTIVE_FORM_DIRECTIVES} from "@angular/forms/src/directives";
 import {DynamicFormElementComponent} from './widgets/dynamicform/dynamic-form-element.component';
 import {DynamicFormComponent} from './widgets/dynamicform/dynamic-form.component';
 import { ExportComponent } from './monitoring/export/export.component';
@@ -71,6 +70,7 @@ import { MonitoringTabsComponent } from './monitoring/monitoring-tabs.component'
 import {LifecycleManagementService} from "./pro/lifecycle-management/lifecycle-management.service";
 import { Hl7ApplicationsComponent } from './hl7-applications/hl7-applications.component';
 import {Hl7ApplicationsService} from "./hl7-applications/hl7-applications.service";
+import {AeListService} from "./ae-list/ae-list.service";
 
 @NgModule({
     declarations: [
@@ -186,7 +186,7 @@ import {Hl7ApplicationsService} from "./hl7-applications/hl7-applications.servic
         StatisticsService,
         DiffDetailViewService,
         LifecycleManagementService,
-        Hl7ApplicationsService
+        AeListService
     ],
     bootstrap: [AppComponent]
 })

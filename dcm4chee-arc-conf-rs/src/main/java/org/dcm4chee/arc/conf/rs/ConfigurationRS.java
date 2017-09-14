@@ -68,10 +68,7 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.*;
 import java.io.*;
 import java.nio.file.Files;
-import java.util.Arrays;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -136,6 +133,7 @@ public class ConfigurationRS {
     public StreamingOutput listDevices() throws Exception {
         try {
             final DeviceInfo[] deviceInfos = conf.listDeviceInfos(new DeviceInfoBuilder(uriInfo).deviceInfo);
+            Arrays.sort(deviceInfos, Comparator.comparing(DeviceInfo::getDeviceName));
             return new StreamingOutput() {
                 @Override
                 public void write(OutputStream out) throws IOException {
@@ -158,14 +156,16 @@ public class ConfigurationRS {
     @Produces("application/json")
     public StreamingOutput listAETs() throws Exception {
         try {
-            final ApplicationEntityInfo[] aetInfos = conf.listAETInfos(new ApplicationEntityInfoBuilder(uriInfo).aetInfo);
+            final ApplicationEntityInfo[] aeInfos =
+                    conf.listAETInfos(new ApplicationEntityInfoBuilder(uriInfo).aetInfo);
+            Arrays.sort(aeInfos, Comparator.comparing(ApplicationEntityInfo::getAETitle));
             return new StreamingOutput() {
                 @Override
                 public void write(OutputStream out) throws IOException {
                     JsonGenerator gen = Json.createGenerator(out);
                     gen.writeStartArray();
-                    for (ApplicationEntityInfo aetInfo : aetInfos)
-                        jsonConf.writeTo(aetInfo, gen);
+                    for (ApplicationEntityInfo aeInfo : aeInfos)
+                        jsonConf.writeTo(aeInfo, gen);
                     gen.writeEnd();
                     gen.flush();
                 }
@@ -182,7 +182,9 @@ public class ConfigurationRS {
     public StreamingOutput listHL7Apps() throws Exception {
         try {
             HL7Configuration hl7Conf = conf.getDicomConfigurationExtension(HL7Configuration.class);
-            final HL7ApplicationInfo[] hl7AppInfos = hl7Conf.listHL7AppInfos(new HL7ApplicationInfoBuilder(uriInfo).hl7AppInfo);
+            final HL7ApplicationInfo[] hl7AppInfos =
+                    hl7Conf.listHL7AppInfos(new HL7ApplicationInfoBuilder(uriInfo).hl7AppInfo);
+            Arrays.sort(hl7AppInfos, Comparator.comparing(HL7ApplicationInfo::getHl7ApplicationName));
             return new StreamingOutput() {
                 @Override
                 public void write(OutputStream out) throws IOException, WebApplicationException {
