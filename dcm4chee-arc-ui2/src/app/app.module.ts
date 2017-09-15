@@ -71,6 +71,7 @@ import {LifecycleManagementService} from "./pro/lifecycle-management/lifecycle-m
 import { Hl7ApplicationsComponent } from './hl7-applications/hl7-applications.component';
 import {Hl7ApplicationsService} from "./hl7-applications/hl7-applications.service";
 import {AeListService} from "./ae-list/ae-list.service";
+import {HttpErrorHandler} from "./helpers/http-error-handler";
 
 @NgModule({
     declarations: [
@@ -186,7 +187,9 @@ import {AeListService} from "./ae-list/ae-list.service";
         StatisticsService,
         DiffDetailViewService,
         LifecycleManagementService,
-        AeListService
+        AeListService,
+        Hl7ApplicationsService,
+        HttpErrorHandler
     ],
     bootstrap: [AppComponent]
 })
