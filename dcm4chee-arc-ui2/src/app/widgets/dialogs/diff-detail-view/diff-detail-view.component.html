@@ -10,7 +10,7 @@
                     <!--{{currentStudy.primary | json}}-->
                     <table>
                         <tr *ngFor="let primaryKey of currentStudyIndex" [ngClass]="{diff_line: (_.hasIn(currentStudy,['primary',primaryKey,'diff']) && currentStudy.primary[primaryKey].diff) , active:activeTr === primaryKey}" (mouseenter)="activateTr(primaryKey)" (mouseleave)="clearTr()">
-                            <td>{{DCM4CHE.elementName.forTag(primaryKey,privateCreator(primaryKey))}}</td>
+                            <td>{{currentStudy["level"][primaryKey]}} {{DCM4CHE.elementName.forTag(primaryKey,privateCreator(primaryKey))}}</td>
                             <td>{{primaryKey}}</td>
                             <td>
                                 <ng-container *ngIf="_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0]) && !_.hasIn(currentStudy.primary,[primaryKey,'object','Value',0,'Alphabetic']) && !(_.isEmpty(currentStudy.primary[primaryKey].object.Value[0]) && !_.isNumber(currentStudy.primary[primaryKey].object.Value[0]))">{{currentStudy.primary[primaryKey].object.Value[0]}}</ng-container>
@@ -30,7 +30,7 @@
                 <div class="diff_content edytatabel"  (mouseenter)="setActiveTable('SECOND')" (mouseleave)="clearActiveTable()">
                     <table>
                         <tr *ngFor="let secondaryKey of currentStudyIndex" [ngClass]="{diff_line: currentStudy.secondary[secondaryKey].diff,active:activeTr === secondaryKey}" (mouseenter)="activateTr(secondaryKey)" (mouseleave)="clearTr()">
-                            <td>{{DCM4CHE.elementName.forTag(secondaryKey,privateCreator(secondaryKey))}}</td>
+                            <td>{{currentStudy["level"][secondaryKey]}} {{DCM4CHE.elementName.forTag(secondaryKey,privateCreator(secondaryKey))}}</td>
                             <td>{{secondaryKey}}</td>
                             <td>
                                 <ng-container *ngIf="_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0]) && !_.hasIn(currentStudy.secondary,[secondaryKey,'object','Value',0,'Alphabetic'])">{{currentStudy.secondary[secondaryKey].object.Value[0]}}</ng-container>
