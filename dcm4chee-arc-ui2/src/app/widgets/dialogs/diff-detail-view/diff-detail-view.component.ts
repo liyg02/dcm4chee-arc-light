@@ -196,7 +196,7 @@ export class DiffDetailViewComponent implements OnInit {
             let noDiffIndexes = [];
             this.currentStudy["flat"] = {};
             this.currentStudy["level"] = {};
-            this.flatMap(this._studies[this._index],"");
+            this.flatMap(this._studies[this._index],"",this.currentStudy, true);
             if(this._groupName === "missing"){
                 _.forEach(this.currentStudy["flat"],(m,i)=>{
                     if(i != "04000561"){
@@ -209,12 +209,18 @@ export class DiffDetailViewComponent implements OnInit {
                 });
                 this.currentStudyIndex = diffIndexes;
             }else{
-                let modifyed = this._studies[this._index]["04000561"].Value[0]["04000550"].Value[0];
+                let modifyed = {
+                    flat:{}
+                };
+                this.flatMap(this._studies[this._index]["04000561"].Value[0]["04000550"].Value[0],"",modifyed, false);
+                this.addEmptySequenceValues(modifyed.flat);
+
+                //modifyed = this._studies[this._index]["04000561"].Value[0]["04000550"].Value[0];
                 _.forEach(this.currentStudy["flat"],(m,i)=>{
                     if(i != "04000561"){
-                        if(_.hasIn(modifyed,i)){
+                        if(_.hasIn(modifyed.flat,i)){
                             this.currentStudy["secondary"][i] = {
-                                object:modifyed[i],
+                                object:modifyed.flat[i],
                                 diff:true
                             };
                             this.currentStudy["primary"][i] = {
@@ -242,17 +248,33 @@ export class DiffDetailViewComponent implements OnInit {
             }
         }
     }
-    flatMap(object,level){
+    flatMap(object,level,endState, setLevel){
         _.forEach(object,(m,i)=>{
             if(m.vr === "SQ" && _.hasIn(m,"Value[0]")){
                 if(i != "04000561"){
-                    this.currentStudy["flat"][i] = {Value:[""]};
-                    this.flatMap(m.Value[0],level+'>');
+                    endState["flat"][i] = {Value:[""]};
+                    this.flatMap(m.Value[0],level+'>', endState, setLevel);
                 }
             }else{
-                this.currentStudy["flat"][i] = m;
+                endState["flat"][i] = m;
             }
-            this.currentStudy["level"][i] = level;
+            if(setLevel){
+                endState["level"][i] = level;
+            }
+        });
+    }
+    addEmptySequenceValues(object){
+        _.forEach(object,(m,i)=>{
+            if(m.vr === "SQ" && !_.hasIn(m,"Value[0]")){
+                m["Value"] = [{}];
+                _.forEach(this._studies[this._index][i].Value[0],(o,j)=>{
+                    console.log("o",o);
+                    console.log("j",j);
+                    m["Value"][0][j] = {
+                        Value:[""]
+                    };
+                });
+            }
         });
     }
     get studies() {
