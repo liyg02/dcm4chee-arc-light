@@ -72,6 +72,7 @@ export class StatisticsComponent implements OnInit {
         }
     ];
     url;
+    aets;
     constructor(
         private service:StatisticsService,
         public viewContainerRef: ViewContainerRef,
@@ -83,6 +84,8 @@ export class StatisticsComponent implements OnInit {
     ngOnInit() {
         this.setTodayDate();
         this.getElasticsearchUrl(2);
+/*        this.getAets(1);
+        this.getQueriesUserID(2);*/
     }
     studyDateTimeChanged(e, mode){
         this.range[mode] = e;
@@ -152,7 +155,7 @@ export class StatisticsComponent implements OnInit {
         this.service.checkIfElasticSearchIsRunning(this.url).subscribe(
             (res)=>{
                 $this.elasticSearchIsRunning = true;
-                $this.search();
+                $this.getAets(2);
             },
             (err)=>{
                 if (retries){
@@ -201,7 +204,7 @@ export class StatisticsComponent implements OnInit {
         this.getStudiesStoredCounts();
         this.getWildflyErrorCounts();
         // this.getQueriesCounts();
-        this.getQueriesUserID();
+        this.getQueriesUserID(2);
         this.getRetrievUserID();
         this.getStudiesStoredSopClass();
         this.getStudiesStoredReceivingAET();
@@ -423,21 +426,26 @@ export class StatisticsComponent implements OnInit {
         }
         console.log("$this.histogramData",$this.histogramData);
     }
-    getQueriesUserID(){
+    getQueriesUserID(retries){
         let $this = this;
-        this.service.getQueriesUserID(this.range, this.url).subscribe(
-            (res)=>{
-                $this.prepareHistogramData(res,'querieUserID');
-                try {
-                    $this.queries.count = res.hits.total;
-                }catch (e){
-                    $this.queries.count = "-";
-                }
-            },
-            (err)=>{
-                $this.studieStored.count = "-";
-                console.log("error",err);
-            });
+        if(this.aets){
+            this.service.getQueriesUserID(this.range, this.url, this.aets).subscribe(
+                (res)=>{
+                    $this.prepareHistogramData(res,'querieUserID');
+                    try {
+                        $this.queries.count = res.hits.total;
+                    }catch (e){
+                        $this.queries.count = "-";
+                    }
+                },
+                (err)=>{
+                    $this.studieStored.count = "-";
+                    console.log("error",err);
+                });
+        }else{
+            if(retries)
+                this.getQueriesUserID(retries-1)
+        }
     }
     getRetrievUserID(){
         let $this = this;
@@ -564,7 +572,7 @@ export class StatisticsComponent implements OnInit {
                 console.log("error",err);
             });
     }
-    openQueriesCountsHistogram(){
+/*    openQueriesCountsHistogram(){
         let $this = this;
         // $this.prepareHistogramData($this.queries.model,'queriesCounts');
         $this.config.viewContainerRef = $this.viewContainerRef;
@@ -582,7 +590,7 @@ export class StatisticsComponent implements OnInit {
             if (result){
             }
         });
-    }
+    }*/
     // getQueriesCounts(){
     //     let $this = this;
     //     this.service.getQueriesCounts(this.range, this.url).subscribe(
@@ -613,6 +621,16 @@ export class StatisticsComponent implements OnInit {
                 console.log("error",err);
                 $this.errors.count = "-";
             });
+    }
+    getAets(retries){
+        let $this = this;
+        $this.service.getAets().subscribe((res)=>{
+            $this.aets = res;
+            $this.search();
+        },(err)=>{
+            if(retries)
+                $this.getAets(retries-1);
+        });
     }
 
 }

@@ -3,11 +3,15 @@ import {Http} from "@angular/http";
 import {WindowRefService} from "../../helpers/window-ref.service";
 import Global = NodeJS.Global;
 import {Globalvar} from "../../constants/globalvar";
+import {AeListService} from "../../ae-list/ae-list.service";
 
 @Injectable()
 export class StatisticsService {
 
-    constructor(private $http:Http) { }
+    constructor(
+        private $http:Http,
+        private aeListService:AeListService
+    ) { }
 
     queryGet(params, url){
         return this.$http.get(`${url}/_search?source=`+JSON.stringify(params))
@@ -85,9 +89,21 @@ export class StatisticsService {
                 return resjson;
             });
     }
-    getQueriesUserID(range, url){
+    getAets(){
+        return this.aeListService.getAets();
+    }
+    getQueriesUserID(range, url, aets){
         let convertedRange = this.getRangeConverted(range);
-        let params = Globalvar.QUERIESUSERID_PARAMETERS;
+/*        aets = [
+            {dicomAETitle:"ARCHIVEACT"},
+            {dicomAETitle:"ARCHIVEACT_ADMIN"},
+            {dicomAETitle:"ARCHIVEACT_TRASH"}
+        ];*/
+        let params = Globalvar.QUERIESUSERID_PARAMETERS(
+            aets.map((aet)=>{
+                return `Destination.UserID:${aet.dicomAETitle}`;
+            }).join(" OR ")
+        );
         this.setRangeToParams(params,convertedRange,"Setting time range failed on Queries UserID ");
         return this.queryGet(params, url);
     }

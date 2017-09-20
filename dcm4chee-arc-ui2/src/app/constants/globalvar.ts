@@ -379,44 +379,46 @@ export class Globalvar {
     };
 
     public static get QUERIESUSERID_PARAMETERS(): any{
-        return {
-            "size": 0,
-            "aggs": {
-                "2": {
-                    "date_histogram": {
-                        "field": "Event.EventDateTime",
-                        "interval": "3h",
-                        "time_zone": "Europe/Berlin",
-                        "min_doc_count": 1
-                    },
-                    "aggs": {
-                        "3": {
-                            "terms": {
-                                "field": "Source.UserID",
-                                "size": 15,
-                                "order": {
-                                    "_count": "desc"
+        return (aets)=>{
+            return {
+                "size": 0,
+                "aggs": {
+                    "2": {
+                        "date_histogram": {
+                            "field": "Event.EventDateTime",
+                            "interval": "3h",
+                            "time_zone": "Europe/Berlin",
+                            "min_doc_count": 1
+                        },
+                        "aggs": {
+                            "3": {
+                                "terms": {
+                                    "field": "Source.UserID",
+                                    "size": 15,
+                                    "order": {
+                                        "_count": "desc"
+                                    }
                                 }
                             }
                         }
                     }
-                }
-            },
-            "query": {
-                "bool": {
-                    "must": [
-                        {
-                            "query_string": {
-                                "query": "EventID.csd-code:110112 AND (Destination.UserID:DCM4CHEE OR Destination.UserID:ANOTHER_AET)",
-                                "analyze_wildcard": true
+                },
+                "query": {
+                    "bool": {
+                        "must": [
+                            {
+                                "query_string": {
+                                    "query": `EventID.csd-code:110112 AND (${aets})`, //TODO use dynamic names of the aets service
+                                    "analyze_wildcard": true
+                                }
                             }
-                        }
-                    ],
-                    "must_not": []
+                        ],
+                        "must_not": []
+                    }
+                },
+                "_source": {
+                    "excludes": []
                 }
-            },
-            "_source": {
-                "excludes": []
             }
         };
     }
