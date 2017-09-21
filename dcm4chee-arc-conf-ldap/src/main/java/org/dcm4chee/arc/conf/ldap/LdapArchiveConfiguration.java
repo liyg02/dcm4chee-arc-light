@@ -625,30 +625,30 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     }
 
     @Override
-    protected void storeChilds(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, Device device)
+    protected void storeChilds(ConfigurationChanges diffs, String deviceDN, Device device)
             throws NamingException, ConfigurationException {
         ArchiveDeviceExtension arcDev = device
                 .getDeviceExtension(ArchiveDeviceExtension.class);
         if (arcDev == null)
             return;
 
-        storeAttributeFilter(ldapObj, deviceDN, arcDev);
-        storeStorageDescriptors(ldapObj, deviceDN, arcDev);
-        storeQueueDescriptors(ldapObj, deviceDN, arcDev);
-        storeExporterDescriptors(ldapObj, deviceDN, arcDev);
-        storeExportRules(ldapObj, arcDev.getExportRules(), deviceDN);
-        storeCompressionRules(ldapObj, arcDev.getCompressionRules(), deviceDN);
-        storeStoreAccessControlIDRules(ldapObj, arcDev.getStoreAccessControlIDRules(), deviceDN);
-        storeAttributeCoercions(ldapObj, arcDev.getAttributeCoercions(), deviceDN);
-        storeQueryRetrieveViews(ldapObj, deviceDN, arcDev);
-        storeRejectNotes(ldapObj, deviceDN, arcDev);
-        storeStudyRetentionPolicies(ldapObj, arcDev.getStudyRetentionPolicies(), deviceDN);
-        storeIDGenerators(ldapObj, deviceDN, arcDev);
-        storeHL7ForwardRules(ldapObj, arcDev.getHL7ForwardRules(), deviceDN, config);
-        storeRSForwardRules(ldapObj, arcDev.getRSForwardRules(), deviceDN);
-        storeAttributeSet(ldapObj, deviceDN, arcDev);
-        storeScheduledStations(ldapObj, arcDev.getHL7OrderScheduledStations(), deviceDN, config);
-        storeHL7OrderSPSStatus(ldapObj, arcDev.getHL7OrderSPSStatuses(), deviceDN, config);
+        storeAttributeFilter(diffs, deviceDN, arcDev);
+        storeStorageDescriptors(diffs, deviceDN, arcDev);
+        storeQueueDescriptors(diffs, deviceDN, arcDev);
+        storeExporterDescriptors(diffs, deviceDN, arcDev);
+        storeExportRules(diffs, arcDev.getExportRules(), deviceDN);
+        storeCompressionRules(diffs, arcDev.getCompressionRules(), deviceDN);
+        storeStoreAccessControlIDRules(diffs, arcDev.getStoreAccessControlIDRules(), deviceDN);
+        storeAttributeCoercions(diffs, arcDev.getAttributeCoercions(), deviceDN);
+        storeQueryRetrieveViews(diffs, deviceDN, arcDev);
+        storeRejectNotes(diffs, deviceDN, arcDev);
+        storeStudyRetentionPolicies(diffs, arcDev.getStudyRetentionPolicies(), deviceDN);
+        storeIDGenerators(diffs, deviceDN, arcDev);
+        storeHL7ForwardRules(diffs, arcDev.getHL7ForwardRules(), deviceDN, config);
+        storeRSForwardRules(diffs, arcDev.getRSForwardRules(), deviceDN);
+        storeAttributeSet(diffs, deviceDN, arcDev);
+        storeScheduledStations(diffs, arcDev.getHL7OrderScheduledStations(), deviceDN, config);
+        storeHL7OrderSPSStatus(diffs, arcDev.getHL7OrderSPSStatuses(), deviceDN, config);
     }
 
     @Override
@@ -958,17 +958,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     }
 
     @Override
-    protected void storeChilds(ConfigurationChanges.ModifiedObject ldapObj, String aeDN, ApplicationEntity ae) throws NamingException {
+    protected void storeChilds(ConfigurationChanges diffs, String aeDN, ApplicationEntity ae) throws NamingException {
         ArchiveAEExtension aeExt = ae.getAEExtension(ArchiveAEExtension.class);
         if (aeExt == null)
             return;
 
-        storeExportRules(ldapObj, aeExt.getExportRules(), aeDN);
-        storeCompressionRules(ldapObj, aeExt.getCompressionRules(), aeDN);
-        storeStoreAccessControlIDRules(ldapObj, aeExt.getStoreAccessControlIDRules(), aeDN);
-        storeAttributeCoercions(ldapObj, aeExt.getAttributeCoercions(), aeDN);
-        storeStudyRetentionPolicies(ldapObj, aeExt.getStudyRetentionPolicies(), aeDN);
-        storeRSForwardRules(ldapObj, aeExt.getRSForwardRules(), aeDN);
+        storeExportRules(diffs, aeExt.getExportRules(), aeDN);
+        storeCompressionRules(diffs, aeExt.getCompressionRules(), aeDN);
+        storeStoreAccessControlIDRules(diffs, aeExt.getStoreAccessControlIDRules(), aeDN);
+        storeAttributeCoercions(diffs, aeExt.getAttributeCoercions(), aeDN);
+        storeStudyRetentionPolicies(diffs, aeExt.getStudyRetentionPolicies(), aeDN);
+        storeRSForwardRules(diffs, aeExt.getRSForwardRules(), aeDN);
     }
 
     @Override
@@ -1006,23 +1006,31 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         mergeRSForwardRules(diffs, aa.getRSForwardRules(), bb.getRSForwardRules(), aeDN);
     }
 
-    private void storeAttributeFilter(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, ArchiveDeviceExtension arcDev)
+    private void storeAttributeFilter(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev)
             throws NamingException {
         for (Map.Entry<Entity, AttributeFilter> entry : arcDev.getAttributeFilters().entrySet()) {
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmEntity", entry.getKey().name(), deviceDN),
-                    storeTo(ldapObj, entry.getValue(), entry.getKey(), new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("dcmEntity", entry.getKey().name(), deviceDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, entry.getValue(), entry.getKey(), new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
-    private void storeAttributeSet(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, ArchiveDeviceExtension arcDev)
+    private void storeAttributeSet(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev)
             throws NamingException {
         for (Map<String, AttributeSet> map : arcDev.getAttributeSet().values()) {
             for (AttributeSet attributeSet : map.values()) {
-                config.createSubcontext(
-                        LdapUtils.dnOf("dcmAttributeSetType", attributeSet.getType().name(),
-                                "dcmAttributeSetID", attributeSet.getID(), deviceDN),
-                        storeTo(ldapObj, attributeSet, new BasicAttributes(true)));
+                String dn = LdapUtils.dnOf("dcmAttributeSetType", attributeSet.getType().name(),
+                        "dcmAttributeSetID", attributeSet.getID(), deviceDN);
+                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                        : null;
+                config.createSubcontext(dn, storeTo(ldapObj, attributeSet, new BasicAttributes(true)));
+                if (diffs != null)
+                    diffs.add(ldapObj);
             }
         }
     }
@@ -1288,7 +1296,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                 prev.getDescription(), attributeSet.getDescription(), null);
         LdapUtils.storeDiff(ldapObj, mods, "dcmAttributeSetNumber",
                 prev.getNumber(), attributeSet.getNumber(), 0);
-        storeDiffProperties(mods, prev.getProperties(), attributeSet.getProperties());
+        storeDiffProperties(ldapObj, mods, prev.getProperties(), attributeSet.getProperties());
         LdapUtils.storeDiff(ldapObj, mods, "dicomInstalled",
                 prev.isInstalled(), attributeSet.isInstalled(), true);
         storeDiffTags(mods, "dcmTag", prev.getSelection(), attributeSet.getSelection());
@@ -1302,12 +1310,15 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                     : new ModificationItem(DirContext.REPLACE_ATTRIBUTE, tagsAttr(attrId, vals)));
     }
 
-    private void storeStorageDescriptors(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
+    private void storeStorageDescriptors(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (StorageDescriptor descriptor : arcDev.getStorageDescriptors()) {
-            String storageID = descriptor.getStorageID();
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmStorageID", storageID, deviceDN),
-                    storeTo(ldapObj, descriptor, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("dcmStorageID", descriptor.getStorageID(), deviceDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, descriptor, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
@@ -1405,27 +1416,38 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         LdapUtils.storeDiffObject(ldapObj, mods, "dcmStorageThreshold", prev.getStorageThreshold(), desc.getStorageThreshold(), null);
         LdapUtils.storeDiff(ldapObj, mods, "dcmDeleterThreshold",
                 prev.getDeleterThresholdsAsStrings(), desc.getDeleterThresholdsAsStrings());
-        storeDiffProperties(mods, prev.getProperties(), desc.getProperties());
+        storeDiffProperties(ldapObj, mods, prev.getProperties(), desc.getProperties());
         LdapUtils.storeDiffObject(ldapObj, mods, "dcmExternalRetrieveAET", prev.getExternalRetrieveAETitle(), desc.getExternalRetrieveAETitle(), null);
         return mods;
     }
 
-    private static void storeDiffProperties(List<ModificationItem> mods, Map<String, ?> prev, Map<String, ?> props) {
-        if (!prev.equals(props)) {
+    private static void storeDiffProperties(ConfigurationChanges.ModifiedObject ldapObj, List<ModificationItem> mods, Map<String, ?> prevs, Map<String, ?> props) {
+        if (!prevs.equals(props)) {
             mods.add(props.size() == 0
                     ? new ModificationItem(DirContext.REMOVE_ATTRIBUTE,
                         new BasicAttribute("dcmProperty"))
                     : new ModificationItem(DirContext.REPLACE_ATTRIBUTE,
                         LdapUtils.attr("dcmProperty", toStrings(props))));
+            if (ldapObj != null) {
+                ConfigurationChanges.ModifiedAttribute attribute = new ConfigurationChanges.ModifiedAttribute("dcmProperty");
+                for (String val : toStrings(props))
+                    attribute.addValue(val);
+                for (String prev : toStrings(prevs))
+                    attribute.removeValue(prev);
+                ldapObj.add(attribute);
+            }
         }
     }
 
-    private void storeQueueDescriptors(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
+    private void storeQueueDescriptors(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (QueueDescriptor descriptor : arcDev.getQueueDescriptors()) {
-            String queueName = descriptor.getQueueName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmQueueName", queueName, deviceDN),
-                    storeTo(ldapObj, descriptor, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("dcmQueueName", descriptor.getQueueName(), deviceDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, descriptor, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
@@ -1518,12 +1540,15 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         return mods;
     }
 
-    private void storeExporterDescriptors(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
+    private void storeExporterDescriptors(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (ExporterDescriptor descriptor : arcDev.getExporterDescriptors()) {
-            String storageID = descriptor.getExporterID();
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmExporterID", storageID, deviceDN),
-                    storeTo(ldapObj, descriptor, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("dcmExporterID", descriptor.getExporterID(), deviceDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, descriptor, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
@@ -1626,16 +1651,19 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         LdapUtils.storeDiffObject(ldapObj, mods, "dcmInstanceAvailability",
                 prev.getInstanceAvailability(), desc.getInstanceAvailability(), Availability.ONLINE);
         LdapUtils.storeDiff(ldapObj, mods, "dcmSchedule", prev.getSchedules(), desc.getSchedules());
-        storeDiffProperties(mods, prev.getProperties(), desc.getProperties());
+        storeDiffProperties(ldapObj, mods, prev.getProperties(), desc.getProperties());
         return mods;
     }
 
-    private void storeExportRules(ConfigurationChanges.ModifiedObject ldapObj, Collection<ExportRule> exportRules, String parentDN) throws NamingException {
+    private void storeExportRules(ConfigurationChanges diffs, Collection<ExportRule> exportRules, String parentDN) throws NamingException {
         for (ExportRule rule : exportRules) {
-            String cn = rule.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, rule, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
@@ -1725,7 +1753,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
 
     private List<ModificationItem> storeDiffs(ConfigurationChanges.ModifiedObject ldapObj, ExportRule prev, ExportRule rule, ArrayList<ModificationItem> mods) {
         LdapUtils.storeDiff(ldapObj, mods, "dcmSchedule", prev.getSchedules(), rule.getSchedules());
-        storeDiffProperties(mods, prev.getConditions().getMap(), rule.getConditions().getMap());
+        storeDiffProperties(ldapObj, mods, prev.getConditions().getMap(), rule.getConditions().getMap());
         LdapUtils.storeDiff(ldapObj, mods, "dcmExporterID", prev.getExporterIDs(), rule.getExporterIDs());
         LdapUtils.storeDiffObject(ldapObj, mods, "dcmEntity", prev.getEntity(), rule.getEntity(), null);
         LdapUtils.storeDiffObject(ldapObj, mods, "dcmDuration", prev.getExportDelay(), rule.getExportDelay(), null);
@@ -1741,76 +1769,98 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         return null;
     }
 
-    private void storeCompressionRules(ConfigurationChanges.ModifiedObject ldapObj, Collection<ArchiveCompressionRule> rules, String parentDN)
+    private void storeCompressionRules(ConfigurationChanges diffs, Collection<ArchiveCompressionRule> rules, String parentDN)
             throws NamingException {
         for (ArchiveCompressionRule rule : rules) {
-            String cn = rule.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, rule, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
-    private void storeStudyRetentionPolicies(ConfigurationChanges.ModifiedObject ldapObj, Collection<StudyRetentionPolicy> policies, String parentDN)
+    private void storeStudyRetentionPolicies(ConfigurationChanges diffs, Collection<StudyRetentionPolicy> policies, String parentDN)
             throws NamingException {
         for (StudyRetentionPolicy policy : policies) {
-            String cn = policy.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, policy, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("cn", policy.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, policy, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
-    private void storeStoreAccessControlIDRules(ConfigurationChanges.ModifiedObject ldapObj, Collection<StoreAccessControlIDRule> rules, String parentDN)
+    private void storeStoreAccessControlIDRules(ConfigurationChanges diffs, Collection<StoreAccessControlIDRule> rules, String parentDN)
             throws NamingException {
         for (StoreAccessControlIDRule rule : rules) {
-            String cn = rule.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, rule, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
 
-    protected static void storeHL7ForwardRules(ConfigurationChanges.ModifiedObject ldapObj,
+    protected static void storeHL7ForwardRules(ConfigurationChanges diffs,
             Collection<HL7ForwardRule> rules, String parentDN, LdapDicomConfiguration config)
             throws NamingException{
         for (HL7ForwardRule rule : rules) {
-            String cn = rule.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, rule, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
-    protected static void storeScheduledStations(ConfigurationChanges.ModifiedObject ldapObj,
+    protected static void storeScheduledStations(ConfigurationChanges diffs,
             Collection<HL7OrderScheduledStation> stations, String parentDN, LdapDicomConfiguration config)
             throws NamingException{
         for (HL7OrderScheduledStation station : stations) {
-            String cn = station.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, station, new BasicAttributes(true), config));
+            String dn = LdapUtils.dnOf("cn", station.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, station, new BasicAttributes(true), config));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
-    protected static void storeHL7OrderSPSStatus(ConfigurationChanges.ModifiedObject ldapObj,
+    protected static void storeHL7OrderSPSStatus(ConfigurationChanges diffs,
             Map<SPSStatus, HL7OrderSPSStatus> hl7OrderSPSStatusMap, String parentDN, LdapDicomConfiguration config)
             throws NamingException {
         for (Map.Entry<SPSStatus, HL7OrderSPSStatus> entry : hl7OrderSPSStatusMap.entrySet()) {
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmSPSStatus", entry.getKey().toString(), parentDN),
-                    storeTo(ldapObj, entry.getValue(), entry.getKey(), new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("dcmSPSStatus", entry.getKey().toString(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, entry.getValue(), entry.getKey(), new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
-    private void storeRSForwardRules(ConfigurationChanges.ModifiedObject ldapObj, Collection<RSForwardRule> rules, String parentDN)
+    private void storeRSForwardRules(ConfigurationChanges diffs, Collection<RSForwardRule> rules, String parentDN)
             throws NamingException {
         for (RSForwardRule rule : rules) {
-            String cn = rule.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, rule, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
@@ -2225,7 +2275,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
 
     private List<ModificationItem> storeDiffs(
             ConfigurationChanges.ModifiedObject ldapObj, ArchiveCompressionRule prev, ArchiveCompressionRule rule, ArrayList<ModificationItem> mods) {
-        storeDiffProperties(mods, prev.getConditions().getMap(), rule.getConditions().getMap());
+        storeDiffProperties(ldapObj, mods, prev.getConditions().getMap(), rule.getConditions().getMap());
         LdapUtils.storeDiffObject(ldapObj, mods, "dicomTransferSyntax", prev.getTransferSyntax(), rule.getTransferSyntax(), null);
         LdapUtils.storeDiff(ldapObj, mods, "dcmImageWriteParam", prev.getImageWriteParams(), rule.getImageWriteParams());
         LdapUtils.storeDiff(ldapObj, mods, "dcmRulePriority", prev.getPriority(), rule.getPriority(), 0);
@@ -2234,7 +2284,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
 
     private List<ModificationItem> storeDiffs(
             ConfigurationChanges.ModifiedObject ldapObj, StoreAccessControlIDRule prev, StoreAccessControlIDRule rule, ArrayList<ModificationItem> mods) {
-        storeDiffProperties(mods, prev.getConditions().getMap(), rule.getConditions().getMap());
+        storeDiffProperties(ldapObj, mods, prev.getConditions().getMap(), rule.getConditions().getMap());
         LdapUtils.storeDiffObject(ldapObj, mods, "dcmStoreAccessControlID",
                 prev.getStoreAccessControlID(), rule.getStoreAccessControlID(), null);
         LdapUtils.storeDiff(ldapObj, mods, "dcmRulePriority", prev.getPriority(), rule.getPriority(), 0);
@@ -2243,7 +2293,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
 
     private List<ModificationItem> storeDiffs(
             ConfigurationChanges.ModifiedObject ldapObj, StudyRetentionPolicy prev, StudyRetentionPolicy policy, ArrayList<ModificationItem> mods) {
-        storeDiffProperties(mods, prev.getConditions().getMap(), policy.getConditions().getMap());
+        storeDiffProperties(ldapObj, mods, prev.getConditions().getMap(), policy.getConditions().getMap());
         LdapUtils.storeDiffObject(ldapObj, mods, "dcmRetentionPeriod", prev.getRetentionPeriod(), policy.getRetentionPeriod(), null);
         LdapUtils.storeDiff(ldapObj, mods, "dcmRulePriority", prev.getPriority(), policy.getPriority(), 0);
         LdapUtils.storeDiff(ldapObj, mods, "dcmExpireSeriesIndividually", prev.isExpireSeriesIndividually(),
@@ -2253,7 +2303,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
 
     private static List<ModificationItem> storeDiffs(
             ConfigurationChanges.ModifiedObject ldapObj, HL7ForwardRule prev, HL7ForwardRule rule, ArrayList<ModificationItem> mods) {
-        storeDiffProperties(mods, prev.getConditions().getMap(), rule.getConditions().getMap());
+        storeDiffProperties(ldapObj, mods, prev.getConditions().getMap(), rule.getConditions().getMap());
         LdapUtils.storeDiff(ldapObj, mods, "hl7FwdApplicationName", prev.getDestinations(), rule.getDestinations());
         return mods;
     }
@@ -2324,12 +2374,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         return null;
     }
 
-    private void storeQueryRetrieveViews(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN,
+    private void storeQueryRetrieveViews(ConfigurationChanges diffs, String deviceDN,
                                          ArchiveDeviceExtension arcDev) throws NamingException {
-        for (QueryRetrieveView view : arcDev.getQueryRetrieveViews())
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmQueryRetrieveViewID", view.getViewID(), deviceDN),
-                    storeTo(ldapObj, view, new BasicAttributes(true)));
+        for (QueryRetrieveView view : arcDev.getQueryRetrieveViews()) {
+            String dn = LdapUtils.dnOf("dcmQueryRetrieveViewID", view.getViewID(), deviceDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, view, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
+        }
     }
 
     private Attributes storeTo(ConfigurationChanges.ModifiedObject ldapObj, QueryRetrieveView qrView, BasicAttributes attrs) {
@@ -2409,13 +2464,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         return mods;
     }
 
-    private void storeAttributeCoercions(ConfigurationChanges.ModifiedObject ldapObj, Collection<ArchiveAttributeCoercion> coercions, String parentDN)
+    private void storeAttributeCoercions(ConfigurationChanges diffs, Collection<ArchiveAttributeCoercion> coercions, String parentDN)
             throws NamingException {
         for (ArchiveAttributeCoercion coercion : coercions) {
-            String cn = coercion.getCommonName();
-            config.createSubcontext(
-                    LdapUtils.dnOf("cn", cn, parentDN),
-                    storeTo(ldapObj, coercion, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("cn", coercion.getCommonName(), parentDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, coercion, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
@@ -2526,20 +2584,27 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
         return null;
     }
 
-    private void storeRejectNotes(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
+    private void storeRejectNotes(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (RejectionNote rejectionNote : arcDev.getRejectionNotes()) {
-            String id = rejectionNote.getRejectionNoteLabel();
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmRejectionNoteLabel", id, deviceDN),
-                    storeTo(ldapObj, rejectionNote, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("dcmRejectionNoteLabel", rejectionNote.getRejectionNoteLabel(), deviceDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, rejectionNote, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
-    private void storeIDGenerators(ConfigurationChanges.ModifiedObject ldapObj, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
+    private void storeIDGenerators(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (IDGenerator generator : arcDev.getIDGenerators().values()) {
-            config.createSubcontext(
-                    LdapUtils.dnOf("dcmIDGeneratorName", generator.getName().name(), deviceDN),
-                    storeTo(ldapObj, generator, new BasicAttributes(true)));
+            String dn = LdapUtils.dnOf("dcmIDGeneratorName", generator.getName().name(), deviceDN);
+            ConfigurationChanges.ModifiedObject ldapObj = diffs != null
+                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
+                    : null;
+            config.createSubcontext(dn, storeTo(ldapObj, generator, new BasicAttributes(true)));
+            if (diffs != null)
+                diffs.add(ldapObj);
         }
     }
 
