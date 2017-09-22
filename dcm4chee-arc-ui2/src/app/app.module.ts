@@ -72,6 +72,7 @@ import { Hl7ApplicationsComponent } from './hl7-applications/hl7-applications.co
 import {Hl7ApplicationsService} from "./hl7-applications/hl7-applications.service";
 import {AeListService} from "./ae-list/ae-list.service";
 import {HttpErrorHandler} from "./helpers/http-error-handler";
+import {j4care} from "./helpers/j4care.service";
 
 @NgModule({
     declarations: [
@@ -189,7 +190,8 @@ import {HttpErrorHandler} from "./helpers/http-error-handler";
         LifecycleManagementService,
         AeListService,
         Hl7ApplicationsService,
-        HttpErrorHandler
+        HttpErrorHandler,
+        j4care
     ],
     bootstrap: [AppComponent]
 })

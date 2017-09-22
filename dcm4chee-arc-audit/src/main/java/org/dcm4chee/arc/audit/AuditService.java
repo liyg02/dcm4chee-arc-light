@@ -290,15 +290,15 @@ public class AuditService {
                                 .callingUserID(KeycloakContext.valueOf(request).getUserName())
                                 .callingHost(request.getRemoteAddr())
                                 .calledUserID(softwareConfiguration.getDeviceName())
-                                .ldapDiff(softwareConfiguration.getLdapDiff().toString())
                                 .build();
-        writeSpoolFile(AuditServiceUtils.EventType.LDAP_CHNGS, info);
+        writeSpoolFile(AuditServiceUtils.EventType.LDAP_CHNGS, info, softwareConfiguration.getLdapDiff().toString());
     }
 
     private void auditSoftwareConfiguration(AuditLogger auditLogger, Path path, AuditServiceUtils.EventType eventType)
             throws IOException {
         SpoolFileReader reader = new SpoolFileReader(path);
         AuditInfo auditInfo = new AuditInfo(reader.getMainInfo());
+
         EventIdentificationBuilder ei = toBuildEventIdentification(eventType, null, getEventTime(path, auditLogger));
         ActiveParticipantBuilder[] activeParticipantBuilder = new ActiveParticipantBuilder[1];
         String callingUserID = auditInfo.getField(AuditInfo.CALLING_USERID);
@@ -311,7 +311,7 @@ public class AuditService {
                                                     AuditInfo.CALLED_USERID),
                                                     AuditMessages.ParticipantObjectIDTypeCode.DeviceName,
                                                     AuditMessages.ParticipantObjectTypeCode.SystemObject,
-                                                    null).detail(getPod("Alert Description", auditInfo.getField(AuditInfo.LDAP_DIFF)))
+                                                    null).detail(getPod("Alert Description", getData(reader)))
                                                     .build();
         emitAuditMessage(auditLogger, ei, activeParticipantBuilder, poiLDAPDiff);
     }
@@ -1376,6 +1376,15 @@ public class AuditService {
         return log.getConnections().get(0).getHostname();
     }
 
+    private String getData(SpoolFileReader reader) {
+        List<String> ldapDiffs = reader.getInstanceLines();
+        StringBuilder sb = new StringBuilder();
+        sb.append(ldapDiffs.get(0));
+        for (int i = 1; i < ldapDiffs.size(); i++)
+            sb.append('\n').append(ldapDiffs.get(i));
+        return sb.toString();
+    }
+
     private void writeSpoolFile(AuditServiceUtils.EventType eventType, LinkedHashSet<Object> obj) {
         if (obj.isEmpty()) {
             LOG.warn("Attempt to write empty file : ", eventType);
@@ -1408,6 +1417,28 @@ public class AuditService {
         return Paths.get(
                 StringUtils.replaceSystemProperties(getArchiveDevice().getAuditSpoolDirectory()),
                 auditLogger.getCommonName().replaceAll(" ", "_"));
+    }
+
+    private void writeSpoolFile(AuditServiceUtils.EventType eventType, AuditInfoBuilder auditInfoBuilder, String data) {
+        boolean auditAggregate = getArchiveDevice().isAuditAggregate();
+        AuditLoggerDeviceExtension ext = device.getDeviceExtension(AuditLoggerDeviceExtension.class);
+        for (AuditLogger auditLogger : ext.getAuditLoggers()) {
+            if (auditLogger.isInstalled()) {
+                Path dir = toDirPath(auditLogger);
+                try {
+                    Files.createDirectories(dir);
+                    Path file = Files.createTempFile(dir, String.valueOf(eventType), null);
+                    try (SpoolFileWriter writer = new SpoolFileWriter(Files.newBufferedWriter(file, StandardCharsets.UTF_8,
+                            StandardOpenOption.APPEND))) {
+                        writer.writeLine(new AuditInfo(auditInfoBuilder), data);
+                    }
+                    if (!auditAggregate)
+                        auditAndProcessFile(auditLogger, file);
+                } catch (Exception e) {
+                    LOG.warn("Failed to write to Audit Spool File - {} ", auditLogger.getCommonName(), e);
+                }
+            }
+        }
     }
 
     private void writeSpoolFile(AuditServiceUtils.EventType eventType, AuditInfoBuilder... auditInfoBuilders) {
