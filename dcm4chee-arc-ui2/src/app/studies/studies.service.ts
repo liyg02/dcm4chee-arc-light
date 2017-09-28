@@ -309,7 +309,6 @@ export class StudiesService {
     };
 
     getPatientIod(){
-        console.log('_patientIod', this._patientIod);
         if (this._patientIod) {
             return Observable.of(this._patientIod);
         } else {
@@ -574,6 +573,13 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             successMsg:'Patient ID changed successfully!'
         };
     }
+    getHl7ApplicationNameFormAETtitle(aet, aes){
+        for(let i = 0; i < aes.length; i++){
+            if(aet === aes[i].dicomAETitle){
+                return aes[i].hl7ApplicationName;
+            }
+        };
+    }
     modifyPatient(patient, iod, oldPatientID, aet,internalAppName, externalAppName,  modifyMode, externalInternalAetMode){
         let url;
         if(externalInternalAetMode === 'external'){
@@ -584,16 +590,22 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
         let headers = new Headers({ 'Content-Type': 'application/dicom+json' });
         this.clearPatientObject(patient.attrs);
         this.convertStringToNumber(patient.attrs);
-        //Check if the patient.attrs object have PatientID
-        if (_.hasIn(patient,'attrs[00100020].Value[0]') && patient.attrs['00100020'].Value[0] != ''){
+        let toSavePatientObject;
+        if(_.hasIn(patient,"attrs")){
+            toSavePatientObject = _.cloneDeep(patient.attrs);
+        }else{
+            toSavePatientObject = _.cloneDeep(patient);
+        }
+        //Check if the toSavePatientObject object have PatientID
+        if (_.hasIn(toSavePatientObject,'[00100020].Value[0]') && toSavePatientObject['00100020'].Value[0] != ''){
             //Delete attrs that don't have values
-            _.forEach(patient.attrs, function(m, i){
+            _.forEach(toSavePatientObject, function(m, i){
                 if (iod && iod[i] && iod[i].vr != 'SQ' && m.Value && m.Value.length === 1 && m.Value[0] === ''){
-                    delete patient.attrs[i];
+                    delete toSavePatientObject[i];
                 }
             });
-            if (modifyMode === 'create' && _.hasIn(patient, 'attrs.00100021') && patient.attrs['00100021'] != undefined) {
-                oldPatientID = this.getPatientId(patient.attrs);
+            if (modifyMode === 'create' && _.hasIn(toSavePatientObject, '00100021') && toSavePatientObject['00100021'] != undefined) {
+                oldPatientID = this.getPatientId(toSavePatientObject);
             }
             if(externalInternalAetMode === 'internal'){
                 url = url + oldPatientID;
@@ -602,7 +614,7 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                     return {
                         save:this.$http.put(
                                 url,
-                                patient.attrs,
+                                toSavePatientObject,
                                 {headers: headers}
                             ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
                         ,
@@ -613,7 +625,7 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                    return {
                        save:this.$http.post(
                            url,
-                           patient.attrs,
+                           toSavePatientObject,
                            {headers: headers}
                        ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
                        ,
@@ -633,7 +645,7 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                 return {
                     save:this.$http.post(
                         url,
-                        patient.attrs,
+                        toSavePatientObject,
                         {headers: headers}
                     ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
                     ,

@@ -1510,13 +1510,6 @@ export class StudiesComponent implements OnDestroy{
             }
         }, 50);
     }
-    getHl7ApplicationNameFormAETtitle(aet){
-        for(let i = 0; i < this.allAes.length; i++){
-            if(aet === this.allAes[i].dicomAETitle){
-                return this.allAes[i].hl7ApplicationName;
-            }
-        };
-    }
     modifyPatient(patient, mode , patientkey){
         let originalPatientObject = _.cloneDeep(patient);
         this.config.viewContainerRef = this.viewContainerRef;
@@ -1562,7 +1555,7 @@ export class StudiesComponent implements OnDestroy{
                     console.log("oldPatientID",oldPatientID);
                     console.log("$this.service.getPatientId(patient.attrs)",$this.service.getPatientId(patient.attrs));
                     if(oldPatientID === $this.service.getPatientId(patient.attrs) || $this.externalInternalAetMode === "internal" || mode === "create"){
-                        let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID, $this.aet, $this.getHl7ApplicationNameFormAETtitle($this.aet), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                        let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
                         if(modifyPatientService){
                             modifyPatientService.save.subscribe((response)=>{
                                 this.fireRightQuery();
@@ -1578,7 +1571,7 @@ export class StudiesComponent implements OnDestroy{
                         }
                     }else{
                         //If patient id was changed and the aetmode is external than change the patient id first than update the patient
-                        let changeExternalPatientIdService = $this.service.changeExternalPatientID($this.service.preparePatientObjectForExternalPatiendIdChange(originalPatientObject.attrs, patient.attrs), $this.getHl7ApplicationNameFormAETtitle($this.aet) ,  $this.externalInternalAetModel.hl7ApplicationName, oldPatientID);
+                        let changeExternalPatientIdService = $this.service.changeExternalPatientID($this.service.preparePatientObjectForExternalPatiendIdChange(originalPatientObject.attrs, patient.attrs), $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes) ,  $this.externalInternalAetModel.hl7ApplicationName, oldPatientID);
                         if(changeExternalPatientIdService){
                             changeExternalPatientIdService.save.subscribe((response)=>{
                                 this.mainservice.setMessage({
@@ -1586,7 +1579,7 @@ export class StudiesComponent implements OnDestroy{
                                     'text': changeExternalPatientIdService.successMsg,
                                     'status': 'info'
                                 });
-                                let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID,$this.aet, $this.getHl7ApplicationNameFormAETtitle($this.aet), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                                let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID,$this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
                                 if(modifyPatientService){
                                     modifyPatientService.save.subscribe((response)=>{
                                         this.fireRightQuery();
@@ -2033,7 +2026,6 @@ export class StudiesComponent implements OnDestroy{
         this.dialogRef.componentInstance.warning = warning;
         this.dialogRef.afterClosed().subscribe(result => {
             if (result){
-
                 $this.cfpLoadingBar.start();
                 if($this.externalInternalAetMode === 'external'){
                     id = 'dicom:' + result.selectedAet;
@@ -3068,7 +3060,7 @@ export class StudiesComponent implements OnDestroy{
                                 console.log('getpatientid', $this.service.getPatientId($this.selected.patients));*/
                                 let url;
                                 if(this.externalInternalAetMode === 'external'){
-                                    url = `../hl7apps/${$this.getHl7ApplicationNameFormAETtitle($this.aet)}/hl7/${$this.externalInternalAetModel.hl7ApplicationName}/patients/${$this.service.getPatientId($this.selected.patients)}/merge`;
+                                    url = `../hl7apps/${$this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes)}/hl7/${$this.externalInternalAetModel.hl7ApplicationName}/patients/${$this.service.getPatientId($this.selected.patients)}/merge`;
                                 }else{
                                     url = '../aets/' + $this.aet + '/rs/patients/' + $this.service.getPatientId($this.selected.patients) + '/merge';
                                 }

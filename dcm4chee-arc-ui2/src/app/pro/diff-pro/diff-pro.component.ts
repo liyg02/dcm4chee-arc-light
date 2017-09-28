@@ -8,6 +8,8 @@ import * as _ from 'lodash';
 import {DiffDetailViewComponent} from "../../widgets/dialogs/diff-detail-view/diff-detail-view.component";
 import {MdDialogConfig, MdDialog, MdDialogRef} from "@angular/material";
 import {DicomOperationsComponent} from "../../widgets/dialogs/dicom-operations/dicom-operations.component";
+import {j4care} from "../../helpers/j4care.service";
+import {WindowRefService} from "../../helpers/window-ref.service";
 
 @Component({
     selector: 'app-diff-pro',
@@ -146,6 +148,7 @@ export class DiffProComponent implements OnInit {
     moreGroupElements = {};
     moreFunctionsButtons = false;
     dialogRef: MdDialogRef<any>;
+    rjnotes;
     constructor(
         private service:DiffProService,
         private cfpLoadingBar: SlimLoadingBarService,
@@ -161,6 +164,7 @@ export class DiffProComponent implements OnInit {
         this.getDiffAttributeSet(2);
         this.modalities = Globalvar.MODALITIES;
         this.calculateWidthOfTable();
+        this.initRjNotes(2);
         this.groups = new Map();
         this.groups.set("patient",{
             label:"Patient data",
@@ -264,7 +268,8 @@ export class DiffProComponent implements OnInit {
             }
         });
     }
-    openDetailView(studies,i,groupName){
+    openDetailView(studies,i,attributes){
+        let groupName = attributes.id;
         let $this = this;
         this.config.viewContainerRef = this.viewContainerRef;
         let width = "90%";
@@ -289,7 +294,11 @@ export class DiffProComponent implements OnInit {
         this.dialogRef.componentInstance.cMoveScp2 = this.cMoveScp2;
         this.dialogRef.componentInstance.studies = studies;
         this.dialogRef.componentInstance.groupName = groupName;
+        this.dialogRef.componentInstance.groupTitle = attributes.title;
         this.dialogRef.componentInstance.index = i;
+        this.dialogRef.componentInstance.rjnotes = this.rjnotes;
+        this.dialogRef.componentInstance.patientMode = attributes.patientMode;
+        this.dialogRef.componentInstance.actions = _.hasIn(attributes,"action") ? attributes.action : [];
         this.dialogRef.afterClosed().subscribe((result) => {
             if (result){
                 if(result === "last"){
@@ -508,11 +517,62 @@ export class DiffProComponent implements OnInit {
             this.loadMore(id);
         }
     }
+    addLabelToActionArray(action){
+        function replacerLabel(match, p1, p2, p3, offset, string) {
+            if(p3){
+                return 'SYNCHRONIZE THIS ENTRIES';
+            }else{
+                return j4care.firstLetterToUpperCase(p2) + ' selected ' + p1;
+            }
+        }
+        function replacerDescription(match, p1, p2, p3, offset, string) {
+            if(p3){
+                return j4care.firstLetterToUpperCase(p2) + ' not selected ' + p1 + ' and ' + p3 + ' selected one to the not selected AEt';
+            }else{
+                return j4care.firstLetterToUpperCase(p2) + ' selected ' + p1;
+            }
+        }
+        return action.map(m => {
+            return {
+                key: m,
+                label: m.replace(/(\w*)\-(\w*)\-?(\w*)?/g, replacerLabel),
+                description: m.replace(/(\w*)\-(\w*)\-?(\w*)?/g, replacerDescription)
+            }
+        });
+    }
+    convertActionToArray(str){
+        const regex = /[A-Za-z0-9_-]*[^\s^,]/g;
+        let m;
+        let result = [];
+        while ((m = regex.exec(str)) !== null) {
+            // This is necessary to avoid infinite loops with zero-width matches
+            if (m.index === regex.lastIndex) {
+                regex.lastIndex++;
+            }
+
+            // The result can be accessed through the `m`-variable.
+            m.forEach((match, groupIndex) => {
+                console.log(`Found match, group ${groupIndex}: ${match}`);
+            });
+            console.log("m[0]",m[0]);
+            result.push(m[0]);
+        }
+        return result;
+    }
     getDiffAttributeSet(retries){
         let $this = this;
         this.service.getDiffAttributeSet().subscribe(
             (res)=>{
                 $this.diffAttributes = res;
+                $this.diffAttributes.forEach((m,i)=>{
+                    if(_.hasIn(m,"action")){
+                        m.patientMode = (m.action.indexOf("patient-update") > -1) ? true : false;
+                        m.action = this.addLabelToActionArray(this.convertActionToArray(m.action));
+                    }else{
+                        m.patientMode = false;
+                    }
+                });
+                //get first letter after "-": regex: /\-(\w)/g
                 $this.diffAttributes.push({
                     id:"missing",
                     title:"Missing studies",
@@ -812,6 +872,28 @@ export class DiffProComponent implements OnInit {
             }
         );
     };
+    initRjNotes(retries) {
+        let $this = this;
+        this.service.rjNotes().subscribe(
+                (res) => {
+                    let rjnotes = res;
+                    rjnotes.sort(function (a, b) {
+                        if (a.codeValue === '113039' && a.codingSchemeDesignator === 'DCM')
+                            return -1;
+                        if (b.codeValue === '113039' && b.codingSchemeDesignator === 'DCM')
+                            return 1;
+                        return 0;
+                    });
+                    $this.rjnotes = rjnotes;
+                    // $this.reject = rjnotes[0].codeValue + '^' + rjnotes[0].codingSchemeDesignator;
+
+                    // $this.mainservice.setGlobal({rjnotes:rjnotes,reject:$this.reject});
+                },
+                (res) => {
+                    if (retries)
+                        $this.initRjNotes(retries - 1);
+                });
+    }
     getAets(retries){
         let $this = this;
         this.service.getAets().subscribe(

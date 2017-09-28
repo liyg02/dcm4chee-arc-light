@@ -1,6 +1,7 @@
 <div class="vex vex-theme-os diff">
     <div class="vex-dialog-form">
-        <h5>{{titleLabel}}</h5>
+        <h5>{{titleLabel}} <span class="pull-right">{{index+1}}/{{studies.length}}</span></h5>
+
         <div class="diff_main_content">
             <div class="first_diff table_block" [ngClass]="{selected: (selectedVersion === 'FIRST' && groupName != 'missing'),missing_mode: groupName === 'missing'}">
                 <div class="header">
@@ -20,7 +21,7 @@
                     </table>
                 </div>
                 <div class="checkbox_content" >
-                    <md-checkbox *ngIf="groupName != 'missing'"  [ngModel]="selectedVersion === 'FIRST'" (ngModelChange)="changeSelectedVersion('FIRST')">Select this version as the right one</md-checkbox>
+                    <md-checkbox *ngIf="groupName != 'missing'"  [ngModel]="selectedVersion === 'FIRST'" (ngModelChange)="changeSelectedVersion('FIRST')">{{selectLabel}}</md-checkbox>
                 </div>
             </div>
             <div class="second_diff table_block" [ngClass]="{selected: selectedVersion === 'SECOND'}" *ngIf="groupName != 'missing'">
@@ -40,14 +41,19 @@
                     </table>
                 </div>
                 <div class="checkbox_content">
-                    <md-checkbox  [ngModel]="selectedVersion === 'SECOND'" (ngModelChange)="changeSelectedVersion('SECOND')">Select this version as the right one</md-checkbox>
+                    <md-checkbox  [ngModel]="selectedVersion === 'SECOND'" (ngModelChange)="changeSelectedVersion('SECOND')">{{selectLabel}}</md-checkbox>
                 </div>
             </div>
         </div>
         <div class="arrows">
             <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
-            <button *ngIf="groupName === 'missing'" class="save" type="button" (click)="executeProcess()">{{buttonLabel}}</button>
-            <button *ngIf="groupName != 'missing'" title="Coming soon..." [disabled]="true" class="save" type="button" (click)="executeProcess()">{{buttonLabel}}</button>
+            <button *ngIf="groupName === 'missing'" class="save" type="button" (click)="executeProcess('missing')">{{buttonLabel}}</button>
+            <button *ngIf="groupName != 'missing' && actions.length < 2" title="{{(actions.length === 0 ? 'Coming soon...':'')}}" [disabled]="actions.length === 0" class="save" type="button" (click)="executeProcess(actions[0].key)">
+                {{buttonLabel}}
+            </button>
+            <ul *ngIf="actions.length > 1" class="actions">
+                <li *ngFor="let action of actions" (click)="executeProcess(action.key)" title="{{action.description}}">{{action.label}}</li>
+            </ul>
             <a class="next" [attr.disabled]="index === (studies.length-1) ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)" title="Show next diff"><span class="text">NEXT</span> <span class="glyphicon glyphicon-chevron-right"></span></a>
         </div>
         <div class="dialogbuttons">

@@ -50,6 +50,16 @@ export class DiffProService {
     _config(params) {
         return '?' + jQuery.param(params);
     };
+    rjNotes(){
+        return this.$http.get('../reject')
+            .map(res => {let resjson; try{
+                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                if(pattern.exec(res.url)){
+                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                }
+                resjson = res.json(); }catch (e){resjson = {}; } return resjson;
+            });
+    }
     getDiffAttributeSet(){
         return this.$http.get('../attribute-set/DIFF_RS')
             .map(res => {

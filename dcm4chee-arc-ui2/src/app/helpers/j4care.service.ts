@@ -16,4 +16,10 @@ export class j4care {
         }
         return object;
     }
+    static firstLetterToUpperCase(str){
+        return str && str[0].toUpperCase() + str.slice(1);
+    }
+    static firstLetterToLowerCase(str){
+        return str && str[0].toLowerCase() + str.slice(1);
+    }
 }
