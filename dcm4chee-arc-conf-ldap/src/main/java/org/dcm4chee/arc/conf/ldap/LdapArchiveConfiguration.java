@@ -1014,21 +1014,10 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException {
         for (Map.Entry<Entity, AttributeFilter> entry : arcDev.getAttributeFilters().entrySet()) {
             String dn = LdapUtils.dnOf("dcmEntity", entry.getKey().name(), deviceDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, entry.getValue(), entry.getKey(), new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
-    }
-
-    private static boolean isVerbose(ConfigurationChanges diffs) {
-        return diffs != null && diffs.isConfigurationVerbose();
-    }
-
-    private static boolean isNonVerbose(ConfigurationChanges diffs) {
-        return diffs != null && !diffs.isConfigurationVerbose();
     }
 
     private void storeAttributeSet(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev)
@@ -1037,12 +1026,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             for (AttributeSet attributeSet : map.values()) {
                 String dn = LdapUtils.dnOf("dcmAttributeSetType", attributeSet.getType().name(),
                         "dcmAttributeSetID", attributeSet.getID(), deviceDN);
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
                 config.createSubcontext(dn, storeTo(ldapObj, attributeSet, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
             }
         }
     }
@@ -1189,8 +1175,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (!arcDev.getAttributeFilters().containsKey(entity)) {
                 String dn = LdapUtils.dnOf("dcmEntity", entity.name(), deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         
         for (Map.Entry<Entity, AttributeFilter> entry : arcDev.getAttributeFilters().entrySet()) {
@@ -1198,22 +1183,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("dcmEntity", entity.name(), deviceDN);
             AttributeFilter prevFilter = prev.getAttributeFilters().get(entity);
             if (prevFilter == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
                 config.createSubcontext(dn,
-                        storeTo(ldapObj, entry.getValue(), entity, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                entry.getValue(), entity, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn,
                         storeDiffs(ldapObj, prevFilter, entry.getValue(), new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -1228,8 +1208,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                     String dn = LdapUtils.dnOf("dcmAttributeSetType", type.name(),
                             "dcmAttributeSetID", name, deviceDN);
                     config.destroySubcontext(dn);
-                    if (diffs != null)
-                        diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
                 }
             }
         }
@@ -1240,21 +1219,18 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                         "dcmAttributeSetID", attributeSet.getID(), deviceDN);
                 AttributeSet prevAttributeSet = prevMap.get(attributeSet.getID());
                 if (prevAttributeSet == null) {
-                    ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                            ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                            : null;
-                    config.createSubcontext(dn, storeTo(ldapObj, attributeSet, new BasicAttributes(true)));
-                    if (ldapObj != null)
-                        diffs.add(ldapObj);
-                    if (isNonVerbose(diffs))
-                        diffs.add(dn);
+                    ConfigurationChanges.ModifiedObject ldapObj =
+                            ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                    config.createSubcontext(dn,
+                            storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                    attributeSet, new BasicAttributes(true)));
+                    ConfigurationChanges.addModifiedObject(diffs, ldapObj);
                 } else {
-                    ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                            ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                            : null;
+                    ConfigurationChanges.ModifiedObject ldapObj =
+                            ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                     config.modifyAttributes(dn,
                             storeDiffs(ldapObj, prevAttributeSet, attributeSet, new ArrayList<ModificationItem>()));
-                    if (diffs != null) diffs.add(ldapObj);
+                    ConfigurationChanges.addModifiedObject(diffs, ldapObj);
                 }
             }
         }
@@ -1267,28 +1243,23 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (!hl7OrderSPSStatusMap.containsKey(spsStatus)) {
                 String dn = LdapUtils.dnOf("dcmSPSStatus", spsStatus.toString(), deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         for (Map.Entry<SPSStatus, HL7OrderSPSStatus> entry : hl7OrderSPSStatusMap.entrySet()) {
             SPSStatus spsStatus = entry.getKey();
             String dn = LdapUtils.dnOf("dcmSPSStatus", spsStatus.toString(), deviceDN);
             HL7OrderSPSStatus prevHL7OrderSPSStatus = prev.get(spsStatus);
             if (prevHL7OrderSPSStatus == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, entry.getValue(), spsStatus, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                entry.getValue(), spsStatus, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevHL7OrderSPSStatus, entry.getValue(), new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -1332,12 +1303,11 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     private void storeStorageDescriptors(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (StorageDescriptor descriptor : arcDev.getStorageDescriptors()) {
             String dn = LdapUtils.dnOf("dcmStorageID", descriptor.getStorageID(), deviceDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
-            config.createSubcontext(dn, storeTo(ldapObj, descriptor, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+            config.createSubcontext(dn,
+                    storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                            descriptor, new BasicAttributes(true)));
         }
     }
 
@@ -1398,8 +1368,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (arcDev.getStorageDescriptor(storageID) == null) {
                 String dn = LdapUtils.dnOf("dcmStorageID", storageID, deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (StorageDescriptor descriptor : arcDev.getStorageDescriptors()) {
@@ -1407,22 +1376,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("dcmStorageID", storageID, deviceDN);
             StorageDescriptor prevDescriptor = prev.getStorageDescriptor(storageID);
             if (prevDescriptor == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
                 config.createSubcontext(dn,
-                        storeTo(ldapObj, descriptor, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                descriptor, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn,
-                        storeDiffs(ldapObj, prevDescriptor, descriptor, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                        storeDiffs(ldapObj, prevDescriptor, descriptor, new ArrayList<>()));
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -1481,12 +1445,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     private void storeQueueDescriptors(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (QueueDescriptor descriptor : arcDev.getQueueDescriptors()) {
             String dn = LdapUtils.dnOf("dcmQueueName", descriptor.getQueueName(), deviceDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, descriptor, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1534,8 +1495,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (arcDev.getQueueDescriptor(queueName) == null) {
                 String dn = LdapUtils.dnOf("dcmQueueName", queueName, deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (QueueDescriptor descriptor : arcDev.getQueueDescriptors()) {
@@ -1543,22 +1503,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("dcmQueueName", queueName, deviceDN);
             QueueDescriptor prevDescriptor = prev.getQueueDescriptor(queueName);
             if (prevDescriptor == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
                 config.createSubcontext(dn,
-                        storeTo(ldapObj, descriptor, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                descriptor, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn,
                         storeDiffs(ldapObj, prevDescriptor, descriptor, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
             }
         }
     }
@@ -1584,12 +1538,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     private void storeExporterDescriptors(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (ExporterDescriptor descriptor : arcDev.getExporterDescriptors()) {
             String dn = LdapUtils.dnOf("dcmExporterID", descriptor.getExporterID(), deviceDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, descriptor, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1651,8 +1602,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (arcDev.getExporterDescriptor(exporterID) == null) {
                 String dn = LdapUtils.dnOf("dcmExporterID", exporterID, deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (ExporterDescriptor descriptor : arcDev.getExporterDescriptors()) {
@@ -1660,22 +1610,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("dcmExporterID", exporterID, deviceDN);
             ExporterDescriptor prevDescriptor = prev.getExporterDescriptor(exporterID);
             if (prevDescriptor == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
                 config.createSubcontext(dn,
-                        storeTo(ldapObj, descriptor, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                descriptor, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn,
                         storeDiffs(ldapObj, prevDescriptor, descriptor, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -1701,12 +1646,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     private void storeExportRules(ConfigurationChanges diffs, Collection<ExportRule> exportRules, String parentDN) throws NamingException {
         for (ExportRule rule : exportRules) {
             String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1769,8 +1711,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findExportRuleByCN(rules, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (ExportRule rule : rules) {
@@ -1778,20 +1719,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             ExportRule prevRule = findExportRuleByCN(prevRules, cn);
             if (prevRule == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                rule, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevRule, rule, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -1818,12 +1755,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException {
         for (ArchiveCompressionRule rule : rules) {
             String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1831,12 +1765,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException {
         for (StudyRetentionPolicy policy : policies) {
             String dn = LdapUtils.dnOf("cn", policy.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, policy, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1844,12 +1775,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException {
         for (StoreAccessControlIDRule rule : rules) {
             String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1859,12 +1787,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException{
         for (HL7ForwardRule rule : rules) {
             String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1873,12 +1798,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException{
         for (HL7OrderScheduledStation station : stations) {
             String dn = LdapUtils.dnOf("cn", station.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, station, new BasicAttributes(true), config));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1887,12 +1809,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException {
         for (Map.Entry<SPSStatus, HL7OrderSPSStatus> entry : hl7OrderSPSStatusMap.entrySet()) {
             String dn = LdapUtils.dnOf("dcmSPSStatus", entry.getKey().toString(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, entry.getValue(), entry.getKey(), new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -1900,12 +1819,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException {
         for (RSForwardRule rule : rules) {
             String dn = LdapUtils.dnOf("cn", rule.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -2095,8 +2011,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findCompressionRuleByCN(rules, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (ArchiveCompressionRule rule : rules) {
@@ -2104,20 +2019,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             ArchiveCompressionRule prevRule = findCompressionRuleByCN(prevRules, cn);
             if (prevRule == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                rule, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevRule, rule, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2130,8 +2041,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findStoreAccessControlIDRuleByCN(rules, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (StoreAccessControlIDRule rule : rules) {
@@ -2139,20 +2049,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             StoreAccessControlIDRule prevRule = findStoreAccessControlIDRuleByCN(prevRules, cn);
             if (prevRule == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
-                config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                rule, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevRule, rule, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2165,8 +2071,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findStudyRetentionPolicyByCN(policies, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (StudyRetentionPolicy policy : policies) {
@@ -2174,20 +2079,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             StudyRetentionPolicy prevPolicy = findStudyRetentionPolicyByCN(prevPolicies, cn);
             if (prevPolicy == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, policy, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                policy, new BasicAttributes(true)));
             } else {
                 ConfigurationChanges.ModifiedObject ldapObj = diffs != null
                         ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
                         : null;
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevPolicy, policy, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2200,8 +2102,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findHL7ForwardRuleByCN(rules, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (HL7ForwardRule rule : rules) {
@@ -2209,20 +2110,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             HL7ForwardRule prevRule = findHL7ForwardRuleByCN(prevRules, cn);
             if (prevRule == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
-            } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                rule, new BasicAttributes(true)));
+             } else {
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevRule, rule, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2235,8 +2132,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findScheduledStationByCN(stations, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (HL7OrderScheduledStation station : stations) {
@@ -2244,20 +2140,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             HL7OrderScheduledStation prevStation = findScheduledStationByCN(prevStations, cn);
             if (prevStation == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, station, new BasicAttributes(true), config));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                station, new BasicAttributes(true), config));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevStation, station, new ArrayList<ModificationItem>(), config));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2271,8 +2163,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findAttributeCoercionByCN(coercions, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (ArchiveAttributeCoercion coercion : coercions) {
@@ -2280,20 +2171,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             ArchiveAttributeCoercion prev = findAttributeCoercionByCN(prevCoercions, cn);
             if (prev == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, coercion, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                coercion, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prev, coercion, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2306,8 +2193,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (findRSForwardRuleByCN(rules, cn) == null) {
                 String dn = LdapUtils.dnOf("cn", cn, parentDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (RSForwardRule rule : rules) {
@@ -2315,20 +2201,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("cn", cn, parentDN);
             RSForwardRule prevRule = findRSForwardRuleByCN(prevRules, cn);
             if (prevRule == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, rule, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                rule, new BasicAttributes(true)));
             } else {
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, prevRule, rule, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2438,12 +2320,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
                                          ArchiveDeviceExtension arcDev) throws NamingException {
         for (QueryRetrieveView view : arcDev.getQueryRetrieveViews()) {
             String dn = LdapUtils.dnOf("dcmQueryRetrieveViewID", view.getViewID(), deviceDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, view, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -2484,8 +2363,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (arcDev.getQueryRetrieveView(viewID) == null) {
                 String dn = LdapUtils.dnOf("dcmQueryRetrieveViewID", viewID, deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (QueryRetrieveView entryNew : arcDev.getQueryRetrieveViews()) {
@@ -2493,20 +2371,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("dcmQueryRetrieveViewID", viewID, deviceDN);
             QueryRetrieveView entryOld = prev.getQueryRetrieveView(viewID);
             if (entryOld == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, entryNew, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                entryNew, new BasicAttributes(true)));
             } else{
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, entryOld, entryNew, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2530,12 +2404,9 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             throws NamingException {
         for (ArchiveAttributeCoercion coercion : coercions) {
             String dn = LdapUtils.dnOf("cn", coercion.getCommonName(), parentDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, coercion, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -2649,24 +2520,18 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
     private void storeRejectNotes(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (RejectionNote rejectionNote : arcDev.getRejectionNotes()) {
             String dn = LdapUtils.dnOf("dcmRejectionNoteLabel", rejectionNote.getRejectionNoteLabel(), deviceDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, rejectionNote, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
     private void storeIDGenerators(ConfigurationChanges diffs, String deviceDN, ArchiveDeviceExtension arcDev) throws NamingException {
         for (IDGenerator generator : arcDev.getIDGenerators().values()) {
             String dn = LdapUtils.dnOf("dcmIDGeneratorName", generator.getName().name(), deviceDN);
-            ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                    ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                    : null;
+            ConfigurationChanges.ModifiedObject ldapObj =
+                    ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
             config.createSubcontext(dn, storeTo(ldapObj, generator, new BasicAttributes(true)));
-            if (ldapObj != null)
-                diffs.add(ldapObj);
         }
     }
 
@@ -2742,8 +2607,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (arcDev.getRejectionNote(rjNoteID) == null) {
                 String dn = LdapUtils.dnOf("dcmRejectionNoteLabel", rjNoteID, deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (RejectionNote entryNew : arcDev.getRejectionNotes()) {
@@ -2751,20 +2615,17 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("dcmRejectionNoteLabel", rjNoteID, deviceDN);
             RejectionNote entryOld = prev.getRejectionNote(rjNoteID);
             if (entryOld == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, entryNew, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
-            } else{
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                entryNew, new BasicAttributes(true)));
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
+            } else {
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, entryOld, entryNew, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
@@ -2775,8 +2636,7 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             if (!arcDev.getIDGenerators().containsKey(name)) {
                 String dn = LdapUtils.dnOf("dcmIDGeneratorName", name.name(), deviceDN);
                 config.destroySubcontext(dn);
-                if (diffs != null)
-                    diffs.add(new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.D));
+                ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.D);
             }
         }
         for (IDGenerator entryNew : arcDev.getIDGenerators().values()) {
@@ -2784,20 +2644,16 @@ class LdapArchiveConfiguration extends LdapDicomConfigurationExtension {
             String dn = LdapUtils.dnOf("dcmIDGeneratorName", name.name(), deviceDN);
             IDGenerator entryOld = prev.getIDGenerators().get(name);
             if (entryOld == null) {
-                ConfigurationChanges.ModifiedObject ldapObj = isVerbose(diffs)
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.C)
-                        : null;
-                config.createSubcontext(dn, storeTo(ldapObj, entryNew, new BasicAttributes(true)));
-                if (ldapObj != null)
-                    diffs.add(ldapObj);
-                if (isNonVerbose(diffs))
-                    diffs.add(dn);
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.addModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.C);
+                config.createSubcontext(dn,
+                        storeTo(ConfigurationChanges.nullifyIfNotVerbose(diffs, ldapObj),
+                                entryNew, new BasicAttributes(true)));
             } else{
-                ConfigurationChanges.ModifiedObject ldapObj = diffs != null
-                        ? new ConfigurationChanges.ModifiedObject(dn, ConfigurationChanges.ChangeType.U)
-                        : null;
+                ConfigurationChanges.ModifiedObject ldapObj =
+                        ConfigurationChanges.newModifiedObject(diffs, dn, ConfigurationChanges.ChangeType.U);
                 config.modifyAttributes(dn, storeDiffs(ldapObj, entryOld, entryNew, new ArrayList<ModificationItem>()));
-                if (diffs != null) diffs.add(ldapObj);
+                ConfigurationChanges.addModifiedObject(diffs, ldapObj);
             }
         }
     }
