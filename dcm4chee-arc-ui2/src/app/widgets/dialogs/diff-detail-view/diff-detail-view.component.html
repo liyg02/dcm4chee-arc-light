@@ -47,11 +47,12 @@
         </div>
         <div class="arrows">
             <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
-            <button *ngIf="groupName === 'missing'" class="save" type="button" (click)="executeProcess('missing')">{{buttonLabel}}</button>
-            <button *ngIf="groupName != 'missing' && actions.length < 2" title="{{(actions.length === 0 ? 'Coming soon...':'')}}" [disabled]="actions.length === 0" class="save" type="button" (click)="executeProcess(actions[0].key)">
+            <button *ngIf="allAction" class="save" type="button" (click)="executeProcess(allAction)">{{allActionLabel}}</button>
+            <button *ngIf="!allAction && groupName === 'missing'" class="save" type="button" (click)="executeProcess('missing')">{{buttonLabel}}</button>
+            <button *ngIf="!allAction && groupName != 'missing' && actions.length < 2" title="{{(actions.length === 0 ? 'Coming soon...':'')}}" [disabled]="actions.length === 0" class="save" type="button" (click)="executeProcess(actions[0].key)">
                 {{buttonLabel}}
             </button>
-            <ul *ngIf="actions.length > 1" class="actions">
+            <ul *ngIf="!allAction && actions.length > 1" class="actions">
                 <li *ngFor="let action of actions" (click)="executeProcess(action.key)" title="{{action.description}}">{{action.label}}</li>
             </ul>
             <a class="next" [attr.disabled]="index === (studies.length-1) ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index+1)" title="Show next diff"><span class="text">NEXT</span> <span class="glyphicon glyphicon-chevron-right"></span></a>

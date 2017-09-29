@@ -31,6 +31,8 @@ export class DiffDetailViewComponent implements OnInit {
     private _patientMode;
     private _groupTitle;
     private _rjnotes;
+    private _allAction;
+    allActionLabel;
     showActions = false;
     currentStudyIndex = [];
     currentStudy = {
@@ -86,6 +88,9 @@ export class DiffDetailViewComponent implements OnInit {
                 }
             });
         },1000);
+        if(this._allAction){
+            this.allActionLabel = `${j4care.firstLetterToUpperCase(this._allAction)} all entries`;
+        }
         if(this._actions.length > 1){
             this.selectLabel = "Select this one"
         }else{
@@ -634,5 +639,13 @@ export class DiffDetailViewComponent implements OnInit {
 
     set rjnotes(value) {
         this._rjnotes = value;
+    }
+
+    get allAction() {
+        return this._allAction;
+    }
+
+    set allAction(value) {
+        this._allAction = value;
     }
 }

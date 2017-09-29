@@ -20,6 +20,9 @@ body{
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
+.mat-checkbox:not(.mat-checkbox-disabled).mat-accent .mat-checkbox-ripple .mat-ripple-element{
+  background-color: rgba(55, 79, 96, 0.26) !important;
+}
 md-sidenav-layout{
     height:100vh;
 }
@@ -1767,6 +1770,21 @@ md-dialog-container{
   overflow: hidden !important;
 }
 /*Pro*/
+.action_buttons {
+  margin-right:20px;
+    span{
+      margin: 0 3px;
+      padding: 2px 8px;
+      float: right;
+      &:hover{
+        background: white;
+        color: $lightBlue;
+      }
+      &.dynamic_buttons{
+        border: 1px solid white;
+      }
+    }
+}
 .statistics_content{
   padding: 30px 0px;
   float: left;

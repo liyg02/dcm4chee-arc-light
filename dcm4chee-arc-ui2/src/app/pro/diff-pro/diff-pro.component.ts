@@ -10,6 +10,7 @@ import {MdDialogConfig, MdDialog, MdDialogRef} from "@angular/material";
 import {DicomOperationsComponent} from "../../widgets/dialogs/dicom-operations/dicom-operations.component";
 import {j4care} from "../../helpers/j4care.service";
 import {WindowRefService} from "../../helpers/window-ref.service";
+import {ConfirmComponent} from "../../widgets/dialogs/confirm/confirm.component";
 
 @Component({
     selector: 'app-diff-pro',
@@ -268,7 +269,30 @@ export class DiffProComponent implements OnInit {
             }
         });
     }
-    openDetailView(studies,i,attributes){
+    fireActionForAllElements(action,studies,i,attributes){
+        console.log("action",action);
+        let msg;
+        switch (action){
+            case "synchronize":
+                msg = "Are you sure you want to synchronize all entries in this group?";
+                break;
+            case "reject":
+                msg = "Are you sure you want to reject all studies in this group?";
+                break;
+            case "export":
+                msg = "Are you sure you want to export all studies in this group?";
+                break;
+        }
+/*        this.confirm({
+            content: msg
+        }).subscribe(ok => {
+            if (ok) {*/
+                this.openDetailView(studies,i,attributes,action);
+/*            }
+        });*/
+    }
+    openDetailView(studies,i,attributes,allAction?){
+
         let groupName = attributes.id;
         let $this = this;
         this.config.viewContainerRef = this.viewContainerRef;
@@ -296,9 +320,10 @@ export class DiffProComponent implements OnInit {
         this.dialogRef.componentInstance.groupName = groupName;
         this.dialogRef.componentInstance.groupTitle = attributes.title;
         this.dialogRef.componentInstance.index = i;
+        this.dialogRef.componentInstance.allAction = allAction;
         this.dialogRef.componentInstance.rjnotes = this.rjnotes;
         this.dialogRef.componentInstance.patientMode = attributes.patientMode;
-        this.dialogRef.componentInstance.actions = _.hasIn(attributes,"action") ? attributes.action : [];
+        this.dialogRef.componentInstance.actions = _.hasIn(attributes,"actions") ? attributes.actions : [];
         this.dialogRef.afterClosed().subscribe((result) => {
             if (result){
                 if(result === "last"){
@@ -550,26 +575,58 @@ export class DiffProComponent implements OnInit {
                 regex.lastIndex++;
             }
 
-            // The result can be accessed through the `m`-variable.
+/*            // The result can be accessed through the `m`-variable.
             m.forEach((match, groupIndex) => {
                 console.log(`Found match, group ${groupIndex}: ${match}`);
-            });
-            console.log("m[0]",m[0]);
+            });*/
             result.push(m[0]);
         }
         return result;
     }
+    confirm(confirmparameters){
+        this.config.viewContainerRef = this.viewContainerRef;
+        this.dialogRef = this.dialog.open(ConfirmComponent, {
+            height: 'auto',
+            width: 'auto'
+        });
+        this.dialogRef.componentInstance.parameters = confirmparameters;
+        return this.dialogRef.afterClosed();
+    };
     getDiffAttributeSet(retries){
         let $this = this;
         this.service.getDiffAttributeSet().subscribe(
             (res)=>{
                 $this.diffAttributes = res;
                 $this.diffAttributes.forEach((m,i)=>{
-                    if(_.hasIn(m,"action")){
-                        m.patientMode = (m.action.indexOf("patient-update") > -1) ? true : false;
-                        m.action = this.addLabelToActionArray(this.convertActionToArray(m.action));
+                    if(_.hasIn(m,"actions")){
+                        m.patientMode = (m.actions.indexOf("patient-update") > -1) ? true : false;
+                        m.actions = this.addLabelToActionArray(this.convertActionToArray(m.actions));
                     }else{
                         m.patientMode = false;
+                    }
+                    if(_.hasIn(m,"groupButtons")){
+                        m.groupButtons = this.convertActionToArray(m.groupButtons).map((actionButton)=>{
+                            switch (actionButton){
+                                case "synchronize":
+                                    return {
+                                        action:actionButton,
+                                        iconClass:"glyphicon glyphicon-transfer",
+                                        title:"Synchronize all entries from this group"
+                                    };
+                                case "reject":
+                                    return {
+                                        action:actionButton,
+                                        iconClass:"glyphicon glyphicon-trash",
+                                        title:"Reject all entries from this group"
+                                    };
+                                case "export":
+                                    return {
+                                        action:actionButton,
+                                        iconClass:"glyphicon glyphicon-export",
+                                        title:"Export all entries from this group"
+                                    };
+                            }
+                        });
                     }
                 });
                 //get first letter after "-": regex: /\-(\w)/g
