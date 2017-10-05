@@ -949,9 +949,10 @@ class ArchiveDeviceFactory {
             "ORU^R01"
     };
 
-    static final String DCM4CHEE_ARC_VERSION = "5.10.5";
+    static final String DCM4CHEE_ARC_VERSION = "5.10.6";
     static final String DCM4CHEE_ARC_KEY_JKS =  "${jboss.server.config.url}/dcm4chee-arc/key.jks";
     static final String HL7_ADT2DCM_XSL = "${jboss.server.temp.url}/dcm4chee-arc/hl7-adt2dcm.xsl";
+    static final String HL7_DCM2ADT_XSL = "${jboss.server.temp.url}/dcm4chee-arc/hl7-dcm2adt.xsl";
     static final String DSR2HTML_XSL = "${jboss.server.temp.url}/dcm4chee-arc/dsr2html.xsl";
     static final String DSR2TEXT_XSL = "${jboss.server.temp.url}/dcm4chee-arc/dsr2text.xsl";
     static final String HL7_ORU2DSR_XSL = "${jboss.server.temp.url}/dcm4chee-arc/hl7-oru2dsr.xsl";
@@ -1268,6 +1269,7 @@ class ArchiveDeviceFactory {
         hl7App.addHL7ApplicationExtension(hl7AppExt);
         hl7App.setAcceptedMessageTypes(HL7_MESSAGE_TYPES);
         hl7App.setHL7DefaultCharacterSet("8859/1");
+        hl7App.setHL7SendingCharacterSet("8859/1");
         ext.addHL7Application(hl7App);
 
         Connection hl7 = new Connection("hl7", archiveHost, 2575);
@@ -1310,6 +1312,7 @@ class ArchiveDeviceFactory {
         ext.setWadoSR2HtmlTemplateURI(DSR2HTML_XSL);
         ext.setWadoSR2TextTemplateURI(DSR2TEXT_XSL);
         ext.setPatientUpdateTemplateURI(HL7_ADT2DCM_XSL);
+        ext.setOutgoingPatientUpdateTemplateURI(HL7_DCM2ADT_XSL);
         ext.setUnzipVendorDataToURI(UNZIP_VENDOR_DATA);
         ext.setQidoMaxNumberOfResults(QIDO_MAX_NUMBER_OF_RESULTS);
         ext.setIanTaskPollingInterval(IAN_TASK_POLLING_INTERVAL);
@@ -1371,17 +1374,23 @@ class ArchiveDeviceFactory {
                 1, "study",
                 "Study attributes",
                 "Compares only Study attributes",
-                DIFF_STUDY_ATTRS));
+                DIFF_STUDY_ATTRS,
+                "groupButtons=synchronize,export,reject",
+                "actions=study-reject-export,study-reject,study-export"));
         ext.addAttributeSet(newAttributeSet(AttributeSet.Type.DIFF_RS,
                 2, "patient",
                 "Patient attributes",
                 "Compares only Patient attributes",
-                DIFF_PAT_ATTRS));
+                DIFF_PAT_ATTRS,
+                "groupButtons=synchronize",
+                "actions=patient-update"));
         ext.addAttributeSet(newAttributeSet(AttributeSet.Type.DIFF_RS,
                 3, "accno",
                 "Request attributes",
                 "Compares Request attributes",
-                DIFF_ACCESSION_NUMBER));
+                DIFF_ACCESSION_NUMBER,
+                "groupButtons=synchronize,export,reject",
+                "actions=study-reject-export,study-reject,study-export"));
         ext.addAttributeSet(newAttributeSet(AttributeSet.Type.DIFF_RS,
                 4, "all",
                 "Patient and Study attributes",
@@ -1598,7 +1607,8 @@ class ArchiveDeviceFactory {
         }
     }
 
-    private static AttributeSet newAttributeSet(AttributeSet.Type type, int number, String id, String title, String desc, int[] tags) {
+    private static AttributeSet newAttributeSet(
+            AttributeSet.Type type, int number, String id, String title, String desc, int[] tags, String... props) {
         AttributeSet attributeSet = new AttributeSet();
         attributeSet.setType(type);
         attributeSet.setID(id);
@@ -1606,6 +1616,7 @@ class ArchiveDeviceFactory {
         attributeSet.setNumber(number);
         attributeSet.setDescription(desc);
         attributeSet.setSelection(tags);
+        attributeSet.setProperties(props);
         return attributeSet;
     }
 

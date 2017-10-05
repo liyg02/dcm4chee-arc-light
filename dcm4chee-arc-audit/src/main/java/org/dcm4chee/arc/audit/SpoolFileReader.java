@@ -40,11 +40,11 @@
 
 package org.dcm4chee.arc.audit;
 
+import org.dcm4che3.util.ByteUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.IOException;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -59,7 +59,7 @@ class SpoolFileReader {
     private static final Logger LOG = LoggerFactory.getLogger(SpoolFileReader.class);
     private String mainInfo;
     private List<String> instanceLines = new ArrayList<>();
-
+    private byte[] data = ByteUtils.EMPTY_BYTES;
 
     SpoolFileReader(Path p) throws IOException {
         try (BufferedReader reader = Files.newBufferedReader(p, StandardCharsets.UTF_8)) {
@@ -73,11 +73,39 @@ class SpoolFileReader {
         }
     }
 
+    SpoolFileReader(File file) throws IOException {
+        try (BufferedInputStream in = new BufferedInputStream(new FileInputStream(file))) {
+            int readMain;
+            int readData;
+            ByteArrayOutputStream mainInfo = new ByteArrayOutputStream();
+            ByteArrayOutputStream data = new ByteArrayOutputStream();
+            while ((readMain = in.read()) != -1) {
+                if (readMain == (int)'\n')
+                    break;
+                else
+                    mainInfo.write(readMain);
+            }
+            while ((readData = in.read()) != -1) {
+                data.write(readData);
+            }
+            this.mainInfo = new String(mainInfo.toByteArray());
+            this.data = data.toByteArray();
+            mainInfo.close();
+            data.close();
+        } catch (Exception e) {
+            LOG.warn("Failed to read audit spool file", e);
+        }
+    }
+
     String getMainInfo() {
         return mainInfo;
     }
 
     List<String> getInstanceLines() {
         return instanceLines;
+    }
+
+    byte[] getData() {
+        return data;
     }
 }

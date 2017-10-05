@@ -990,7 +990,7 @@ attributetype ( 1.2.40.0.13.1.15.110.3.166 NAME 'dcmAuditUnknownPatientID'
   SINGLE-VALUE )
 
 attributetype ( 1.2.40.0.13.1.15.110.3.167 NAME 'hl7ScheduledStationAETInOrder'
-  DESC 'Specifies location of Scheduled Station AE Title in received HL7 Order message. Enumerated values: ORC_18. Not effective for HL7 v2.5.1 OMI^O23 with IPC segment. If absent or no value is provided in the configured field, the Scheduled Station AE Title is selected according configured rules.'
+  DESC 'Specifies location of Scheduled Station AE Title in received HL7 Order message. Enumerated values: ORC_18. Should not be configured for HL7 v2.5.1 OMI^O23 with IPC segment. If absent or no value is provided in the configured field, the Scheduled Station AE Title is selected according configured rules.'
   EQUALITY caseExactIA5Match
   SYNTAX 1.3.6.1.4.1.1466.115.121.1.26
   SINGLE-VALUE )
@@ -1115,6 +1115,13 @@ attributetype ( 1.2.40.0.13.1.15.110.3.187 NAME 'dcmAuditSoftwareConfigurationVe
   SYNTAX 1.3.6.1.4.1.1466.115.121.1.7
   SINGLE-VALUE )
 
+attributetype ( 1.2.40.0.13.1.15.110.3.188 NAME 'hl7OutgoingPatientUpdateTemplateURI'
+  DESC 'Specifies URI for the style sheet to transcode DICOM object patient attributes to HL7 ADT messages.'
+  EQUALITY caseExactMatch
+  SUBSTR caseExactSubstringsMatch
+  SYNTAX 1.3.6.1.4.1.1466.115.121.1.15
+  SINGLE-VALUE )
+
 objectclass ( 1.2.40.0.13.1.15.110.4.4 NAME 'dcmArchiveDevice'
   DESC 'DICOM Archive Device related information'
   SUP top AUXILIARY
@@ -1194,6 +1201,7 @@ objectclass ( 1.2.40.0.13.1.15.110.4.4 NAME 'dcmArchiveDevice'
     hl7PatientUpdateTemplateURI $
     hl7ImportReportTemplateURI $
     hl7ScheduleProcedureTemplateURI $
+    hl7OutgoingPatientUpdateTemplateURI $
     hl7ScheduledProtocolCodeInOrder $
     hl7ScheduledStationAETInOrder $
     hl7LogFilePattern $

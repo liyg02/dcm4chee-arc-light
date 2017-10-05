@@ -164,6 +164,7 @@ dicomManufacturerModelName: dcm4chee-arc
 dcmSeriesMetadataPollingInterval: PT1M
 dcmOverwritePolicy: SAME_SOURCE
 dcmSendPendingCGet: TRUE
+hl7OutgoingPatientUpdateTemplateURI: ${jboss.server.temp.url}/dcm4chee-arc/hl7-dcm2adt.xsl
 dcmQueryRetrieveViewID: hideRejected
 dcmAudit2JsonFhirTemplateURI: ${jboss.server.temp.url}/dcm4chee-arc/audit2json+fhir.xsl
 dicomDeviceName: dcm4chee-arc
@@ -184,15 +185,15 @@ dcmPurgeQueueMessagePollingInterval: PT1H
 dcmKeyStorePin: secret
 dicomInstalled: TRUE
 dcmSeriesMetadataStorageID: series-metadata
-dicomSoftwareVersion: 5.10.5
+dicomSoftwareVersion: 5.10.6
 dcmPurgeStoragePollingInterval: PT5M
 dcmRejectExpiredSeriesFetchSize: 10
 dcmRejectExpiredStudiesPollingInterval: P1D
 dcmDeleteRejectedPollingInterval: PT5M
 dcmRejectExpiredStudiesPollingStartTime: 00:00
 dcmLeadingCFindSCPQueryCacheStaleTimeout: PT5M
-dcmUnzipVendorDataToURI: ${jboss.server.temp.url}/dcm4chee-arc
 dcmAuditPollingInterval: PT1M
+dcmUnzipVendorDataToURI: ${jboss.server.temp.url}/dcm4chee-arc
 dcmHideSPSWithStatusFromMWL: STARTED
 dcmHideSPSWithStatusFromMWL: DEPARTED
 dcmHideSPSWithStatusFromMWL: CANCELLED
@@ -1057,6 +1058,7 @@ dcmJndiName: jms/queue/MPPSSCU
 dn: hl7ApplicationName=*,dicomDeviceName=dcm4chee-arc,cn=Devices,cn=DICOM Configuration,dc=dcm4che,dc=org
 hl7DefaultCharacterSet: 8859/1
 dicomDescription: Default HL7 Receiver
+hl7SendingCharacterSet: 8859/1
 objectClass: hl7Application
 objectClass: dcmArchiveHL7Application
 dicomAETitle: DCM4CHEE
@@ -1410,6 +1412,8 @@ dcmTag: 00080050
 dcmTag: 00080051
 dcmAttributeSetType: DIFF_RS
 dcmAttributeSetID: accno
+dcmProperty: groupButtons=synchronize,export,reject
+dcmProperty: actions=study-reject-export,study-reject,study-export
 objectClass: dcmAttributeSet
 dcmAttributeSetNumber: 3
 
@@ -1432,6 +1436,8 @@ dcmTag: 00201206
 dcmTag: 00201208
 dcmAttributeSetType: DIFF_RS
 dcmAttributeSetID: study
+dcmProperty: groupButtons=synchronize,export,reject
+dcmProperty: actions=study-reject-export,study-reject,study-export
 objectClass: dcmAttributeSet
 dcmAttributeSetNumber: 1
 
@@ -1445,6 +1451,8 @@ dcmTag: 00100030
 dcmTag: 00100040
 dcmAttributeSetType: DIFF_RS
 dcmAttributeSetID: patient
+dcmProperty: groupButtons=synchronize
+dcmProperty: actions=patient-update
 objectClass: dcmAttributeSet
 dcmAttributeSetNumber: 2
 
