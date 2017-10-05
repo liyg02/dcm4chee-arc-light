@@ -33,6 +33,7 @@ export class DiffDetailViewComponent implements OnInit {
     private _groupTitle;
     private _rjnotes;
     private _allAction;
+    queue;
     allActionLabel;
     showActions = false;
     currentStudyIndex = [];
@@ -100,6 +101,7 @@ export class DiffDetailViewComponent implements OnInit {
             }
         }
         if(this._allAction){
+            this.queue = true;
             if(this._allAction === "missing"){
                 this.allActionLabel = `SEND ALL STUDIES`;
             }else{
@@ -107,6 +109,8 @@ export class DiffDetailViewComponent implements OnInit {
             }
             this.prepareAllStudies();
             this.selectLabel = "Select this AE as the right one";
+        }else{
+            this.queue = false;
         }
         if(this._groupName === "missing"){
             this.buttonLabel = "SEND STUDY TO SECONDARY AE";
@@ -140,17 +144,17 @@ export class DiffDetailViewComponent implements OnInit {
                                             // this.updatePatient(m[this.selectedVersion],i, false);
                                             this.updateAllPatients();
                                         }else{
-                                            toCallAction = "study-reject-export";
+                                            this.rejectExportAllStudies();
                                         }
                                     break;
                                 case "reject":
-                                    toCallAction = "study-reject";
+                                    this.rejectAllStudies();
                                     break;
                                 case "export":
-                                    toCallAction = "study-export";
+                                    this.exportAllStudies();
                                     break;
                                 case "missing":
-                                    toCallAction = "study-export";
+                                    this.exportAllStudies();
                                     break;
                                 default:
                                     this.mainservice.setMessage({
@@ -183,6 +187,105 @@ export class DiffDetailViewComponent implements OnInit {
         //     });
         // }
     }
+    exportAllStudies(){
+        let externalAET;
+        let destinationAET;
+        let $this = this;
+        let select: any = [];
+        if(this.selectedVersion === "FIRST"){
+            externalAET = this._cMoveScp1;
+            destinationAET = this._copyScp2;
+        }else{
+            externalAET = this._cMoveScp2;
+            destinationAET = this._copyScp1;
+        }
+
+        let parameters: any = {
+            content: 'Select rejected type',
+            select: select,
+            result: {select: this._rjnotes[0].codeValue + '^' + this._rjnotes[0].codingSchemeDesignator},
+            saveButton: 'REJECT'
+        };
+
+        let studieRxjs = [];
+        _.forEach(this.preparedStudies,(study,index)=>{
+            let studyInstanceUID = this.service.getStudyInstanceUID(study[this.selectedVersion]);
+            studieRxjs.push(
+                $this.service.exportStudyExternal(this._homeAet,externalAET,studyInstanceUID,destinationAET,$this.queue)
+            );
+        });
+        Observable.forkJoin(studieRxjs)
+            .subscribe((result)=>{
+                while($this._studies.length > 0){
+                    $this._studies.splice(0,1);
+                }
+                $this.mainservice.setMessage({
+                    'title': 'Info',
+                    'text': "Studies exported successfully",
+                    'status': 'info'
+                });
+                this.dialogRef.close('last');
+            },(err)=>{
+                $this.mainservice.setMessage({
+                    'title': 'Error',
+                    'text': "Some or all studies couldn't be exported, execute diff again and try again",
+                    'status': 'error'
+                });
+                $this.httpErrorHandler.handleError(err);
+            });
+    }
+    rejectAllStudies(){
+        let externalAET;
+        let $this = this;
+        let select: any = [];
+        if(this.selectedVersion === "FIRST"){
+            externalAET = this._cMoveScp1;
+            // destinationAET = this._copyScp2;
+        }else{
+            externalAET = this._cMoveScp2;
+            // destinationAET = this._copyScp1;
+        }
+        _.forEach(this._rjnotes, (m, i) => {
+            select.push({
+                title: m.codeMeaning,
+                value: m.codeValue + '^' + m.codingSchemeDesignator,
+                label: m.label
+            });
+        });
+        let parameters: any = {
+            content: 'Select rejected type',
+            select: select,
+            result: {select: this._rjnotes[0].codeValue + '^' + this._rjnotes[0].codingSchemeDesignator},
+            saveButton: 'REJECT'
+        };
+        this.confirm(parameters).subscribe(result => {
+            if (result) {
+                let studieRxjs = [];
+                _.forEach(this.preparedStudies,(study,index)=>{
+                    studieRxjs.push($this.service.rejectStudy($this._homeAet, externalAET, study[this.selectedVersion], parameters.result.select));
+                });
+                Observable.forkJoin(studieRxjs)
+                    .subscribe((result)=>{
+                        while($this._studies.length > 0){
+                            $this._studies.splice(0,1);
+                        }
+                        $this.mainservice.setMessage({
+                            'title': 'Info',
+                            'text': "Studies rejected successfully",
+                            'status': 'info'
+                        });
+                        this.dialogRef.close('last');
+                    },(err)=>{
+                        $this.mainservice.setMessage({
+                            'title': 'Error',
+                            'text': "Some or all studies couldn't be rejected, execute diff again and try again",
+                            'status': 'error'
+                        });
+                        $this.httpErrorHandler.handleError(err);
+                    });
+            }
+        });
+    }
     updateAllPatients(){
         this.preparedStudies
         let $this = this;
@@ -204,35 +307,35 @@ export class DiffDetailViewComponent implements OnInit {
                     internalAppName,
                     externalAppName,
                     "edit",
-                    "external"
+                    "external",
+                    $this.queue
                 ).save)
             });
-            console.log("patientRxjs",patientRxjs);
-            patientRxjs.push(this.$http.get("basdf"));
-            patientRxjs.push(this.$http.get("basdf2"));
-            let forkJoinResult;
             Observable.forkJoin(patientRxjs)
-/*                .catch((error) =>{
-                    console.log("in catch",error);
-                    return error;
-                })*/
                 .subscribe((result)=>{
-                console.log("process finished",result);
-                while($this._studies.length > 0){
-                    $this._studies.splice(0,1);
-                }
-                $this.mainservice.setMessage({
-                    'title': 'Info',
-                    'text': "Studies synchronize successfully",
-                    'status': 'info'
-                });
-                console.log("forkJoinResult1",forkJoinResult);
-                this.dialogRef.close('last');
-            },(err)=>{
-                console.log("forkJoinResult2",forkJoinResult);
-                $this.httpErrorHandler.handleError(err);
+                    console.log("process finished",result);
+                    while($this._studies.length > 0){
+                        $this._studies.splice(0,1);
+                    }
+                    let successfullMsg = "Patients synchronized successfully";
+                    if($this.queue){
+                        successfullMsg = "Patients update added successfully to the queue";
+                    }
+                    $this.mainservice.setMessage({
+                        'title': 'Info',
+                        'text': successfullMsg,
+                        'status': 'info'
+                    });
+                    this.dialogRef.close('last');
+                },(err)=>{
+                    $this.mainservice.setMessage({
+                        'title': 'Error',
+                        'text': "Some or all patients couldn't be updated, execute diff again and try again",
+                        'status': 'error'
+                    });
+                    $this.httpErrorHandler.handleError(err);
 
-            });
+                });
         },(err)=>{
             $this.httpErrorHandler.handleError(err);
 
@@ -301,7 +404,8 @@ export class DiffDetailViewComponent implements OnInit {
                 internalAppName,
                 externalAppName,
                 "edit",
-                "external"
+                "external",
+                $this.queue
             );
             if(modifyPatientService){
                 modifyPatientService.save.subscribe((response)=>{
@@ -349,6 +453,68 @@ export class DiffDetailViewComponent implements OnInit {
         });
         return rejectionCode;
     }
+    rejectExportAllStudies(){
+        let $this = this;
+        let rejectExternalAET;
+        let destinationAET;
+        let externalAET;
+        let studieExportRxjs = [];
+        let studieRejectRxjs = [];
+        if(this.selectedVersion === "FIRST"){
+            externalAET = this._cMoveScp1;
+            destinationAET = this._copyScp2;
+            rejectExternalAET = this._copyScp2;
+        }else{
+            externalAET = this._cMoveScp2;
+            destinationAET = this._copyScp1;
+            rejectExternalAET = this._copyScp1;
+        }
+        let expiredCode = $this.getExpiredRejectionType();
+
+        _.forEach(this.preparedStudies,(study,index)=>{
+            let studyInstanceUID = this.service.getStudyInstanceUID(study[this.selectedVersion]);
+            studieExportRxjs.push(
+                $this.service.exportStudyExternal(this._homeAet,externalAET,studyInstanceUID,destinationAET,$this.queue)
+            );
+            studieRejectRxjs.push(
+                $this.service.rejectStudy($this._homeAet, rejectExternalAET, study[this.selectedVersion], expiredCode)
+            );
+        });
+        Observable.forkJoin(studieRejectRxjs)
+            .subscribe((result)=>{
+                $this.mainservice.setMessage({
+                    'title': 'Info',
+                    'text': "Studies rejected successfully",
+                    'status': 'info'
+                });
+                Observable.forkJoin(studieExportRxjs)
+                    .subscribe((result)=>{
+                        while($this._studies.length > 0){
+                            $this._studies.splice(0,1);
+                        }
+                        $this.mainservice.setMessage({
+                            'title': 'Info',
+                            'text': "Studies exported successfully",
+                            'status': 'info'
+                        });
+                        this.dialogRef.close('last');
+                    },(err)=>{
+                        $this.mainservice.setMessage({
+                            'title': 'Error',
+                            'text': "Some or all studies couldn't be exported, execute diff again and try again",
+                            'status': 'error'
+                        });
+                        $this.httpErrorHandler.handleError(err);
+                    });
+            },(err)=>{
+                $this.mainservice.setMessage({
+                    'title': 'Error',
+                    'text': "Some or all studies couldn't be rejected, execute diff again and try again",
+                    'status': 'error'
+                });
+                $this.httpErrorHandler.handleError(err);
+            });
+    }
     rejectExportStudy(study){
         let $this = this;
         let rejectExternalAET;
@@ -379,7 +545,7 @@ export class DiffDetailViewComponent implements OnInit {
                                         'text': 'Study rejected successfully!',
                                         'status': 'info'
                                     });
-                                    $this.service.exportStudyExternal(this._homeAet,externalAET,studyInstanceUID,destinationAET).subscribe(
+                                    $this.service.exportStudyExternal(this._homeAet,externalAET,studyInstanceUID,destinationAET,$this.queue).subscribe(
                                         (successExport)=>{
                                             try{
                                                 let msg = `Process successfully accomplished!<br> - Completed:${successExport.completed}<br> - Failed:${successExport.failed}<br> - Warnings:${successExport.warning}`;
@@ -459,9 +625,6 @@ export class DiffDetailViewComponent implements OnInit {
                         // $this.cfpLoadingBar.complete();
                     }
                 );
-            } else {
-                console.log('else', result);
-                console.log('parameters', parameters);
             }
         });
     }
@@ -473,7 +636,7 @@ export class DiffDetailViewComponent implements OnInit {
                 content: `Are you sure you want to send this study to ${destinationAET}?`
             }).subscribe(result => {
                 if (result) {
-                    $this.service.exportStudyExternal(this._homeAet,externalAET,studyInstanceUID,destinationAET).subscribe(
+                    $this.service.exportStudyExternal(this._homeAet,externalAET,studyInstanceUID,destinationAET,$this.queue).subscribe(
                         (res)=>{
                             console.log("res",res);
                             let msg = `Process successfully accomplished!<br> - Completed:${res.completed}<br> - Failed:${res.failed}<br> - Warnings:${res.warning}`;

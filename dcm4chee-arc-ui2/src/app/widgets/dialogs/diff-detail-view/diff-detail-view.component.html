@@ -1,7 +1,7 @@
 <div class="vex vex-theme-os diff">
     <div class="vex-dialog-form">
-        <h5>{{titleLabel}} <span class="pull-right">{{index+1}}/{{studies.length}}</span></h5>
-
+        <h5>{{titleLabel}}
+            <span class="pull-right">{{index+1}}/{{studies.length}}</span></h5>
         <div class="diff_main_content">
             <div class="first_diff table_block" [ngClass]="{selected: (selectedVersion === 'FIRST' && groupName != 'missing'),missing_mode: groupName === 'missing'}">
                 <div class="header">
@@ -44,9 +44,18 @@
                     <md-checkbox  [ngModel]="selectedVersion === 'SECOND'" (ngModelChange)="changeSelectedVersion('SECOND')">{{selectLabel}}</md-checkbox>
                 </div>
             </div>
+            <div class="queued">
+                    <md-checkbox [(ngModel)]="queue">Queue the request(s)</md-checkbox>
+            </div>
         </div>
+
         <div class="arrows">
             <a class="prev" [attr.disabled]="index === 0 ? true : null" (click)="$event.preventDefault();prepareStudyWithIndex(index-1)" title="Show previous diff"><span class="glyphicon glyphicon-chevron-left"></span> <span class="text">PREVIOUS</span></a>
+<!--            <button class="queues">
+                <label title="If checked the process will be queued">
+                    <input type="checkbox" name="queue" [(ngModel)]="queue"> Queued request
+                </label>
+            </button>-->
             <button *ngIf="allAction" class="save" type="button" (click)="executeAllProcess(allAction)">{{allActionLabel}}</button>
             <button *ngIf="!allAction && groupName === 'missing'" class="save" type="button" (click)="executeProcess('missing')">{{buttonLabel}}</button>
             <button *ngIf="!allAction && groupName != 'missing' && actions.length < 2" title="{{(actions.length === 0 ? 'Coming soon...':'')}}" [disabled]="actions.length === 0" class="save" type="button" (click)="executeProcess(actions[0].key)">

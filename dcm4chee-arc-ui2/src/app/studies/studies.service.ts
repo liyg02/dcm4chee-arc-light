@@ -580,7 +580,7 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             }
         };
     }
-    modifyPatient(patient, iod, oldPatientID, aet,internalAppName, externalAppName,  modifyMode, externalInternalAetMode){
+    modifyPatient(patient, iod, oldPatientID, aet,internalAppName, externalAppName,  modifyMode, externalInternalAetMode, queue?){
         let url;
         if(externalInternalAetMode === 'external'){
             url = `../hl7apps/${internalAppName}/hl7/${externalAppName}/patients`;
@@ -609,6 +609,9 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             }
             if(externalInternalAetMode === 'internal'){
                 url = url + oldPatientID;
+            }
+            if(queue){
+                url += `?queue=true`
             }
             if((externalInternalAetMode === 'external' && modifyMode === 'edit') || externalInternalAetMode === 'internal'){
                     return {

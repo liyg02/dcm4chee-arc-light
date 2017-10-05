@@ -32,10 +32,14 @@ export class DiffDetailViewService {
                 return resjson;
             });
     }
-    exportStudyExternal(aet,externalAET,StudyInstanceUID,destinationAET){
+    exportStudyExternal(aet,externalAET,StudyInstanceUID,destinationAET, queue?){
+        let queueParam = "";
+        if(queue){
+            queueParam = "?queue=true";
+        }
         return this.$http
             .post(
-                Globalvar.EXPORT_STUDY_EXTERNAL_URL(aet,externalAET,StudyInstanceUID,destinationAET),
+                Globalvar.EXPORT_STUDY_EXTERNAL_URL(aet,externalAET,StudyInstanceUID,destinationAET) + queueParam,
                 {}
             )
             .map(res => {
