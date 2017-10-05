@@ -8,7 +8,8 @@ import {HttpErrorHandler} from "../../../helpers/http-error-handler";
 import {j4care} from "../../../helpers/j4care.service";
 import {StudiesService} from "../../../studies/studies.service";
 import {ExportDialogComponent} from "../export/export.component";
-import {Headers} from "@angular/http";
+import {Headers, Http} from "@angular/http";
+import {Observable} from "rxjs";
 declare var DCM4CHE: any;
 
 @Component({
@@ -60,7 +61,8 @@ export class DiffDetailViewComponent implements OnInit {
         public dialog: MdDialog,
         public config: MdDialogConfig,
         public httpErrorHandler:HttpErrorHandler,
-        public studyService:StudiesService
+        public studyService:StudiesService,
+        public $http:Http
     ){}
     activeTable;
     setActiveTable(mode){
@@ -69,12 +71,12 @@ export class DiffDetailViewComponent implements OnInit {
     clearActiveTable(){
         this.activeTable = "";
     }
+    preparedStudies;
     buttonLabel = "SYNCHRONIZE THIS ENTRIES";
     titleLabel = "Compare Diff";
     selectLabel = "Select this version as the right one";
     ngOnInit() {
         let $this = this;
-        this.prepareStudyWithIndex(this._index);
         this.titleLabel = "Compare " + j4care.firstLetterToLowerCase(this._groupTitle);
         setTimeout(function() {
             $('.first_table').on('scroll', function () {
@@ -88,9 +90,7 @@ export class DiffDetailViewComponent implements OnInit {
                 }
             });
         },1000);
-        if(this._allAction){
-            this.allActionLabel = `${j4care.firstLetterToUpperCase(this._allAction)} all entries`;
-        }
+            this.prepareStudyWithIndex(this._index);
         if(this._actions.length > 1){
             this.selectLabel = "Select this one"
         }else{
@@ -98,6 +98,15 @@ export class DiffDetailViewComponent implements OnInit {
                 this.selectLabel = "Select this one";
                 this.buttonLabel = this._actions[0].label;
             }
+        }
+        if(this._allAction){
+            if(this._allAction === "missing"){
+                this.allActionLabel = `SEND ALL STUDIES`;
+            }else{
+                this.allActionLabel = `${j4care.firstLetterToUpperCase(this._allAction)} all entries`;
+            }
+            this.prepareAllStudies();
+            this.selectLabel = "Select this AE as the right one";
         }
         if(this._groupName === "missing"){
             this.buttonLabel = "SEND STUDY TO SECONDARY AE";
@@ -110,6 +119,125 @@ export class DiffDetailViewComponent implements OnInit {
         this.confDialogRef.componentInstance.parameters = confirmparameters;
         return this.confDialogRef.afterClosed();
     };
+    executeAllProcess(action){
+        console.log("preparedstudies",this.preparedStudies);
+        let toCallAction;
+        let msg = `Are you sure you want to ${action} all entries?`;
+        if(action === "missing"){
+            msg = `Are you sure you want to send all studies to ${this._aet2}?`
+        }
+        // if(toCallAction){
+            this.confirm({
+                content: msg
+            }).subscribe(ok => {
+                if (ok) {
+                    // _.forEach(this.preparedStudies,(m,i)=>{
+                        try {
+                            switch (action){
+                                case "synchronize":
+                                        if(this._patientMode){
+                                            // toCallAction = "patient-update";
+                                            // this.updatePatient(m[this.selectedVersion],i, false);
+                                            this.updateAllPatients();
+                                        }else{
+                                            toCallAction = "study-reject-export";
+                                        }
+                                    break;
+                                case "reject":
+                                    toCallAction = "study-reject";
+                                    break;
+                                case "export":
+                                    toCallAction = "study-export";
+                                    break;
+                                case "missing":
+                                    toCallAction = "study-export";
+                                    break;
+                                default:
+                                    this.mainservice.setMessage({
+                                        'title': 'Error',
+                                        'text': "Unknown action:" + action,
+                                        'status': 'error'
+                                    });
+                            }
+                            // this.prepareStudyWithIndex(parseInt(i));
+                            // this.executeProcess(toCallAction);
+                        }catch (e){
+                            this.mainservice.setMessage({
+                                'title': 'Error',
+                                'text': "Process could not be started!",
+                                'status': 'error'
+                            });
+                        }
+/*                        if(this._studies.length === (i+1)){
+                            console.log("before close studies",this._studies);
+                            this.dialogRef.close('last');
+                        }*/
+                    // });
+                }
+            });
+        // }else{
+        //     this.mainservice.setMessage({
+        //         'title': 'Error',
+        //         'text': "Unknown action:" + action,
+        //         'status': 'error'
+        //     });
+        // }
+    }
+    updateAllPatients(){
+        this.preparedStudies
+        let $this = this;
+        this.studyService.getPatientIod().subscribe((patientIod) => {
+            let internalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this._homeAet, this.aes);
+            let externalAppName;
+            if(this.selectedVersion === "FIRST"){
+                externalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this.aet2, this.aes);
+            }else{
+                externalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this.aet1, this.aes);
+            }
+            let patientRxjs = [];
+            _.forEach(this.preparedStudies,(patient,index)=>{
+                patientRxjs.push($this.studyService.modifyPatient(
+                    patient[this.selectedVersion],
+                    patientIod,
+                    $this.studyService.getPatientId(patient[this.selectedVersion]),
+                    $this._homeAet,
+                    internalAppName,
+                    externalAppName,
+                    "edit",
+                    "external"
+                ).save)
+            });
+            console.log("patientRxjs",patientRxjs);
+            patientRxjs.push(this.$http.get("basdf"));
+            patientRxjs.push(this.$http.get("basdf2"));
+            let forkJoinResult;
+            Observable.forkJoin(patientRxjs)
+/*                .catch((error) =>{
+                    console.log("in catch",error);
+                    return error;
+                })*/
+                .subscribe((result)=>{
+                console.log("process finished",result);
+                while($this._studies.length > 0){
+                    $this._studies.splice(0,1);
+                }
+                $this.mainservice.setMessage({
+                    'title': 'Info',
+                    'text': "Studies synchronize successfully",
+                    'status': 'info'
+                });
+                console.log("forkJoinResult1",forkJoinResult);
+                this.dialogRef.close('last');
+            },(err)=>{
+                console.log("forkJoinResult2",forkJoinResult);
+                $this.httpErrorHandler.handleError(err);
+
+            });
+        },(err)=>{
+            $this.httpErrorHandler.handleError(err);
+
+        });
+    }
     executeProcess(action){
         console.log("action",action);
         let $this = this;
@@ -136,51 +264,7 @@ export class DiffDetailViewComponent implements OnInit {
                 break;
             case 'patient-update':
                 //code block
-                this.studyService.getPatientIod().subscribe((patientIod) => {
-                    console.log("_currentStudy",this.currentStudy);
-                    console.log("selectedVersion",this.selectedVersion);
-                    console.log("hl7app1",this.studyService.getHl7ApplicationNameFormAETtitle(this.aet1, this.aes));
-                    console.log("hl7app2",this.studyService.getHl7ApplicationNameFormAETtitle(this.aet2, this.aes));
-                    console.log("right object",this.currentStudy[this.selectedVersion]);
-                    let patient = this.currentStudy[this.selectedVersion];
-                    let internalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this._homeAet, this.aes);
-                    let externalAppName;
-                    if(this.selectedVersion === "FIRST"){
-                        externalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this.aet2, this.aes);
-                    }else{
-                        externalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this.aet1, this.aes);
-                    }
-                    let modifyPatientService = $this.studyService.modifyPatient(
-                        patient,
-                        patientIod,
-                        $this.studyService.getPatientId(patient),
-                        $this._homeAet,
-                        internalAppName,
-                        externalAppName,
-                        "edit",
-                        "external"
-                    );
-                    if(modifyPatientService){
-                        modifyPatientService.save.subscribe((response)=>{
-                            this.mainservice.setMessage({
-                                'title': 'Info',
-                                'text': modifyPatientService.successMsg,
-                                'status': 'info'
-                            });
-                            if($this._studies.length === 1){
-                                _.remove($this._studies, function(n,i){return i == $this._index});
-                                $this.dialogRef.close('last');
-                            }else{
-                                _.remove($this._studies, function(n,i){return i == $this._index});
-                                $this.prepareStudyWithIndex($this._index);
-                            }
-                        },(err)=>{
-                            $this.httpErrorHandler.handleError(err);
-                        });
-                    }
-                },(err)=>{
-                    $this.httpErrorHandler.handleError(err);
-                });
+                this.updatePatient(this.currentStudy[this.selectedVersion],this._index, true);
                 break;
             default:
                 if(this.actions.length > 1 && !this.showActions){
@@ -197,6 +281,63 @@ export class DiffDetailViewComponent implements OnInit {
                         });
                     }
                 }
+        }
+    }
+    updatePatient(patient, index, showMessage){
+        let $this = this;
+        this.studyService.getPatientIod().subscribe((patientIod) => {
+            let internalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this._homeAet, this.aes);
+            let externalAppName;
+            if(this.selectedVersion === "FIRST"){
+                externalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this.aet2, this.aes);
+            }else{
+                externalAppName = this.studyService.getHl7ApplicationNameFormAETtitle(this.aet1, this.aes);
+            }
+            let modifyPatientService = $this.studyService.modifyPatient(
+                patient,
+                patientIod,
+                $this.studyService.getPatientId(patient),
+                $this._homeAet,
+                internalAppName,
+                externalAppName,
+                "edit",
+                "external"
+            );
+            if(modifyPatientService){
+                modifyPatientService.save.subscribe((response)=>{
+                    if(showMessage){
+                        $this.mainservice.setMessage({
+                            'title': 'Info',
+                            'text': modifyPatientService.successMsg,
+                            'status': 'info'
+                        });
+                    }
+                    $this.removeElementFromObject(index);
+
+                },(err)=>{
+                    $this.httpErrorHandler.handleError(err);
+                });
+            }
+        },(err)=>{
+            $this.httpErrorHandler.handleError(err);
+        });
+    }
+    allSuccess(patient){
+        let allSuccess = true;
+        _.forEach(patient,(m,i)=>{
+            if(!(_.hasIn(m[this.selectedVersion],"success") && m[this.selectedVersion].success)){
+               allSuccess = false;
+            }
+        });
+        return allSuccess;
+    }
+    removeElementFromObject(index){
+        if(this._studies.length === 1){
+            _.remove(this._studies, function(n,i){return i == index});
+            this.dialogRef.close('last');
+        }else{
+            _.remove(this._studies, function(n,i){return i == index});
+            this.prepareStudyWithIndex(index);
         }
     }
     getExpiredRejectionType(){
@@ -254,13 +395,7 @@ export class DiffDetailViewComponent implements OnInit {
                                                     'status': 'info'
                                                 });
                                             }
-                                             if($this._studies.length === 1){
-                                                 _.remove($this._studies, function(n,i){return i == $this._index});
-                                                 $this.dialogRef.close('last');
-                                             }else{
-                                             _.remove($this._studies, function(n,i){return i == $this._index});
-                                                $this.prepareStudyWithIndex($this._index);
-                                             }
+                                            $this.removeElementFromObject(this._index);
                                         },
                                         (err)=>{
                                             $this.httpErrorHandler.handleError(err);
@@ -416,7 +551,84 @@ export class DiffDetailViewComponent implements OnInit {
     clearTr(){
         this.activeTr = "";
     }
+    prepareAllStudies(){
+        this.preparedStudies = [];
+        _.forEach(this._studies,(studie,index)=>{
+            let diffIndexes = [];
+            let noDiffIndexes = [];
+            this.preparedStudies[index] = {
+                "primary":{},
+                "FIRST":{},
+                "secondary":{},
+                "SECOND":{},
+                "flat":{},
+                "level":{},
+                "indexes":[],
+                "success":false
+            };
+            this.flatMap(studie,"",this.preparedStudies[index], true);
+            if(this._groupName === "missing"){
+                _.forEach(this.preparedStudies[index]["flat"],(m,i)=>{
+                    if(i != "04000561"){
+                        this.preparedStudies[index]["primary"][i] = {
+                            object:m,
+                            diff:false
+                        };
+                        this.preparedStudies[index]["FIRST"][i] = m;
+                        diffIndexes.push(i)
+                    }
+                });
+                this.preparedStudies[index]["indexes"] = diffIndexes;
+            }else{
+                let modifyed = {
+                    flat:{}
+                };
+                this.flatMap(studie["04000561"].Value[0]["04000550"].Value[0],"",modifyed, false);
+                this.addEmptySequenceValues(modifyed.flat);
 
+                //modifyed = this._studies[this._index]["04000561"].Value[0]["04000550"].Value[0];
+                _.forEach(this.preparedStudies[index]["flat"],(m,i)=>{
+                    if(i != "04000561"){
+                        if(_.hasIn(modifyed.flat,i)){
+                            this.preparedStudies[index]["secondary"][i] = {
+                                object:modifyed.flat[i],
+                                diff:true
+                            };
+                            this.preparedStudies[index]["primary"][i] = {
+                                object:m,
+                                diff:true
+                            };
+                            this.preparedStudies[index]["SECOND"][i] = modifyed.flat[i];
+                            this.preparedStudies[index]["FIRST"][i] = m;
+                            diffIndexes.push(i);
+                        }else{
+                            this.preparedStudies[index]["secondary"][i] ={
+                                object:m,
+                                diff:false
+                            };
+                            this.preparedStudies[index]["primary"][i] = {
+                                object:m,
+                                diff:false
+                            };
+                            this.preparedStudies[index]["SECOND"][i] = m;
+                            this.preparedStudies[index]["FIRST"][i] = m;
+                            noDiffIndexes.push(i);
+                        }
+                    }
+                });
+                this.preparedStudies[index]["indexes"] = [...diffIndexes,...noDiffIndexes];
+            }
+        });
+/*        this.currentStudy = {
+            "primary":{},
+            "FIRST":{},
+            "secondary":{},
+            "SECOND":{}
+        };
+        this.currentStudy["flat"] = {};
+        this.currentStudy["level"] = {};*/
+
+    }
     prepareStudyWithIndex(index?:number){
         if(_.hasIn(this._studies,index)){
             let direction;
@@ -491,6 +703,12 @@ export class DiffDetailViewComponent implements OnInit {
             }
             if(direction){
                 this.addEffect(direction);
+            }
+        }else{
+            if(this._studies.length === 0){
+                this.dialogRef.close('last');
+            }else{
+                console.error("Preparing study error, index doesen't exist in studies");
             }
         }
     }

@@ -271,7 +271,7 @@ export class DiffProComponent implements OnInit {
     }
     fireActionForAllElements(action,studies,i,attributes){
         console.log("action",action);
-        let msg;
+/*        let msg;
         switch (action){
             case "synchronize":
                 msg = "Are you sure you want to synchronize all entries in this group?";
@@ -282,7 +282,7 @@ export class DiffProComponent implements OnInit {
             case "export":
                 msg = "Are you sure you want to export all studies in this group?";
                 break;
-        }
+        }*/
 /*        this.confirm({
             content: msg
         }).subscribe(ok => {
@@ -627,14 +627,20 @@ export class DiffProComponent implements OnInit {
                                     };
                             }
                         });
+
                     }
                 });
                 //get first letter after "-": regex: /\-(\w)/g
                 $this.diffAttributes.push({
                     id:"missing",
                     title:"Missing studies",
-                    descriptioin:"Compares only missing Studies"
-                })
+                    descriptioin:"Compares only missing Studies",
+                    groupButtons:[{
+                        action:"missing",
+                        iconClass:"glyphicon glyphicon-export",
+                        title:"Send all studies to secondary AE"
+                    }]
+                });
 //Example
 /*                _.forEach($this.diffAttributes,(m,i)=>{
                     $this.groupResults[m.id] = [{

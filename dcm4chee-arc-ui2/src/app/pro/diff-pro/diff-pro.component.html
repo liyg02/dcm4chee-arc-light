@@ -251,9 +251,11 @@
                     <span class="pull-right" *ngIf="counts[attributes.id] > 0 && counts[attributes.id] != groupResults[attributes.id]?.length">{{groupResults[attributes.id]?.length}} / {{counts[attributes.id]}}</span>
                     <span class="pull-right" *ngIf="counts[attributes.id] == 0 || counts[attributes.id] == groupResults[attributes.id]?.length">{{groupResults[attributes.id]?.length}}</span>
                     <div class="action_buttons pull-right" *ngIf="counts[attributes.id] > 0">
-                        <span title="Open tabel view of the group" *ngIf="toggle != attributes.id" (click)="toggleBar(attributes.id)"><i class="glyphicon glyphicon-triangle-right"></i></span>
-                        <span title="Close tabel view of the group" *ngIf="toggle === attributes.id" (click)="toggleBar(attributes.id)"><i class="glyphicon glyphicon-triangle-bottom"></i></span>
-                        <span *ngFor="let groupButton of attributes.groupButtons" title="{{groupButton.title}}" class="dynamic_buttons" (click)="fireActionForAllElements(groupButton.action,groupResults[attributes.id],0,attributes)"><i class="{{groupButton.iconClass}}"></i></span>
+                        <span title="Open tabel view of the group" *ngIf="toggle != attributes.id && (counts[attributes.id] == 0 || counts[attributes.id] == groupResults[attributes.id]?.length)" (click)="toggleBar(attributes.id)"><i class="glyphicon glyphicon-triangle-right"></i></span>
+                        <span title="Close tabel view of the group" *ngIf="toggle === attributes.id && (counts[attributes.id] == 0 || counts[attributes.id] == groupResults[attributes.id]?.length)" (click)="toggleBar(attributes.id)"><i class="glyphicon glyphicon-triangle-bottom"></i></span>
+                        <ng-container *ngIf="counts[attributes.id] == 0 || counts[attributes.id] == groupResults[attributes.id]?.length">
+                            <span *ngFor="let groupButton of attributes.groupButtons" title="{{groupButton.title}}" class="dynamic_buttons" (click)="fireActionForAllElements(groupButton.action,groupResults[attributes.id],0,attributes)"><i class="{{groupButton.iconClass}}"></i></span>
+                        </ng-container>
                     </div>
                 </div>
                 <div class="bluecontent {{attributes.id}}" *ngIf="toggle === attributes.id">
