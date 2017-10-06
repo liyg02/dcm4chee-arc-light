@@ -2630,6 +2630,7 @@ export class StudiesComponent implements OnDestroy{
                         patientInSelectedObject = true;
                     }
                 });
+                patientobject["attrs"] = object.attrs || {};
                 console.log('patientobject =', this.service.getPatientId(patientobject));
                 if (!patientInSelectedObject){
                     this.selected['patients'].push(patientobject);
@@ -3034,7 +3035,13 @@ export class StudiesComponent implements OnDestroy{
                         });
                         $this.clipboard.action = 'move';
                     }
-                    console.log("reject",this.reject);
+                    if(this.externalInternalAetMode === 'external' && ($this.selected.patients.length > 1 || $this.clipboard.patients.length > 1)){
+                        $this.mainservice.setMessage({
+                            'title': 'Warning',
+                            'text': 'External merge of multiple patients is not allowed, just the first selected patient will be taken for merge!',
+                            'status': 'warning'
+                        });
+                    }
                     this.dialogRef.componentInstance.clipboard = this.clipboard;
                     this.dialogRef.componentInstance.rjnotes = this.rjnotes;
                     this.dialogRef.componentInstance.selected = this.selected['otherObjects'];
@@ -3050,24 +3057,30 @@ export class StudiesComponent implements OnDestroy{
                             $this.reject = result;
                             console.log("reject",$this.reject);
                             if ($this.clipboard.action === 'merge') {
-                                let object = {
-                                    priorPatientID: $this.clipboard.patients
-                                };
 /*                                console.log('object', object);
                                 console.log('in merge clipboard', $this.clipboard);
                                 console.log('in merge selected', $this.selected['otherObjects']);
                                 console.log('in merge selected', $this.selected.patients[0].PatientID);
                                 console.log('getpatientid', $this.service.getPatientId($this.selected.patients));*/
+                                let object;
                                 let url;
                                 if(this.externalInternalAetMode === 'external'){
-                                    url = `../hl7apps/${$this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes)}/hl7/${$this.externalInternalAetModel.hl7ApplicationName}/patients/${$this.service.getPatientId($this.selected.patients)}/merge`;
+                                    url = `../hl7apps/${$this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes)}/hl7/${$this.externalInternalAetModel.hl7ApplicationName}/patients/${$this.service.getPatientId($this.clipboard.patients)}/merge`;
+                                    object = $this.selected.patients[0].attrs;
                                 }else{
+                                    delete $this.clipboard.patients[0].attrs;
+                                    _.forEach($this.clipboard.patients,(pat,ind)=>{
+                                        if(_.hasIn(pat,"attrs")){
+                                            delete $this.clipboard.patients[ind].attrs;
+                                        }
+                                    });
+                                    object =  $this.clipboard.patients;
                                     url = '../aets/' + $this.aet + '/rs/patients/' + $this.service.getPatientId($this.selected.patients) + '/merge';
                                 }
                                 console.log("url",url);
                                 $this.$http.post(
                                     url,
-                                    object.priorPatientID,
+                                    object,
                                     headers
                                 )
                                     .subscribe((response) => {
