@@ -176,6 +176,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
     private Attributes.UpdatePolicy linkMWLEntryUpdatePolicy;
     private boolean hl7TrackChangedPatientID = true;
     private boolean auditSoftwareConfigurationVerbose = false;
+    private boolean hl7UseNullValue = false;
     private String invokeImageDisplayPatientURL;
     private String invokeImageDisplayStudyURL;
     private String[] hl7ADTReceivingApplication = {};
@@ -1623,6 +1624,14 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         return StringUtils.maskNull(auditUnknownPatientID, "<none>");
     }
 
+    public boolean isHl7UseNullValue() {
+        return hl7UseNullValue;
+    }
+
+    public void setHl7UseNullValue(boolean hl7UseNullValue) {
+        this.hl7UseNullValue = hl7UseNullValue;
+    }
+
     @Override
     public void reconfigure(DeviceExtension from) {
         ArchiveDeviceExtension arcdev = (ArchiveDeviceExtension) from;
@@ -1746,6 +1755,7 @@ public class ArchiveDeviceExtension extends DeviceExtension {
         auditUnknownStudyInstanceUID = arcdev.auditUnknownStudyInstanceUID;
         auditUnknownPatientID = arcdev.auditUnknownPatientID;
         auditSoftwareConfigurationVerbose = arcdev.auditSoftwareConfigurationVerbose;
+        hl7UseNullValue = arcdev.hl7UseNullValue;
         attributeFilters.clear();
         attributeFilters.putAll(arcdev.attributeFilters);
         attributeSet.clear();
