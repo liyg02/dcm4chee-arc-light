@@ -41,13 +41,15 @@
 package org.dcm4chee.arc.store.impl;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.Code;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.UID;
 import org.dcm4che3.util.StringUtils;
-import org.dcm4chee.arc.conf.Availability;
-import org.dcm4chee.arc.conf.RejectionNote;
+import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.entity.Instance;
 import org.dcm4chee.arc.entity.Location;
+import org.dcm4chee.arc.entity.RejectedInstance;
+import org.dcm4chee.arc.storage.ReadContext;
 import org.dcm4chee.arc.storage.WriteContext;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.store.StoreSession;
@@ -70,17 +72,19 @@ class StoreContextImpl implements StoreContext {
     private String sopInstanceUID;
     private String receiveTranferSyntaxUID;
     private String storeTranferSyntaxUID;
+    private ArchiveCompressionRule compressionRule;
     private String acceptedStudyInstanceUID;
     private int moveOriginatorMessageID;
     private String moveOriginatorAETitle;
-    private final EnumMap<Location.ObjectType,WriteContext> writeContexts =
-            new EnumMap<Location.ObjectType, WriteContext>(Location.ObjectType.class);
+    private final EnumMap<Location.ObjectType,WriteContext> writeContexts = new EnumMap<>(Location.ObjectType.class);
+    private ReadContext readContext;
     private Attributes attributes;
-    private Attributes coercedAttributes;
+    private Attributes coercedAttributes = new Attributes();
     private String studyInstanceUID;
     private String seriesInstanceUID;
     private String mppsInstanceUID;
     private RejectionNote rejectionNote;
+    private RejectedInstance rejectedInstance;
     private Instance previousInstance;
     private Instance storedInstance;
     private Exception exception;
@@ -88,6 +92,7 @@ class StoreContextImpl implements StoreContext {
     private String[] retrieveAETs;
     private Availability availability;
     private LocalDate expirationDate;
+    private Code impaxReportPatientMismatch;
 
     public StoreContextImpl(StoreSession storeSession) {
         this.storeSession = storeSession;
@@ -155,6 +160,16 @@ class StoreContextImpl implements StoreContext {
     }
 
     @Override
+    public ArchiveCompressionRule getCompressionRule() {
+        return compressionRule;
+    }
+
+    @Override
+    public void setCompressionRule(ArchiveCompressionRule compressionRule) {
+        this.compressionRule = compressionRule;
+    }
+
+    @Override
     public String getAcceptedStudyInstanceUID() {
         return acceptedStudyInstanceUID;
     }
@@ -201,7 +216,16 @@ class StoreContextImpl implements StoreContext {
                 ? ppsRef.getString(Tag.ReferencedSOPInstanceUID)
                 : null;
         this.attributes = attrs;
-        this.coercedAttributes = new Attributes(attrs.bigEndian());
+    }
+
+    @Override
+    public ReadContext getReadContext() {
+        return readContext;
+    }
+
+    @Override
+    public void setReadContext(ReadContext readContext) {
+        this.readContext = readContext;
     }
 
     @Override
@@ -212,6 +236,8 @@ class StoreContextImpl implements StoreContext {
     @Override
     public void setWriteContext(Location.ObjectType objectType, WriteContext writeCtx) {
         writeContexts.put(objectType, writeCtx);
+        if (objectType == Location.ObjectType.DICOM_FILE)
+            readContext = writeCtx;
     }
 
     @Override
@@ -225,6 +251,11 @@ class StoreContextImpl implements StoreContext {
     }
 
     @Override
+    public void setCoercedAttributes(Attributes coercedAttributes) {
+        this.coercedAttributes = coercedAttributes;
+    }
+
+    @Override
     public RejectionNote getRejectionNote() {
         return rejectionNote;
     }
@@ -232,6 +263,16 @@ class StoreContextImpl implements StoreContext {
     @Override
     public void setRejectionNote(RejectionNote rejectionNote) {
         this.rejectionNote = rejectionNote;
+    }
+
+    @Override
+    public RejectedInstance getRejectedInstance() {
+        return rejectedInstance;
+    }
+
+    @Override
+    public void setRejectedInstance(RejectedInstance rejectedInstance) {
+        this.rejectedInstance = rejectedInstance;
     }
 
     @Override
@@ -291,8 +332,7 @@ class StoreContextImpl implements StoreContext {
             return availability;
 
         return StringUtils.maskNull(
-                getWriteContext(Location.ObjectType.DICOM_FILE).getStorage().getStorageDescriptor()
-                        .getInstanceAvailability(),
+                readContext.getStorage().getStorageDescriptor().getInstanceAvailability(),
                 Availability.ONLINE);
     }
 
@@ -321,5 +361,23 @@ class StoreContextImpl implements StoreContext {
     public boolean isPreviousDifferentSeries() {
         return previousInstance != null
                 && previousInstance.getSeries().getPk() != storedInstance.getSeries().getPk();
+    }
+
+    @Override
+    public Code getImpaxReportPatientMismatch() {
+        return impaxReportPatientMismatch;
+    }
+
+    @Override
+    public void setImpaxReportPatientMismatch(Code impaxReportPatientMismatch) {
+        this.impaxReportPatientMismatch = impaxReportPatientMismatch;
+    }
+
+    @Override
+    public boolean isExportReoccurredInstances(ExportPriorsRule rule) {
+        ExportReoccurredInstances exportReoccurredInstances = rule.getExportReoccurredInstances();
+        return exportReoccurredInstances == ExportReoccurredInstances.ALWAYS
+                || (exportReoccurredInstances == ExportReoccurredInstances.NEVER && previousInstance == null)
+                || !locations.isEmpty();
     }
 }

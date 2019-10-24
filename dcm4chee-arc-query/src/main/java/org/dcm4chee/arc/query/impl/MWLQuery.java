@@ -1,5 +1,5 @@
 /*
- * *** BEGIN LICENSE BLOCK *****
+ * **** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
  * The contents of this file are subject to the Mozilla Public License Version
@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2018
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -35,22 +35,22 @@
  * the provisions above, a recipient may use your version of this file under
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
- * *** END LICENSE BLOCK *****
+ * **** END LICENSE BLOCK *****
+ *
  */
 
 package org.dcm4chee.arc.query.impl;
 
-import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.Tuple;
-import com.querydsl.core.types.Expression;
-import com.querydsl.jpa.hibernate.HibernateQuery;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.query.QueryContext;
-import org.dcm4chee.arc.query.util.QueryBuilder;
-import org.hibernate.StatelessSession;
+
+import javax.persistence.EntityManager;
+import javax.persistence.Tuple;
+import javax.persistence.criteria.*;
+import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -58,49 +58,43 @@ import org.hibernate.StatelessSession;
  */
 public class MWLQuery extends AbstractQuery {
 
-    static final Expression<?>[] SELECT = {
-            QPatient.patient.numberOfStudies,
-            QueryBuilder.mwlAttributesBlob.encodedAttributes,
-            QueryBuilder.patientAttributesBlob.encodedAttributes
-    };
+    private Root<MWLItem> mwlItem;
+    private Join<MWLItem, Patient> patient;
+    private Path<byte[]> patientAttrBlob;
+    private Path<byte[]> mwlAttrBlob;
 
-    public MWLQuery(QueryContext context, StatelessSession session) {
-        super(context, session);
+    public MWLQuery(QueryContext context, EntityManager em) {
+        super(context, em);
     }
 
     @Override
-    protected HibernateQuery<Tuple> newHibernateQuery() {
-        HibernateQuery<Tuple> q = new HibernateQuery<Void>(session).select(SELECT).from(QMWLItem.mWLItem);
-        q = QueryBuilder.applyMWLJoins(q,
-                context.getQueryKeys(),
-                context.getQueryParam());
-        q = QueryBuilder.applyPatientLevelJoins(q,
-                context.getPatientIDs(),
-                context.getQueryKeys(),
-                context.getQueryParam(),
-                context.isOrderByPatientName());
-        BooleanBuilder predicates = new BooleanBuilder();
-        QueryBuilder.addPatientLevelPredicates(predicates,
-                context.getPatientIDs(),
-                context.getQueryKeys(),
-                context.getQueryParam());
-        QueryBuilder.addMWLPredicates(predicates,
-                context.getQueryKeys(),
-                context.getQueryParam());
-        return q.where(predicates);
+    protected CriteriaQuery<Tuple> multiselect() {
+        CriteriaQuery<Tuple> q = cb.createTupleQuery();
+        this.mwlItem = q.from(MWLItem.class);
+        this.patient = mwlItem.join(MWLItem_.patient);
+        return order(restrict(q, patient, mwlItem)).multiselect(
+                patient.get(Patient_.numberOfStudies),
+                patientAttrBlob = patient.join(Patient_.attributesBlob).get(AttributesBlob_.encodedAttributes),
+                mwlAttrBlob = mwlItem.join(MWLItem_.attributesBlob).get(AttributesBlob_.encodedAttributes));
+    }
+
+    @Override
+    protected CriteriaQuery<Long> count() {
+        CriteriaQuery<Long> q = cb.createQuery(Long.class);
+        Root<MWLItem> mwlItem = q.from(MWLItem.class);
+        Join<MWLItem, Patient> patient = mwlItem.join(MWLItem_.patient);
+        return restrict(q, patient, mwlItem).select(cb.count(mwlItem));
     }
 
     @Override
     protected Attributes toAttributes(Tuple results) {
-        Attributes mwlAttrs = AttributesBlob.decodeAttributes(
-                results.get(QueryBuilder.mwlAttributesBlob.encodedAttributes), null);
-        Attributes patAttrs = AttributesBlob.decodeAttributes(
-                results.get(QueryBuilder.patientAttributesBlob.encodedAttributes), null);
+        Attributes mwlAttrs = AttributesBlob.decodeAttributes(results.get(mwlAttrBlob), null);
+        Attributes patAttrs = AttributesBlob.decodeAttributes(results.get(patientAttrBlob), null);
         Attributes.unifyCharacterSets(patAttrs, mwlAttrs);
         Attributes attrs = new Attributes(patAttrs.size() + mwlAttrs.size() + 1);
         attrs.addAll(patAttrs);
         attrs.addAll(mwlAttrs);
-        attrs.setInt(Tag.NumberOfPatientRelatedStudies, VR.IS, results.get(QPatient.patient.numberOfStudies));
+        attrs.setInt(Tag.NumberOfPatientRelatedStudies, VR.IS, results.get(patient.get(Patient_.numberOfStudies)));
         return attrs;
     }
 
@@ -109,4 +103,21 @@ public class MWLQuery extends AbstractQuery {
         //TODO
         return false;
     }
+
+    private CriteriaQuery<Tuple> order(CriteriaQuery<Tuple> q) {
+        if (context.getOrderByTags() != null)
+            q.orderBy(builder.orderMWLItems(patient, mwlItem, context.getOrderByTags()));
+        return q;
+    }
+
+    private <T> CriteriaQuery<T> restrict(CriteriaQuery<T> q, Join<MWLItem, Patient> patient, Root<MWLItem> mwlItem) {
+        List<Predicate> predicates = builder.mwlItemPredicates(q, patient, mwlItem,
+                context.getPatientIDs(),
+                context.getQueryKeys(),
+                context.getQueryParam());
+        if (!predicates.isEmpty())
+            q.where(predicates.toArray(new Predicate[0]));
+        return q;
+    }
+
 }

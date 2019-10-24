@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2013-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,10 +42,15 @@ package org.dcm4chee.arc.hl7;
 
 import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.data.*;
+import org.dcm4che3.hl7.ERRSegment;
+import org.dcm4che3.hl7.HL7Exception;
+import org.dcm4che3.hl7.HL7Message;
 import org.dcm4che3.hl7.HL7Segment;
 import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4che3.net.Connection;
 import org.dcm4che3.net.hl7.HL7Application;
 import org.dcm4che3.net.hl7.UnparsedHL7Message;
+import org.dcm4che3.net.hl7.service.DefaultHL7Service;
 import org.dcm4che3.net.hl7.service.HL7Service;
 import org.dcm4che3.util.UIDUtils;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
@@ -53,6 +58,8 @@ import org.dcm4chee.arc.patient.PatientService;
 import org.dcm4chee.arc.store.StoreContext;
 import org.dcm4chee.arc.store.StoreService;
 import org.dcm4chee.arc.store.StoreSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Typed;
@@ -68,7 +75,9 @@ import java.util.List;
  */
 @ApplicationScoped
 @Typed(HL7Service.class)
-class ImportReportService extends AbstractHL7Service {
+class ImportReportService extends DefaultHL7Service {
+
+    private final Logger LOG = LoggerFactory.getLogger(ImportReportService.class);
 
     @Inject
     private PatientService patientService;
@@ -81,9 +90,18 @@ class ImportReportService extends AbstractHL7Service {
     }
 
     @Override
-    protected void process(HL7Application hl7App, Socket s, UnparsedHL7Message msg) throws Exception {
-        if (PatientUpdateService.updatePatient(hl7App, s, msg, patientService) != null)
-            importReport(hl7App, s, msg);
+    public UnparsedHL7Message onMessage(HL7Application hl7App, Connection conn, Socket s, UnparsedHL7Message msg)
+            throws HL7Exception {
+        ArchiveHL7Message archiveHL7Message = new ArchiveHL7Message(
+                HL7Message.makeACK(msg.msh(), HL7Exception.AA, null).getBytes(null));
+        if (PatientUpdateService.updatePatient(hl7App, s, msg, patientService, archiveHL7Message) != null) {
+            try {
+                importReport(hl7App, s, msg);
+            } catch (Exception e) {
+                throw new HL7Exception(new ERRSegment(msg.msh()).setUserMessage(e.getMessage()), e);
+            }
+        }
+        return archiveHL7Message;
     }
 
     private void importReport(HL7Application hl7App, Socket s, UnparsedHL7Message msg) throws Exception {
@@ -95,19 +113,21 @@ class ImportReportService extends AbstractHL7Service {
                     + hl7App.getApplicationName());
         }
         ApplicationEntity ae = hl7App.getDevice().getApplicationEntity(aet);
-        if (ae == null) {
+        if (ae == null)
             throw new ConfigurationException("No local AE with AE Title " + aet
                     + " associated with HL7 Application: " + hl7App.getApplicationName());
-        }
-        String hl7cs = msg.msh().getField(17, hl7App.getHL7DefaultCharacterSet());
+
         Attributes attrs = SAXTransformer.transform(
-                msg.data(), hl7cs, arcHL7App.importReportTemplateURI(), null);
+                msg,
+                arcHL7App,
+                arcHL7App.importReportTemplateURI(),
+                tr -> arcHL7App.importReportTemplateParams().forEach(tr::setParameter));
 
         if (!attrs.containsValue(Tag.StudyInstanceUID)) {
             List<String> suids = storeService.studyIUIDsByAccessionNo(attrs.getString(Tag.AccessionNumber));
             switch (suids.size()) {
                 case 0:
-                    attrs.setString(Tag.StudyInstanceUID, VR.UI, UIDUtils.createUID());
+                    adjustStudyIUID(attrs, arcHL7App, msg.msh());
                     break;
                 case 1:
                     attrs.setString(Tag.StudyInstanceUID, VR.UI, suids.get(0));
@@ -123,6 +143,42 @@ class ImportReportService extends AbstractHL7Service {
             attrs.setString(Tag.SeriesInstanceUID, VR.UI,
                     UIDUtils.createNameBasedUID(attrs.getBytes(Tag.SOPInstanceUID)));
         store(hl7App, s, ae, msg, attrs);
+    }
+
+    private void adjustStudyIUID(Attributes attrs, ArchiveHL7ApplicationExtension arcHL7App, HL7Segment msh)
+            throws HL7Exception {
+        String accessionNum = attrs.getString(Tag.AccessionNumber);
+        String reqProcID = attrs.getNestedDataset(Tag.ReferencedRequestSequence).getString(Tag.RequestedProcedureID);
+        String studyIUID = null;
+        if (reqProcID != null) {
+            studyIUID = UIDUtils.createNameBasedUID(reqProcID.getBytes());
+            LOG.info("Derived StudyInstanceUID from RequestedProcedureID[={}] : {} ",
+                    reqProcID, studyIUID);
+        } else switch (arcHL7App.hl7ImportReportMissingStudyIUIDPolicy()) {
+            case REJECT:
+                throw new HL7Exception(
+                        new ERRSegment(msh)
+                                .setHL7ErrorCode(ERRSegment.RequiredFieldMissing)
+                                .setErrorLocation("OBX^3^1")
+                                .setUserMessage("Missing OBX segment with Study Instance UID text in OBX^3^1 and its value in OBX-5"));
+            case ACCESSION_BASED:
+                if (accessionNum == null)
+                    throw new HL7Exception(
+                            new ERRSegment(msh)
+                                    .setHL7ErrorCode(ERRSegment.RequiredFieldMissing)
+                                    .setErrorLocation("OBR^1^18")
+                                    .setUserMessage("Missing OBR-18"));
+                else {
+                    studyIUID = UIDUtils.createNameBasedUID(accessionNum.getBytes());
+                    LOG.info("Derived StudyInstanceUID from AccessionNumber[={}] : {}",
+                            accessionNum, studyIUID);
+                }
+                break;
+            case GENERATE:
+                studyIUID = UIDUtils.createUID();
+                break;
+        }
+        attrs.setString(Tag.StudyInstanceUID, VR.UI, studyIUID);
     }
 
     private void store(HL7Application hl7App, Socket s, ApplicationEntity ae, UnparsedHL7Message msg, Attributes attrs)

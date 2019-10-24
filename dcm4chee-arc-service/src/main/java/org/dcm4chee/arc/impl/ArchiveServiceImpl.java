@@ -40,8 +40,9 @@
 
 package org.dcm4chee.arc.impl;
 
-import org.dcm4che3.conf.api.IApplicationEntityCache;
+import org.dcm4che3.conf.api.*;
 import org.dcm4che3.conf.api.hl7.IHL7ApplicationCache;
+import org.dcm4che3.conf.ldap.LdapUtils;
 import org.dcm4che3.net.AssociationHandler;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.net.hl7.HL7DeviceExtension;
@@ -53,6 +54,10 @@ import org.dcm4che3.net.service.DicomServiceRegistry;
 import org.dcm4chee.arc.*;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.entity.Patient;
+import org.dcm4chee.arc.event.ArchiveServiceEvent;
+import org.dcm4chee.arc.event.SoftwareConfiguration;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -65,6 +70,11 @@ import javax.enterprise.event.Event;
 import javax.enterprise.inject.Instance;
 import javax.inject.Inject;
 import javax.servlet.http.HttpServletRequest;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.Properties;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -73,6 +83,8 @@ import javax.servlet.http.HttpServletRequest;
 @Singleton
 @Startup
 public class ArchiveServiceImpl implements ArchiveService {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ArchiveServiceImpl.class);
 
     @Inject
     private ArchiveDeviceProducer deviceProducer;
@@ -87,7 +99,13 @@ public class ArchiveServiceImpl implements ArchiveService {
     private Instance<Scheduler> schedulers;
 
     @Inject
+    private IDeviceCache deviceCache;
+
+    @Inject
     private IApplicationEntityCache aeCache;
+
+    @Inject
+    private IWebApplicationCache webAppCache;
 
     @Inject
     private IHL7ApplicationCache hl7AppCache;
@@ -119,7 +137,19 @@ public class ArchiveServiceImpl implements ArchiveService {
     @Inject
     private ConnectionEventSource connectionEventSource;
 
-    private Status status = Status.STOPPED;
+    @Inject
+    private AssociationEventSource associationEventSource;
+
+    @Inject
+    private HL7ConnectionEventSource hl7ConnectionEventSource;
+
+    @Inject
+    private DicomConfiguration conf;
+
+    @Inject
+    private Event<SoftwareConfiguration> softwareConfigurationEvent;
+
+    private volatile Status status = Status.STOPPED;
 
     private final DicomService echoscp = new BasicCEchoSCP();
 
@@ -131,6 +161,7 @@ public class ArchiveServiceImpl implements ArchiveService {
     public void init() {
         try {
             device.setConnectionMonitor(connectionEventSource);
+            device.setAssociationMonitor(associationEventSource);
             device.setExecutor(executor);
             device.setScheduledExecutor(scheduledExecutor);
             device.setAssociationHandler(associationHandler);
@@ -145,7 +176,9 @@ public class ArchiveServiceImpl implements ArchiveService {
             HL7DeviceExtension hl7Extension = device.getDeviceExtension(HL7DeviceExtension.class);
             if (hl7Extension != null) {
                 hl7Extension.setHL7MessageListener(hl7ServiceRegistry);
+                hl7Extension.setHL7ConnectionMonitor(hl7ConnectionEventSource);
             }
+            mergeSoftwareVersions();
             configure();
             start(null);
         } catch (RuntimeException re) {
@@ -159,7 +192,9 @@ public class ArchiveServiceImpl implements ArchiveService {
 
     @PreDestroy
     public void destroy() {
-        stop(null);
+        if (status != Status.STOPPED) {
+            stop(null);
+        }
 
         serviceRegistry.removeDicomService(echoscp);
         for (DicomService service : dicomServices) {
@@ -196,7 +231,9 @@ public class ArchiveServiceImpl implements ArchiveService {
         deviceProducer.reloadConfiguration();
         for (Scheduler scheduler : schedulers) scheduler.reload();
         device.rebindConnections();
+        deviceCache.clear();
         aeCache.clear();
+        webAppCache.clear();
         hl7AppCache.clear();
         configure();
         archiveServiceEvent.fire(new ArchiveServiceEvent(ArchiveServiceEvent.Type.RELOADED, request));
@@ -204,7 +241,9 @@ public class ArchiveServiceImpl implements ArchiveService {
 
     private void configure() {
         ArchiveDeviceExtension arcdev = device.getDeviceExtension(ArchiveDeviceExtension.class);
+        deviceCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
         aeCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
+        webAppCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
         hl7AppCache.setStaleTimeout(arcdev.getAECacheStaleTimeoutSeconds());
         leadingCFindSCPQueryCache.setStaleTimeout(
                 arcdev.getLeadingCFindSCPQueryCacheStaleTimeoutSeconds() * 1000L);
@@ -216,6 +255,41 @@ public class ArchiveServiceImpl implements ArchiveService {
                 arcdev.getStorePermissionCacheStaleTimeoutSeconds() * 1000L);
         storePermissionCache.setMaxSize(arcdev.getStorePermissionCacheSize());
         Patient.setShowPatientInfo(arcdev.showPatientInfoInSystemLog());
+    }
+
+    private void mergeSoftwareVersions() {
+        Properties gitProps = new Properties();
+        InputStream in = ArchiveService.class.getResourceAsStream("git.properties");
+        if (in == null) {
+            LOG.warn("Missing git.properties");
+            return;
+        }
+        try {
+            gitProps.load(in);
+        } catch (IOException e) {
+            LOG.warn("Failed to read git.properties", e);
+            return;
+        }
+        String[] versions = {
+                "master".equals(gitProps.getProperty("git.branch"))
+                        ? gitProps.getProperty("git.build.version")
+                        : gitProps.getProperty("git.build.version") + '-' + gitProps.getProperty("git.branch"),
+                gitProps.getProperty("git.commit.id.abbrev"),
+                gitProps.getProperty("git.commit.time")
+        };
+        if (!LdapUtils.equals(device.getSoftwareVersions(), versions)) {
+            try {
+                LOG.info("Update Software Version in LDAP to: {}", Arrays.toString(versions));
+                device.setSoftwareVersions(versions);
+                ConfigurationChanges diffs = conf.merge(device, EnumSet.of(
+                        DicomConfiguration.Option.PRESERVE_VENDOR_DATA,
+                        DicomConfiguration.Option.PRESERVE_CERTIFICATE,
+                        DicomConfiguration.Option.CONFIGURATION_CHANGES));
+                softwareConfigurationEvent.fire(new SoftwareConfiguration(null, device.getDeviceName(), diffs));
+            } catch (ConfigurationException e) {
+                LOG.warn("Failed to update Software Version in LDAP:\n", e);
+            }
+        }
     }
 
 }

@@ -41,6 +41,7 @@
 package org.dcm4chee.arc.procedure.scp;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.AttributesCoercion;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.Dimse;
@@ -52,7 +53,7 @@ import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.query.Query;
 import org.dcm4chee.arc.query.QueryContext;
-import org.hibernate.Transaction;
+import org.dcm4chee.arc.query.RunInTransaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -66,40 +67,33 @@ public class MWLQueryTask extends BasicQueryTask {
     private static final Logger LOG = LoggerFactory.getLogger(MWLQueryTask.class);
 
     private final Query query;
-    private Transaction transaction;
+    private final AttributesCoercion coercion;
+    private final RunInTransaction runInTx;
 
-    public MWLQueryTask(Association as, PresentationContext pc, Attributes rq, Attributes keys, Query query)
-            throws DicomServiceException {
+    public MWLQueryTask(Association as, PresentationContext pc, Attributes rq, Attributes keys, Query query,
+            AttributesCoercion coercion, RunInTransaction runInTx) {
         super(as, pc, rq, keys);
         this.query = query;
+        this.coercion = coercion;
+        this.runInTx = runInTx;
         setOptionalKeysNotSupported(query.isOptionalKeysNotSupported());
-    }
-
-    private int getQueryFetchSize(Association as) {
-        return as.getApplicationEntity().getDevice().getDeviceExtension(ArchiveDeviceExtension.class)
-                .getQueryFetchSize();
     }
 
     @Override
     public void run() {
+        runInTx.execute(this::run0);
+    }
+
+    private void run0() {
         try {
-            query.initQuery();
             QueryContext ctx = query.getQueryContext();
             ArchiveAEExtension arcAE = ctx.getArchiveAEExtension();
             ArchiveDeviceExtension arcdev = arcAE.getArchiveDeviceExtension();
-            transaction = query.beginTransaction();
-            query.setFetchSize(arcdev.getQueryFetchSize());
-            query.executeQuery();
+            query.executeQuery(arcdev.getQueryFetchSize());
             super.run();
         } catch (Exception e) {
             writeDimseRSP(new DicomServiceException(Status.UnableToProcess, e));
         } finally {
-            if (transaction != null)
-                try {
-                    transaction.commit();
-                } catch (Exception e) {
-                    LOG.warn("Failed to commit transaction:\n{}", e);
-                }
             query.close();
         }
     }
@@ -136,6 +130,12 @@ public class MWLQueryTask extends BasicQueryTask {
 
     @Override
     protected Attributes adjust(Attributes match) {
+        if (match == null)
+            return null;
+
+        if (coercion != null)
+            coercion.coerce(match, null);
+
         return query.adjust(match);
     }
 }

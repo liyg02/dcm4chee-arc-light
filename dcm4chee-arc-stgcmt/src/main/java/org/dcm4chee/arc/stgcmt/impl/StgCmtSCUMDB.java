@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,14 +41,13 @@
 package org.dcm4chee.arc.stgcmt.impl;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4chee.arc.entity.QueueMessage;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.dcm4chee.arc.qmgt.QueueManager;
 import org.dcm4chee.arc.stgcmt.StgCmtSCU;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ejb.ActivationConfigProperty;
-import javax.ejb.MessageDriven;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.inject.Inject;
@@ -56,18 +55,11 @@ import javax.jms.JMSException;
 import javax.jms.Message;
 import javax.jms.MessageListener;
 import javax.jms.ObjectMessage;
-import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
  * @since Sep 2016
  */
-@MessageDriven(activationConfig = {
-        @ActivationConfigProperty(propertyName = "destinationType", propertyValue = "javax.jms.Queue"),
-        @ActivationConfigProperty(propertyName = "destination", propertyValue = StgCmtSCU.JNDI_NAME),
-        @ActivationConfigProperty(propertyName = "maxSession", propertyValue = "5")
-})
 @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 public class StgCmtSCUMDB implements MessageListener {
 
@@ -79,9 +71,6 @@ public class StgCmtSCUMDB implements MessageListener {
     @Inject
     private StgCmtSCU stgCmtSCU;
 
-    @PersistenceContext(unitName="dcm4chee-arc")
-    private EntityManager em;
-
     @Override
     public void onMessage(Message msg) {
         String msgID = null;
@@ -90,7 +79,8 @@ public class StgCmtSCUMDB implements MessageListener {
         } catch (JMSException e) {
             LOG.error("Failed to process {}", msg, e);
         }
-        if (queueManager.onProcessingStart(msgID) == null)
+        QueueMessage queueMessage = queueManager.onProcessingStart(msgID);
+        if (queueMessage == null)
             return;
         try {
             Attributes actionInfo = (Attributes) ((ObjectMessage) msg).getObject();
@@ -99,8 +89,10 @@ public class StgCmtSCUMDB implements MessageListener {
                     msg.getStringProperty("RemoteAET"),
                     msg.getStringProperty("StudyInstanceUID"),
                     msg.getStringProperty("SeriesInstanceUID"),
-                    msg.getStringProperty("SopInstanceUID"),
+                    msg.getStringProperty("SOPInstanceUID"),
                     msg.getStringProperty("ExporterID"),
+                    msg.getStringProperty("MessageID"),
+                    queueMessage.getBatchID(),
                     actionInfo);
             queueManager.onProcessingSuccessful(msgID, outcome);
         } catch (Throwable e) {

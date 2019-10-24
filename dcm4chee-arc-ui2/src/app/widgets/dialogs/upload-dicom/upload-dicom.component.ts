@@ -1,11 +1,16 @@
 import {Component, OnInit} from '@angular/core';
-import {FileUploader} from 'ng2-file-upload';
-import {MdDialogRef} from '@angular/material';
+// import {FileUploader} from 'ng2-file-upload';
+import {MatDialogRef} from '@angular/material';
 import {Http} from '@angular/http';
 import {UploadDicomService} from './upload-dicom.service';
 import * as _ from 'lodash';
 import {AppService} from "../../../app.service";
 import {J4careHttpService} from "../../../helpers/j4care-http.service";
+import {StudiesService} from "../../../studies/studies.service";
+import {HttpErrorHandler} from "../../../helpers/http-error-handler";
+import {KeycloakService} from "../../../helpers/keycloak-service/keycloak.service";
+import {j4care} from "../../../helpers/j4care.service";
+import {DcmWebApp} from "../../../models/dcm-web-app";
 
 @Component({
   selector: 'app-upload-dicom',
@@ -20,17 +25,22 @@ export class UploadDicomComponent implements OnInit{
     fileList: File[];
     xmlHttpRequest;
     percentComplete: any;
-    public vendorUpload: FileUploader = new FileUploader({
+    webApps;
+    selectedWebApp;
+/*    public vendorUpload: FileUploader = new FileUploader({
         url: ``,
         // allowedMimeType:['application/octet-stream','application/zip']
         // headers: [{name: 'Content-Type', value: `multipart/related`}]
         // ,disableMultipart: true
-    });
+    });*/
     constructor(
-        public dialogRef: MdDialogRef<UploadDicomComponent>,
+        public dialogRef: MatDialogRef<UploadDicomComponent>,
         private $http:J4careHttpService,
         private service: UploadDicomService,
-        public mainservice:AppService
+        public mainservice:AppService,
+        private studieService:StudiesService,
+        private httpErrorHandler:HttpErrorHandler,
+        private _keycloakService: KeycloakService
     ) {
         this.service.progress$.subscribe(
             data => {
@@ -44,19 +54,20 @@ export class UploadDicomComponent implements OnInit{
          allowedMimeType:['application/octet-stream','application/zip']
          });*/
         this.percentComplete = {};
-        this.vendorUpload.onAfterAddingFile = (item) => {
+/*        this.vendorUpload.onAfterAddingFile = (item) => {
             item.method = 'POST';
             console.log('this.vendorUpload.optionss', this.vendorUpload.options);
             console.log('item', item);
         };
         this.vendorUpload.onBeforeUploadItem = (item) => {
             this.addFileNameHeader(item.file.name);
-        };
+        };*/
+        this.getWebApps();
     }
     addFileNameHeader(fileName) {
         // var boundary=Math.random().toString().substr(2);
-        console.log('this.vendorUpload.progress', this.vendorUpload.progress);
-        console.log('this.vendorUpload.optionss', this.vendorUpload.options);
+/*        console.log('this.vendorUpload.progress', this.vendorUpload.progress);
+        console.log('this.vendorUpload.optionss', this.vendorUpload.options);*/
         // this.vendorUpload.setOptions({headers: [{
         //     name: 'Content-Type', value: `multipart/related`
         // }]});
@@ -71,14 +82,9 @@ export class UploadDicomComponent implements OnInit{
         this.fileList = event.target.files;
 
         if (this.fileList) {
-            this.$http.refreshToken().subscribe((response) => {
+            this._keycloakService.getToken().subscribe((response) => {
                 if(!this.mainservice.global.notSecure){
-                    if (response && response.length != 0) {
-                        $this.$http.resetAuthenticationInfo(response);
-                        token = response['token'];
-                    } else {
-                        token = this.mainservice.global.authentication.token;
-                    }
+                    token = response.token;
                 }
                 _.forEach(this.fileList, (file, i) => {
     /*                {
@@ -106,7 +112,13 @@ export class UploadDicomComponent implements OnInit{
 
                         let xmlHttpRequest = new XMLHttpRequest();
                         //Some AJAX-y stuff - callbacks, handlers etc.
-                        xmlHttpRequest.open('POST', `../aets/${$this._selectedAe}/rs/studies`, true);
+                        let url;
+                        if(this.selectedWebApp){
+                            url = this.service.getUrlFromWebApp(this.selectedWebApp);
+                        }else{
+                            url = `../aets/${$this._selectedAe}/rs/studies`;
+                        }
+                        xmlHttpRequest.open('POST', url, true);
                         let dashes = '--';
                         let crlf = '\r\n';
                         //Post with the correct MIME type (If the OS can identify one)
@@ -117,7 +129,7 @@ export class UploadDicomComponent implements OnInit{
                         }
                         const postDataStart = dashes + boundary + crlf + 'Content-Disposition: form-data;' + 'name=\"file\";' + 'filename=\"' + encodeURIComponent(file.name) + '\"' + crlf + 'Content-Type: ' + filetype + crlf + crlf;
                         const postDataEnd = crlf + dashes + boundary + dashes;
-                        xmlHttpRequest.setRequestHeader('Content-Type', 'multipart/related;type=application/dicom;boundary=' + boundary + ';');
+                        xmlHttpRequest.setRequestHeader('Content-Type', 'multipart/related;type="application/dicom";boundary=' + boundary);
                         xmlHttpRequest.setRequestHeader('Accept', 'application/dicom+json');
                         if(!this.mainservice.global.notSecure) {
                             xmlHttpRequest.setRequestHeader('Authorization', `Bearer ${token}`);
@@ -139,6 +151,8 @@ export class UploadDicomComponent implements OnInit{
                                     $this.percentComplete[file.name]['showLoader'] = false;
                                     $this.percentComplete[file.name]['value'] = 0;
                                     $this.percentComplete[file.name]['status'] = xmlHttpRequest.status + ' ' + xmlHttpRequest.statusText;
+                                    let jsonFormat = JSON.parse(xmlHttpRequest.response);
+                                    $this.httpErrorHandler.handleError(jsonFormat || xmlHttpRequest.response);
                                 }
                             }
                         };
@@ -162,8 +176,8 @@ export class UploadDicomComponent implements OnInit{
     }
     uploadFile(dialogRef){
 
-        this.vendorUpload.setOptions({url: `../aets/${this._selectedAe}/rs/studies`});
-        this.vendorUpload.uploadAll();
+/*        this.vendorUpload.setOptions({url: `../aets/${this._selectedAe}/rs/studies`});
+        this.vendorUpload.uploadAll();*/
         // dialogRef.close("ok");
     }
     close(dialogRef){
@@ -186,5 +200,17 @@ export class UploadDicomComponent implements OnInit{
 
     set aes(value) {
         this._aes = value;
+    }
+    getWebApps(){
+        this.studieService.getWebApps().subscribe((res)=>{
+            this.webApps = res;
+            this.webApps.forEach((webApp:DcmWebApp)=>{
+               if(webApp.dicomAETitle === this._selectedAe || (this.selectedWebApp && this.selectedWebApp.dcmWebAppName === webApp.dcmWebAppName))
+                 this.selectedWebApp = webApp;
+            });
+        },(err)=>{
+            j4care.log("Something went wrong on getting webApps", err);
+            this.httpErrorHandler.handleError(err);
+        });
     }
 }

@@ -41,16 +41,18 @@
 package org.dcm4chee.arc.store.scu.impl;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.AttributesCoercion;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
 import org.dcm4che3.imageio.codec.Transcoder;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.pdu.PresentationContext;
 import org.dcm4che3.net.service.RetrieveTask;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4che3.util.SafeClose;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.Duration;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveService;
 import org.slf4j.Logger;
@@ -93,7 +95,7 @@ final class RetrieveTaskImpl implements RetrieveTask {
         this.ctx = ctx;
         this.storeas = storeas;
         this.aeExt = ctx.getArchiveAEExtension();
-        this.hostName = storeas.getSocket().getInetAddress().getHostName();
+        this.hostName = ReverseDNS.hostNameOf(storeas.getSocket().getInetAddress());
     }
 
     void setRequestAssociation(Dimse dimserq, Association rqas, PresentationContext pc, Attributes rqCmd) {
@@ -123,14 +125,22 @@ final class RetrieveTaskImpl implements RetrieveTask {
             for (InstanceLocations match : ctx.getMatches()) {
                 if (canceled)
                     break;
-                store(match);
+
+                if (!ctx.copyToRetrieveCache(match))
+                    store(match);
             }
+            ctx.copyToRetrieveCache(null);
+            InstanceLocations match;
+            while ((match = ctx.copiedToRetrieveCache()) != null && !canceled)
+                store(match);
+
             waitForOutstandingCStoreRSP();
         } finally {
             releaseStoreAssociation();
             waitForPendingCMoveForward();
             waitForPendingCStoreForward();
             updateCompleteness();
+            ctx.getRetrieveService().updateLocations(ctx);
             ctx.stopWritePendingRSP();
             if (rqas != null) {
                 writeFinalRSP();
@@ -148,15 +158,16 @@ final class RetrieveTaskImpl implements RetrieveTask {
         int priority = ctx.getPriority();
         Set<String> tsuids = storeas.getTransferSyntaxesFor(cuid);
         try {
-            if (tsuids.isEmpty()) {
-                throw new NoPresentationContextException(cuid);
-            }
             RetrieveService service = ctx.getRetrieveService();
             try (Transcoder transcoder = service.openTranscoder(ctx, inst, tsuids, false)) {
                 String tsuid = transcoder.getDestinationTransferSyntax();
-                DataWriter data = new TranscoderDataWriter(transcoder,
-                        service.getAttributesCoercion(ctx, inst));
+                AttributesCoercion coerce = service.getAttributesCoercion(ctx, inst);
+                if (coerce != null)
+                    iuid = coerce.remapUID(iuid);
+
+                TranscoderDataWriter data = new TranscoderDataWriter(transcoder, coerce);
                 outstandingRSP.add(inst);
+                long startTime = System.nanoTime();
                 if (ctx.getMoveOriginatorAETitle() != null) {
                     storeas.cstore(cuid, iuid, priority,
                             ctx.getMoveOriginatorAETitle(), ctx.getMoveOriginatorMessageID(),
@@ -165,12 +176,14 @@ final class RetrieveTaskImpl implements RetrieveTask {
                     storeas.cstore(cuid, iuid, priority,
                             data, tsuid, rspHandler);
                 }
+                service.getMetricsService().acceptDataRate("send-to-" + storeas.getRemoteAET(),
+                        data.getCount(), startTime);
             }
         } catch (Exception e) {
             outstandingRSP.remove(inst);
             ctx.incrementFailed();
             ctx.addFailedSOPInstanceUID(iuid);
-            LOG.info("{}: failed to send {} to {}:", rqas, inst, ctx.getDestinationAETitle(), e);
+            LOG.warn("{}: failed to send {} to {}:", rqas != null ? rqas : storeas, inst, ctx.getDestinationAETitle(), e);
         }
     }
 
@@ -219,8 +232,7 @@ final class RetrieveTaskImpl implements RetrieveTask {
         cmd.setInt(Tag.NumberOfFailedSuboperations, VR.US, ctx.failed());
         cmd.setInt(Tag.NumberOfWarningSuboperations, VR.US, ctx.warning());
         try {
-            if (rqas.isReadyForDataTransfer())
-                rqas.writeDimseRSP(pc, cmd, data);
+            rqas.writeDimseRSP(pc, cmd, data);
         } catch (IOException e) {
             LOG.warn("{}: Unable to send C-GET or C-MOVE RSP on association to {}",
                     rqas, rqas.getRemoteAET(), e);
@@ -244,10 +256,14 @@ final class RetrieveTaskImpl implements RetrieveTask {
 
     private void waitForOutstandingCStoreRSP() {
         try {
+            LOG.debug("{}: wait for outstanding C-STORE RSP(s) on association to {}",
+                    rqas, storeas.getRemoteAET());
             synchronized (outstandingRSP) {
                 while (!outstandingRSP.isEmpty())
                     outstandingRSP.wait();
             }
+            LOG.debug("{}: received outstanding C-STORE RSP(s) on association to {}",
+                    rqas, storeas.getRemoteAET());
         } catch (InterruptedException e) {
             LOG.warn("{}: failed to wait for outstanding C-STORE RSP(s) on association to {}",
                     rqas, storeas.getRemoteAET(), e);
@@ -271,7 +287,7 @@ final class RetrieveTaskImpl implements RetrieveTask {
     private void removeOutstandingRSP(InstanceLocations inst) {
         outstandingRSP.remove(inst);
         synchronized (outstandingRSP) {
-            outstandingRSP.notify();
+            outstandingRSP.notifyAll();
         }
     }
 

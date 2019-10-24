@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import {MdDialogRef} from '@angular/material';
+import {MatDialogRef} from '@angular/material';
 import {AppService} from '../../../app.service';
 import {Http} from '@angular/http';
 import * as _ from 'lodash';
@@ -22,6 +22,10 @@ export class ExportDialogComponent{
     private _externalAetMode;
     private _mode;
     private _count;
+    private _subTitle;
+    private _quantity;
+    newStudyPage = false;
+    queues;
     private _result = {
         exportType: 'dicom',
         selectedAet: undefined,
@@ -35,8 +39,16 @@ export class ExportDialogComponent{
         }
     };
     private _preselectedAet;
-    constructor(public dialogRef: MdDialogRef<ExportDialogComponent>, private $http:J4careHttpService, private mainservice: AppService) {
+    constructor(public dialogRef: MatDialogRef<ExportDialogComponent>, private $http:J4careHttpService, private mainservice: AppService) {
         this.getAes();
+    }
+
+    get subTitle() {
+        return this._subTitle;
+    }
+
+    set subTitle(value) {
+        this._subTitle = value;
     }
 
     get preselectedAet() {
@@ -134,7 +146,7 @@ export class ExportDialogComponent{
         this.$http.get(
             '../aes'
         )
-        .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+        // .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res; }catch (e){ resjson = [];} return resjson;})
         .subscribe((response) => {
             $this.aes = response;
             $this._result.selectedAet = $this._result.selectedAet || $this.aes[0].dicomAETitle;
@@ -154,6 +166,9 @@ export class ExportDialogComponent{
         });
     }
     validForm(){
+        if(this._mode === "reschedule"){
+            return true;
+        }
         if (this._result && _.hasIn(this._result,"exportType") && this._result.exportType === 'dicom'){
            // if (this._result.dicomPrefix && this._result.selectedAet){
             if (this._result.selectedAet){
@@ -171,7 +186,6 @@ export class ExportDialogComponent{
     }
     dialogKeyHandler(e, dialogRef){
         let code = (e.keyCode ? e.keyCode : e.which);
-        console.log('in modality keyhandler', code);
         if (code === 13){
             dialogRef.close('ok');
         }
@@ -179,4 +193,12 @@ export class ExportDialogComponent{
             dialogRef.close(null);
         }
     };
+
+    get quantity() {
+        return this._quantity;
+    }
+
+    set quantity(value) {
+        this._quantity = value;
+    }
 }

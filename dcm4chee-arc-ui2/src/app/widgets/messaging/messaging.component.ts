@@ -2,7 +2,7 @@ import {Component, OnDestroy} from '@angular/core';
 import {AppService} from '../../app.service';
 import {Subscription} from 'rxjs';
 import {InfoComponent} from '../dialogs/info/info.component';
-import {MdDialogRef, MdDialog, MdDialogConfig} from '@angular/material';
+import {MatDialogRef, MatDialog, MatDialogConfig} from '@angular/material';
 @Component({
   selector: 'app-messaging',
   template: `
@@ -25,11 +25,11 @@ export class MessagingComponent implements OnDestroy{
     public msg: Array<any> = [];
     subscription: Subscription;
 
-    dialogRef: MdDialogRef<any>;
+    dialogRef: MatDialogRef<any>;
     constructor(
         private mainservice: AppService,
-        public dialog: MdDialog,
-        public config: MdDialogConfig
+        public dialog: MatDialog,
+        public config: MatDialogConfig
     ){
         this.subscription = this.mainservice.messageSet$.subscribe(msg => {
             console.log('msg in subscribe messagecomponent ', msg);
@@ -51,10 +51,17 @@ export class MessagingComponent implements OnDestroy{
         this.dialogRef.afterClosed().subscribe();
     }
     setMsg(msg: any){
-        console.log('in setmessage in messaging.component', msg);
         let timeout = msg.timeout || this.msgTimeout;
         let isInArray = false;
         let presentId = '';
+        if(!msg.title && msg.status)
+            msg.title = msg.status.charAt(0).toUpperCase() + msg.status.slice(1);
+        if(!msg.status)
+            msg.status = 'info';
+        if(!msg.status && !msg.title){
+            msg.title = "Info";
+            msg.status = 'info';
+        }
         if (this.msg && this.msg.length > 0){
             this.msg.forEach((k, i) => {
                 if (k.text === msg.text && k.status === msg.status) {
@@ -101,9 +108,6 @@ export class MessagingComponent implements OnDestroy{
     };
 
     closeBox(m){
-        // this.msg.finde(m);
-        console.log('m.id', m.id);
-        console.log('m.text', m.text);
         this.removeMsgFromArray(m.id);
     }
     private getUniqueRandomId() {

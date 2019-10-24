@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2017
+ * Portions created by the Initial Developer are Copyright (C) 2017-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -45,8 +45,8 @@ import org.dcm4che3.data.IDWithIssuer;
 import org.dcm4che3.json.JSONWriter;
 import org.dcm4che3.util.ByteUtils;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
-import org.dcm4chee.arc.conf.RSForwardRule;
 import org.dcm4chee.arc.conf.RSOperation;
+import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,9 +56,6 @@ import javax.json.Json;
 import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
 import java.io.ByteArrayOutputStream;
-import java.net.InetAddress;
-import java.net.URI;
-import java.util.List;
 
 /**
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
@@ -74,45 +71,40 @@ public class RSForward {
     private RSClient rsClient;
 
     public void forward(RSOperation rsOp, ArchiveAEExtension arcAE, Attributes attrs, HttpServletRequest request) {
-        List<RSForwardRule> rules = arcAE.findRSForwardRules(rsOp);
-        for (RSForwardRule rule : rules) {
-            String baseURI = rule.getBaseURI();
-            try {
-                if (!request.getRemoteAddr().equals(
-                        InetAddress.getByName(URI.create(baseURI).getHost()).getHostAddress())) {
-                    rsClient.scheduleRequest(getMethod(rsOp), mkForwardURI(baseURI, rsOp, attrs, request), toContent(attrs));
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to apply {}:\n", rule, e);
-            }
-        }
+        forward(rsOp,
+                arcAE,
+                toContent(attrs),
+                rsOp == RSOperation.CreatePatient ? IDWithIssuer.pidOf(attrs).toString() : null,
+                request);
     }
 
-    public void forwardMergeMultiplePatients(RSOperation rsOp, ArchiveAEExtension arcAE, byte[] in, HttpServletRequest request) {
-        List<RSForwardRule> rules = arcAE.findRSForwardRules(rsOp);
-        for (RSForwardRule rule : rules) {
-            String baseURI = rule.getBaseURI();
-            try {
-                if (!request.getRemoteAddr().equals(
-                        InetAddress.getByName(URI.create(baseURI).getHost()).getHostAddress())) {
-                    rsClient.scheduleRequest(getMethod(rsOp), mkForwardURI(baseURI, rsOp, null, request), in);
-                }
-            } catch (Exception e) {
-                LOG.warn("Failed to apply {}:\n", rule, e);
-            }
-        }
-    }
-
-    private static String mkForwardURI(String baseURI, RSOperation rsOp, Attributes attrs, HttpServletRequest request) {
+    public void forward(
+            RSOperation rsOp, ArchiveAEExtension arcAE, byte[] in, String patientID, HttpServletRequest request) {
+        LOG.info("Restful Service Forward invoked for {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
         String requestURI = request.getRequestURI();
-        int requestURIIndex = requestURI.indexOf("/rs");
-        int baseURIIndex = baseURI.indexOf("/rs");
-        StringBuilder sb = new StringBuilder(requestURI.length() + 16);
-        sb.append(baseURI.substring(0, baseURIIndex));
-        sb.append(requestURI.substring(requestURIIndex));
-        if (rsOp == RSOperation.CreatePatient)
-            sb.append(IDWithIssuer.pidOf(attrs));
-        return sb.toString();
+
+        arcAE.findRSForwardRules(rsOp, request).forEach(
+                rule -> {
+                    try {
+                        LOG.info("Apply RS Forward Rule[{}] to RSOperation {}", rule, rsOp);
+                        rsClient.scheduleRequest(
+                                rsOp,
+                                request.getRequestURI(),
+                                request.getQueryString(),
+                                rule.getWebAppName(),
+                                patientID,
+                                in,
+                                rule.isTlsAllowAnyHostname(),
+                                rule.isTlsDisableTrustManager());
+                    } catch (QueueSizeLimitExceededException e) {
+                        LOG.warn(e.getMessage());
+                    }
+                });
     }
 
     private static byte[] toContent(Attributes attrs) {
@@ -124,37 +116,5 @@ public class RSForward {
             new JSONWriter(gen).write(attrs);
         }
         return out.toByteArray();
-    }
-
-    private String getMethod(RSOperation rsOp) {
-        String method = null;
-        switch (rsOp) {
-            case CreatePatient:
-            case UpdatePatient:
-            case UpdateStudyExpirationDate:
-            case UpdateSeriesExpirationDate:
-                method = "PUT";
-                break;
-            case ChangePatientID:
-            case MergePatient:
-            case MergePatients:
-            case UpdateStudy:
-            case RejectStudy:
-            case RejectSeries:
-            case RejectInstance:
-            case CopyInstances:
-            case MoveInstances:
-            case CreateMWL:
-            case UpdateMWL:
-            case LinkInstancesWithMWL:
-                method = "POST";
-                break;
-            case DeletePatient:
-            case DeleteStudy:
-            case DeleteMWL:
-                method = "DELETE";
-                break;
-        }
-        return method;
     }
 }

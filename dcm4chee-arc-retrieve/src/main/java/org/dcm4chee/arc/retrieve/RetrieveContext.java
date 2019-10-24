@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -47,12 +47,14 @@ import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.AttributeSet;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
-import org.dcm4chee.arc.entity.CodeEntity;
+import org.dcm4chee.arc.conf.StorageDescriptor;
 import org.dcm4chee.arc.entity.Location;
 import org.dcm4chee.arc.entity.Series;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.storage.Storage;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
-import javax.servlet.http.HttpServletRequest;
+import org.dcm4chee.arc.store.InstanceLocations;
+import org.dcm4chee.arc.store.UpdateLocation;
+
 import java.io.Closeable;
 import java.util.Collection;
 import java.util.Date;
@@ -85,10 +87,6 @@ public interface RetrieveContext extends Closeable {
 
     void setFallbackAssociation(Association fallbackAssociation);
 
-    HttpServletRequest getHttpRequest();
-
-    void setHttpRequest(HttpServletRequest httpRequest);
-
     RetrieveService getRetrieveService();
 
     ApplicationEntity getLocalApplicationEntity();
@@ -98,8 +96,6 @@ public interface RetrieveContext extends Closeable {
     String[] getAccessControlIDs();
 
     QueryRetrieveView getQueryRetrieveView();
-
-    boolean isHideNotRejectedInstances();
 
     int getPriority();
 
@@ -120,6 +116,10 @@ public interface RetrieveContext extends Closeable {
     ApplicationEntity getDestinationAE();
 
     void setDestinationAE(ApplicationEntity remoteAE);
+
+    StorageDescriptor getDestinationStorage();
+
+    void setDestinationStorage(StorageDescriptor storageDescriptor);
 
     Throwable getException();
 
@@ -152,6 +152,8 @@ public interface RetrieveContext extends Closeable {
     Series.MetadataUpdate getSeriesMetadataUpdate();
 
     void setSeriesMetadataUpdate(Series.MetadataUpdate metadataUpdate);
+
+    String getSopInstanceUID();
 
     String[] getSopInstanceUIDs();
 
@@ -203,19 +205,15 @@ public interface RetrieveContext extends Closeable {
 
     void putStorage(String storageID, Storage storage);
 
-    CodeEntity[] getShowInstancesRejectedByCode();
-
-    void setShowInstancesRejectedByCode(CodeEntity[] showInstancesRejectedByCode);
-
-    CodeEntity[] getHideRejectionNotesWithCode();
-
-    void setHideRejectionNotesWithCode(CodeEntity[] hideRejectionNotesWithCode);
-
     void incrementPendingCStoreForward();
 
     void decrementPendingCStoreForward();
 
     void waitForPendingCStoreForward() throws InterruptedException;
+
+    void incrementMissing();
+
+    int missing();
 
     void addCStoreForward(InstanceLocations inst);
 
@@ -258,4 +256,16 @@ public interface RetrieveContext extends Closeable {
     HttpServletRequestInfo getHttpServletRequestInfo();
 
     void setHttpServletRequestInfo(HttpServletRequestInfo httpServletRequestInfo);
+
+    boolean copyToRetrieveCache(InstanceLocations match);
+
+    InstanceLocations copiedToRetrieveCache();
+
+    List<UpdateLocation> getUpdateLocations();
+
+    boolean isUpdateLocationStatusOnRetrieve();
+
+    boolean isStorageVerificationOnRetrieve();
+
+    void decrementNumberOfMatches();
 }

@@ -41,12 +41,10 @@
 package org.dcm4chee.arc.delete.impl;
 
 import org.dcm4che3.data.Code;
-import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.Scheduler;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Duration;
 import org.dcm4chee.arc.conf.RejectionNote;
-import org.dcm4chee.arc.entity.Location;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,9 +60,6 @@ import java.util.Date;
 public class DeleteRejectedInstancesScheduler extends Scheduler {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeleteRejectedInstancesScheduler.class);
-
-    @Inject
-    private Device device;
 
     @Inject
     private DeletionServiceEJB ejb;
@@ -90,20 +85,26 @@ public class DeleteRejectedInstancesScheduler extends Scheduler {
         int fetchSize = arcDev.getDeleteRejectedFetchSize();
         for (RejectionNote rjNote : arcDev.getRejectionNotes()) {
             Code rjCode = rjNote.getRejectionNoteCode();
-            delete(Location.FIND_BY_REJECTION_CODE_BEFORE, rjCode, rjNote.getDeleteRejectedInstanceDelay(), fetchSize);
-            delete(Location.FIND_BY_CONCEPT_NAME_CODE_BEFORE, rjCode, rjNote.getDeleteRejectionNoteDelay(), fetchSize);
+            delete(ejb::deleteRejectedInstances, rjCode, rjNote.getDeleteRejectedInstanceDelay(), fetchSize);
+            delete(ejb::deleteRejectionNotes, rjCode, rjNote.getDeleteRejectionNoteDelay(), fetchSize);
         }
     }
 
-    private void delete(String queryName, Code rjCode, Duration delay, int fetchSize) {
+    private void delete(DeletionServiceEJB.DeleteRejectedInstancesOrRejectionNotes cmd,
+            Code rjCode, Duration delay, int fetchSize) {
         if (delay == null)
             return;
 
         Date before = new Date(System.currentTimeMillis() - delay.getSeconds() * 1000);
         int deleted;
         do {
-            deleted = ejb.deleteRejectedInstancesOrRejectionNotesBefore(queryName, rjCode, before, fetchSize);
+            if (getPollingInterval() == null)
+                return;
+            deleted = cmd.delete(rjCode, before, fetchSize);
         } while (deleted == fetchSize);
+
+        if (deleted > 0)
+            LOG.info("Deleted {} instances of type {} permanently.", deleted, rjCode);
     }
 
 }

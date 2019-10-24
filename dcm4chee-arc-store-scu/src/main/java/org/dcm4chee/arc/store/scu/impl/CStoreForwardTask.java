@@ -45,7 +45,7 @@ import org.dcm4che3.data.Tag;
 import org.dcm4che3.imageio.codec.Transcoder;
 import org.dcm4che3.net.*;
 import org.dcm4chee.arc.entity.*;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveService;
 import org.dcm4chee.arc.store.StoreContext;
@@ -123,12 +123,15 @@ class CStoreForwardTask implements Runnable {
             RetrieveService service = ctx.getRetrieveService();
             try (Transcoder transcoder = service.openTranscoder(ctx, inst, tsuids, false)) {
                 String tsuid = transcoder.getDestinationTransferSyntax();
-                DataWriter data = new TranscoderDataWriter(transcoder,
+                TranscoderDataWriter data = new TranscoderDataWriter(transcoder,
                         service.getAttributesCoercion(ctx, inst));
                 DimseRSPHandler rspHandler = new CStoreRSPHandler(inst);
+                long startTime = System.nanoTime();
                 storeas.cstore(cuid, iuid, ctx.getPriority(),
                             ctx.getMoveOriginatorAETitle(), ctx.getMoveOriginatorMessageID(),
                             data, tsuid, rspHandler);
+                service.getMetricsService().acceptDataRate("send-to-" + storeas.getRemoteAET(),
+                        data.getCount(), startTime);
             }
         } catch (Exception e) {
             ctx.incrementFailed();
@@ -147,9 +150,9 @@ class CStoreForwardTask implements Runnable {
         Attributes studyAttrs = study.getAttributes();
         Attributes patAttrs = patient.getAttributes();
         Attributes.unifyCharacterSets(patAttrs, studyAttrs, seriesAttrs, instAttrs);
-        instAttrs.addAll(seriesAttrs);
-        instAttrs.addAll(studyAttrs);
-        instAttrs.addAll(patAttrs);
+        instAttrs.addAll(seriesAttrs, true);
+        instAttrs.addAll(studyAttrs, true);
+        instAttrs.addAll(patAttrs, true);
         RetrieveService service = ctx.getRetrieveService();
         InstanceLocations instanceLocations = service.newInstanceLocations(instAttrs);
         instanceLocations.getLocations().addAll(locations(storeCtx));
@@ -161,6 +164,7 @@ class CStoreForwardTask implements Runnable {
         return locations.isEmpty() ? storeCtx.getStoredInstance().getLocations() : locations;
     }
 
+    //needed to use storeContext == null as marker of end of queue
     private static class WrappedStoreContext {
         final StoreContext storeContext;
 

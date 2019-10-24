@@ -45,7 +45,7 @@
   <parent>
     <artifactId>dcm4chee-arc-parent</artifactId>
     <groupId>org.dcm4che.dcm4chee-arc</groupId>
-    <version>5.11.1</version>
+    <version>5.19.1</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
@@ -60,7 +60,17 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-cors</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-ctrl</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-diff-rs</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -80,7 +90,27 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-ian-rs</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-iocm-rs</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-impax-report-rs</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-keycloak-rs</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-metrics-rs</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -91,6 +121,11 @@
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-monitor-rs</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-pdq-rs</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -125,7 +160,17 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-ups-rs</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-wado</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-xroad-rs</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>

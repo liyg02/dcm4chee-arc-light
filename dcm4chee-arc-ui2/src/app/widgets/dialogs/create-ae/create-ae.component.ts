@@ -1,21 +1,39 @@
-import { Component } from '@angular/core';
-import {MdDialogRef} from '@angular/material';
+import {Component, OnInit} from '@angular/core';
+import {MatDialogRef} from '@angular/material';
 import * as _ from 'lodash';
 import {AppService} from '../../../app.service';
 import {Http} from '@angular/http';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import {WindowRefService} from "../../../helpers/window-ref.service";
 import {HttpErrorHandler} from "../../../helpers/http-error-handler";
 import {J4careHttpService} from "../../../helpers/j4care-http.service";
+import {LoadingBarService} from '@ngx-loading-bar/core';
+import {AeListService} from "../../../configuration/ae-list/ae-list.service";
+import {j4care} from "../../../helpers/j4care.service";
+import {SelectDropdown} from "../../../interfaces";
 
 @Component({
-  selector: 'app-create-ae',
-  templateUrl: './create-ae.component.html'
+    selector: 'app-create-ae',
+    templateUrl: './create-ae.component.html',
+    styles: [`
+        .test_button button{
+            background:rgba(6, 29, 47, 0.84);
+            color: white;
+            width: 130px;
+            height: 26px;
+            border: none;
+            margin-top: 4px;
+            margin-left: 5px;
+        }
+        .test_button button:hover{
+            background: #061d2f;
+        }
+  `],
 })
-export class CreateAeComponent {
+export class CreateAeComponent implements OnInit{
     private _dicomconn;
     private _newAetModel;
     private _netAEModel;
+    showTestBlock = true;
     showdevice= false;
     showconn= true;
     showselectdevice= true;
@@ -24,17 +42,45 @@ export class CreateAeComponent {
     activetab= 'createdevice';
     selctedDeviceObject;
     selectedDevice;
+    showAetList = false;
     netConnModelDevice;
+    private _aes;
+    selectedCallingAet;
     private _devices;
     _ = _;
+    configuredAetList = [];
+    selectedForAcceptedCallingAET:string[] = [];
+    dicomConnectionns = [];
+    selectedDicomConnection:any =  {};
     constructor(
         public $http:J4careHttpService,
-        public dialogRef: MdDialogRef<CreateAeComponent>,
+        public dialogRef: MatDialogRef<CreateAeComponent>,
         public mainservice: AppService,
-        public cfpLoadingBar: SlimLoadingBarService,
-        public httpErrorHandler:HttpErrorHandler
+        public cfpLoadingBar: LoadingBarService,
+        public httpErrorHandler:HttpErrorHandler,
+        private aeListService:AeListService
     ) {
+    }
+    ngOnInit(){
         this.cfpLoadingBar.complete();
+        if(_.hasIn(this.mainservice.global,"uiConfig.dcmuiWidgetAets")){
+            this.configuredAetList = (<string[]>_.get(this.mainservice.global,"uiConfig.dcmuiWidgetAets")).map(ae=>{
+                // this.selectedForAcceptedCallingAET.push(ae);
+                return new SelectDropdown(ae,ae);
+            });
+            if(_.hasIn(this.mainservice.global,"uiConfig.dcmuiDefaultWidgetAets")){
+                this.selectedForAcceptedCallingAET = _.get(this.mainservice.global,"uiConfig.dcmuiDefaultWidgetAets");
+            }
+            //selectedForAcceptedCallingAET
+        }else{
+            this.aeListService.getAes().subscribe(aes=>{
+                this.configuredAetList = aes.map(ae=>{
+                    return new SelectDropdown(ae.dicomAETitle,ae.dicomAETitle);
+                })
+            },err=>{
+                this.httpErrorHandler.handleError(err);
+            })
+        }
     }
 
     get dicomconn() {
@@ -72,6 +118,14 @@ export class CreateAeComponent {
         this._devices = value;
     };
 
+    get aes() {
+        return this._aes;
+    }
+
+    set aes(value) {
+        this._aes = value;
+    }
+
     checkClick(e){
         console.log('e', e);
         let code = (e.keyCode ? e.keyCode : e.which);
@@ -85,14 +139,14 @@ export class CreateAeComponent {
             }else{
                 $this.cfpLoadingBar.start();
                 $this.$http.get('../devices/' + this.selectedDevice)
-                    .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+                    .map(res => j4care.redirectOnAuthResponse(res))
                     .subscribe((response) => {
                         $this.selctedDeviceObject = response;
                         // $scope.selctedDeviceObject.dicomNetworkConnection;
                         // $scope.selctedDeviceObject.dicomNetworkConnection.push($scope.netConnModelDevice);
                         console.log('this.selctedDeviceObject', $this.selctedDeviceObject);
                         $this.setReferencesFromDevice();
-                        $this.cfpLoadingBar.stop();
+                        $this.cfpLoadingBar.complete();
                     }, (err) => {
                         $this.httpErrorHandler.handleError(err);
                         $this.cfpLoadingBar.complete();
@@ -115,7 +169,6 @@ export class CreateAeComponent {
         }
     }
     toggleReference(model, ref){
-
         if (this.inArray(ref, model)){
           _.remove(model, (i) => {
               return i === ref;
@@ -123,6 +176,7 @@ export class CreateAeComponent {
         }else{
             model.push(ref);
         }
+        this.dicomConnectionns = this.getDicomConnections();
 
     }
     inArray(element, array){
@@ -147,8 +201,8 @@ export class CreateAeComponent {
                 }],
                 dicomNetworkAE: [{
                     dicomNetworkConnectionReference: ['/dicomNetworkConnection/0']
-                }]
-
+                }],
+                dicomInstitutionName:['']
             };
         }else{
             this.getDevice(null);
@@ -166,6 +220,20 @@ export class CreateAeComponent {
             };
         }
     };
+    trackByFn(index, item) {
+        return index; // or item.id
+    }
+    addArrayElement(model,key){
+       if(_.hasIn(model,key) && _.isArray(model[key])){
+            model[key].push("");
+       }else{
+           model[key] = [""];
+       }
+    }
+    removeElemnt(model,i){
+        model.splice(i,1);
+    }
+
 /*
     getConn(){
         if(this.newAetModel && this.activetab === "createdevice" && this.newAetModel.dicomNetworkConnection && this.newAetModel.dicomNetworkConnection[0] && this.newAetModel.dicomNetworkConnection[0].cn && this.newAetModel.dicomNetworkConnection[0].cn != ""){
@@ -178,7 +246,7 @@ export class CreateAeComponent {
     }*/
     updateAetFromDevicename(e){
         let code = (e.keyCode ? e.keyCode : e.which);
-        if (code === 8){
+        if (code === 8 && _.hasIn(this.newAetModel,"dicomDeviceName")){
             let aetUppercase = this.newAetModel.dicomDeviceName.toUpperCase();
             if (this.newAetModel.dicomNetworkAE[0].dicomAETitle.slice(0, -1) === aetUppercase){
                 this.newAetModel.dicomNetworkAE[0].dicomAETitle = aetUppercase;
@@ -237,6 +305,84 @@ export class CreateAeComponent {
             });
         }
         console.log('this.selctedDeviceObject=', this.selctedDeviceObject);
+    }
+    getDicomConnections(){
+        try{
+            if(_.hasIn(this.newAetModel,"dicomNetworkAE.0.dicomNetworkConnectionReference") && _.hasIn(this.newAetModel,"dicomNetworkAE.0.dicomNetworkConnectionReference")){
+                return this.selctedDeviceObject.dicomNetworkConnection.filter((connection,i)=>{
+                    return this.newAetModel.dicomNetworkAE["0"].dicomNetworkConnectionReference.indexOf(`/dicomNetworkConnection/${i}`) > -1 &&
+                            (
+                                !_.hasIn(connection, "dcmNetworkConnection.dcmProtocol") ||
+                                !connection.dcmNetworkConnection.dcmProtocol ||
+                                connection.dcmNetworkConnection.dcmProtocol === ""
+                            )
+                });
+            }
+        }catch (e) {
+            return [];
+        }
+        return [];
+    }
+
+    testConnection(){
+        if(this.selectedCallingAet && this.newAetModel.dicomNetworkAE[0].dicomAETitle && this.newAetModel.dicomNetworkConnection[0].dicomHostname && this.newAetModel.dicomNetworkConnection[0].dicomPort){
+            this.cfpLoadingBar.start();
+            let data;
+            if(this.activetab === "selectdevice"){
+                if(this.dicomConnectionns.length > 1){
+                    console.log("this.selectedDicomConnection",this.selectedDicomConnection);
+                    if(this.selectedDicomConnection){
+                        data = {
+                            host:this.selectedDicomConnection.dicomHostname,
+                            port:this.selectedDicomConnection.dicomPort
+                        };
+                    }else{
+                        this.mainservice.showError("Multiple DICOM connection selected!");
+                        this.cfpLoadingBar.complete();
+                        return;
+                    }
+                }else{
+                    if(this.dicomConnectionns.length === 0){
+                        this.mainservice.showError("No DICOM connection found!");
+                        this.cfpLoadingBar.complete();
+                        return;
+                    }else{
+                        data = {
+                            host:this.dicomConnectionns[0].dicomHostname,
+                            port:this.dicomConnectionns[0].dicomPort
+                        };
+                    }
+                }
+            }else{
+                data = {
+                    host: this.newAetModel.dicomNetworkConnection[0].dicomHostname,
+                    port: this.newAetModel.dicomNetworkConnection[0].dicomPort
+                }
+            }
+            if(data && data.host && data.port){
+                this.aeListService.echoAe(this.selectedCallingAet, this.newAetModel.dicomNetworkAE[0].dicomAETitle,data).subscribe((response) => {
+                    this.cfpLoadingBar.complete();
+                    let msg = this.aeListService.generateEchoResponseText(response);
+                    this.mainservice.setMessage({
+                        'title': msg.title,
+                        'text': msg.text,
+                        'status': msg.status
+                    });
+                    this.dicomConnectionns = [];
+                }, err => {
+                    this.cfpLoadingBar.complete();
+                    this.httpErrorHandler.handleError(err);
+                });
+            }else{
+                this.mainservice.showError("No connection found");
+            }
+        }else{
+            this.mainservice.setMessage({
+                title:"Error",
+                text:"Parameter is missing, check the parameters Host, port, AE Title and Calling AET!",
+                status:"error"
+            })
+        }
     }
     validAeForm(){
         if (!_.hasIn(this.newAetModel, 'dicomNetworkAE[0].dicomAETitle') || this.newAetModel.dicomNetworkAE[0].dicomAETitle === ''){

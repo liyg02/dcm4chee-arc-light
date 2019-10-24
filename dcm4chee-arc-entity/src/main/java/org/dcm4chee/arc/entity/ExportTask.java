@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -38,11 +38,13 @@
 
 package org.dcm4chee.arc.entity;
 
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.util.StringUtils;
 
 import javax.json.stream.JsonGenerator;
 import javax.persistence.*;
 import java.io.IOException;
+import java.io.Writer;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -56,6 +58,7 @@ import java.util.Date;
 @Table(name = "export_task",
     indexes = {
         @Index(columnList = "device_name"),
+        @Index(columnList = "created_time"),
         @Index(columnList = "updated_time"),
         @Index(columnList = "scheduled_time"),
         @Index(columnList = "exporter_id"),
@@ -76,18 +79,11 @@ import java.util.Date;
                 query = "select o from ExportTask o where o.exporterID=?1 and o.studyInstanceUID=?2 " +
                         "and o.seriesInstanceUID in ('*',?3) and o.sopInstanceUID in ('*',?4) " +
                         "and o.queueMessage is null"),
-        @NamedQuery(name = ExportTask.DELETE_BY_QUEUE_NAME,
-                query = "delete from ExportTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1)"),
-        @NamedQuery(name = ExportTask.DELETE_BY_QUEUE_NAME_AND_STATUS,
-                query = "delete from ExportTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1 and o.status=?2)"),
-        @NamedQuery(name = ExportTask.DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE,
-                query = "delete from ExportTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1 and o.updatedTime<?2)"),
-        @NamedQuery(name = ExportTask.DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE,
-                query = "delete from ExportTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1 and o.status=?2 and o.updatedTime<?3)")
+        @NamedQuery(name = ExportTask.FIND_DEVICE_BY_PK,
+                query = "select o.deviceName from ExportTask o where o.pk=?1"),
+        @NamedQuery(name = ExportTask.FIND_STUDY_EXPORT_AFTER,
+                query = "select o from ExportTask o where o.updatedTime > ?1 and o.exporterID=?2 " +
+                        "and o.studyInstanceUID=?3 and o.seriesInstanceUID='*'")
 })
 public class ExportTask {
 
@@ -99,12 +95,8 @@ public class ExportTask {
             "ExportTask.FindByExporterIDAndStudyIUIDAndSeriesIUID";
     public static final String FIND_BY_EXPORTER_ID_AND_STUDY_IUID_AND_SERIES_IUID_AND_SOP_IUID =
             "ExportTask.FindByExporterIDAndStudyIUIDAndSeriesIUIDAndSopInstanceUID";
-    public static final String DELETE_BY_QUEUE_NAME = "ExportTask.DeleteByQueueName";
-    public static final String DELETE_BY_QUEUE_NAME_AND_STATUS = "ExportTask.DeleteByQueueNameAndStatus";
-    public static final String DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE =
-            "ExportTask.DeleteByQueueNameAndUpdatedBefore";
-    public static final String DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE =
-            "ExportTask.DeleteByQueueNameAndStatusAndUpdatedBefore";
+    public static final String FIND_DEVICE_BY_PK = "ExportTask.FindDeviceByPk";
+    public static final String FIND_STUDY_EXPORT_AFTER = "ExportTask.FindStudyExportAfter";
 
     @Id
     @GeneratedValue(strategy= GenerationType.IDENTITY)
@@ -135,7 +127,7 @@ public class ExportTask {
     private String deviceName;
 
     @Basic(optional = false)
-    @Column(name = "exporter_id", updatable = false)
+    @Column(name = "exporter_id")
     private String exporterID;
 
     @Basic(optional = false)
@@ -261,42 +253,98 @@ public class ExportTask {
         this.queueMessage = queueMessage;
     }
 
-    public void writeAsJSONTo(JsonGenerator gen) throws IOException {
+    public void writeAsJSONTo(JsonGenerator gen, String localAET) {
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        JsonWriter writer = new JsonWriter(gen);
         gen.writeStartObject();
-        gen.write("pk", pk);
-        gen.write("createdTime", df.format(createdTime));
-        gen.write("updatedTime", df.format(updatedTime));
-        gen.write("dicomDeviceName", deviceName);
-        gen.write("ExporterID", exporterID);
-        gen.write("StudyInstanceUID", studyInstanceUID);
-        if (!seriesInstanceUID.equals("*")) {
-            gen.write("SeriesInstanceUID", seriesInstanceUID);
-            if (!sopInstanceUID.equals("*")) {
-                gen.write("SOPInstanceUID", sopInstanceUID);
-            }
-        }
-        if (numberOfInstances != null)
-            gen.write("NumberOfInstances", numberOfInstances);
-        if (modalities != null) {
-            gen.writeStartArray("Modality");
-            for (String modality : getModalities()) {
-                gen.write(modality);
-            }
-            gen.writeEnd();
-        }
+        writer.writeNotNullOrDef("pk", pk, null);
+        writer.writeNotNullOrDef("createdTime", df.format(createdTime), null);
+        writer.writeNotNullOrDef("updatedTime", df.format(updatedTime), null);
+        writer.writeNotNullOrDef("ExporterID", exporterID, null);
+        writer.writeNotNullOrDef("LocalAET", localAET, null);
+        writer.writeNotNullOrDef("StudyInstanceUID", studyInstanceUID, null);
+        writer.writeNotNullOrDef("SeriesInstanceUID", seriesInstanceUID, "*");
+        writer.writeNotNullOrDef("SOPInstanceUID", sopInstanceUID, "*");
+        writer.writeNotNullOrDef("NumberOfInstances", numberOfInstances, null);
+        writer.writeNotEmpty("Modality", getModalities());
         if (queueMessage == null) {
-            gen.write("status", QueueMessage.Status.TO_SCHEDULE.toString());
-            gen.write("scheduledTime", df.format(scheduledTime));
-        } else {
-            queueMessage.writeStatusAsJSONTo(gen, df);
-        }
+            writer.writeNotNullOrDef("dicomDeviceName", deviceName, null);
+            writer.writeNotNullOrDef("status", QueueMessage.Status.TO_SCHEDULE.toString(), null);
+            writer.writeNotNullOrDef("scheduledTime", df.format(scheduledTime), null);
+        } else
+            queueMessage.writeStatusAsJSONTo(writer, df);
         gen.writeEnd();
         gen.flush();
     }
 
+    public static void writeCSVHeader(Writer writer, char delimiter) throws IOException {
+         writer.write("pk" + delimiter +
+                "createdTime" + delimiter +
+                "updatedTime" + delimiter +
+                "ExporterID" + delimiter +
+                "LocalAET" + delimiter +
+                "StudyInstanceUID" + delimiter +
+                "SeriesInstanceUID" + delimiter +
+                "SOPInstanceUID" + delimiter +
+                "NumberOfInstances" + delimiter +
+                "Modality" + delimiter +
+                "JMSMessageID" + delimiter +
+                "queue" + delimiter +
+                "dicomDeviceName" + delimiter +
+                "status" + delimiter +
+                "scheduledTime" + delimiter +
+                "failures" + delimiter +
+                "batchID" + delimiter +
+                "processingStartTime" + delimiter +
+                "processingEndTime" + delimiter +
+                "errorMessage" + delimiter +
+                "outcomeMessage\r\n");
+    }
+
+    public void writeAsCSVTo(Writer writer, char delimiter, String localAET) throws IOException {
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        writer.write(String.valueOf(pk));
+        writer.write(delimiter);
+        writer.write(df.format(createdTime));
+        writer.write(delimiter);
+        writer.write(df.format(updatedTime));
+        writer.write(delimiter);
+        writer.write(exporterID);
+        writer.write(delimiter);
+        writer.write(localAET);
+        writer.write(delimiter);
+        writer.write(studyInstanceUID);
+        writer.write(delimiter);
+        if (!seriesInstanceUID.equals("*"))
+            writer.write(seriesInstanceUID);
+        writer.write(delimiter);
+        if (!sopInstanceUID.equals("*"))
+            writer.write(sopInstanceUID);
+        writer.write(delimiter);
+        if (numberOfInstances != null)
+            writer.write(numberOfInstances.toString());
+        writer.write(delimiter);
+        writer.write(modalities);
+        writer.write(delimiter);
+        if (queueMessage == null) {
+            writer.append(delimiter).append(delimiter).write(deviceName);
+            writer.append(delimiter).write("TO SCHEDULE");
+            writer.append(delimiter).write(df.format(scheduledTime));
+            writer.append(delimiter).append(delimiter).append(delimiter).append(delimiter).append(delimiter).append(delimiter);
+        } else {
+            queueMessage.writeStatusAsCSVTo(writer, df, delimiter);
+        }
+        writer.write('\r');
+        writer.write('\n');
+    }
+
     @Override
     public String toString() {
-        return "ExportTask[pk=" + pk + ", ExporterID=" + exporterID + "]";
+        return "ExportTask[pk=" + pk
+                + ", exporterID=" + exporterID
+                + ", studyUID=" + studyInstanceUID
+                + ", seriesUID=" + seriesInstanceUID
+                + ", objectUID=" + sopInstanceUID
+                + "]";
     }
 }

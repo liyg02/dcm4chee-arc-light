@@ -41,7 +41,7 @@ export class CustomValidatorDirective{
     }
     static min(min: number): ValidatorFn {
         return (control: AbstractControl): {[key: string]: any} => {
-            if (!control.value) {
+            if (!control.value && control.value != "0") {
                 return null;  // don't validate empty values to allow optional controls
             }
             // {'msg': {'requiredMax': min, 'actual': control.value}}
@@ -53,7 +53,7 @@ export class CustomValidatorDirective{
 
     static max(max: number): ValidatorFn {
         return (control: AbstractControl): {[key: string]: any} => {
-            if (!control.value) {
+            if (!control.value && control.value != "0") {
                 return null;  // don't validate empty values to allow optional controls
             }
             // {'msg': {'requiredMax': max, 'actual': control.value}} :
@@ -68,8 +68,6 @@ export class CustomValidatorDirective{
                 return null;  // don't validate empty values to allow optional controls
             }
             let re = new RegExp(patern, 'g');
-            console.log('exec', re.exec(control.value));
-            console.log('exec', (re.exec(control.value) === null));
             // {'msg': {'pattern': patern, 'value': control.value}} :
             return (re.exec(control.value) === null) ?
             {'msg': `The given value is not a valid string!`} :

@@ -41,9 +41,9 @@
 package org.dcm4chee.arc.delete;
 
 import org.dcm4che3.data.Code;
-import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.patient.PatientMgtContext;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 
 import java.util.Date;
 
@@ -60,8 +60,8 @@ public interface DeletionService {
 
     StudyDeleteContext createStudyDeleteContext(Long pk, HttpServletRequestInfo httpServletRequestInfo);
 
-    void deleteStudy(String studyUID, HttpServletRequestInfo httpServletRequestInfo, ApplicationEntity ae)
-            throws StudyNotFoundException, StudyNotEmptyException;
+    void deleteStudy(String studyUID, HttpServletRequestInfo httpServletRequestInfo, ArchiveAEExtension arcAE)
+            throws Exception;
 
-    void deletePatient(PatientMgtContext ctx);
+    void deletePatient(PatientMgtContext ctx, ArchiveAEExtension arcAE);
 }

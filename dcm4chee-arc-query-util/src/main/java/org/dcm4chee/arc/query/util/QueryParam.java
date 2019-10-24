@@ -44,7 +44,10 @@ import org.dcm4che3.data.Issuer;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4chee.arc.conf.*;
-import org.dcm4chee.arc.entity.CodeEntity;
+import org.dcm4chee.arc.entity.ExpirationState;
+import org.dcm4chee.arc.entity.Patient;
+
+import java.util.List;
 
 
 /**
@@ -58,17 +61,23 @@ public class QueryParam {
     private final QueryRetrieveView qrView;
     private boolean combinedDatetimeMatching;
     private boolean fuzzySemanticMatching;
-    private boolean returnEmpty;
-    private boolean expired;
+    private boolean allOfModalitiesInStudy;
     private boolean withoutStudies = true;
     private boolean incomplete;
     private boolean retrieveFailed;
-    private CodeEntity[] showInstancesRejectedByCode = {};
-    private CodeEntity[] hideRejectionNotesWithCode = {};
-    private String sendingApplicationEntityTitleOfSeries;
-    private String studyReceiveDateTime;
+    private boolean storageVerificationFailed;
+    private boolean metadataUpdateFailed;
+    private boolean compressionfailed;
     private String externalRetrieveAET;
     private String externalRetrieveAETNot;
+    private String subscriberAET;
+    private String notSubscribedByAET;
+    private Patient.VerificationStatus patientVerificationStatus;
+    private ExpirationState[] expirationState;
+    private String expirationDate;
+    private List<String> studyStorageIDs;
+    private long minStudySize;
+    private long maxStudySize;
 
     public QueryParam(ApplicationEntity ae) {
         this.arcAE = ae.getAEExtensionNotNull(ArchiveAEExtension.class);
@@ -94,22 +103,6 @@ public class QueryParam {
 
     public boolean isPersonNameComponentOrderInsensitiveMatching() {
         return arcAE.personNameComponentOrderInsensitiveMatching();
-    }
-
-    public CodeEntity[] getShowInstancesRejectedByCode() {
-        return showInstancesRejectedByCode;
-    }
-
-    public void setShowInstancesRejectedByCode(CodeEntity[] showInstancesRejectedByCode) {
-        this.showInstancesRejectedByCode = showInstancesRejectedByCode;
-    }
-
-    public CodeEntity[] getHideRejectionNotesWithCode() {
-        return hideRejectionNotesWithCode;
-    }
-
-    public void setHideRejectionNotesWithCode(CodeEntity[] hideRejectionNotesWithCode) {
-        this.hideRejectionNotesWithCode = hideRejectionNotesWithCode;
     }
 
     public boolean isHideNotRejectedInstances() {
@@ -148,20 +141,12 @@ public class QueryParam {
         this.fuzzySemanticMatching = fuzzySemanticMatching;
     }
 
-    public boolean isReturnEmpty() {
-        return returnEmpty;
+    public boolean isAllOfModalitiesInStudy() {
+        return allOfModalitiesInStudy;
     }
 
-    public void setReturnEmpty(boolean returnEmpty) {
-        this.returnEmpty = returnEmpty;
-    }
-
-    public boolean isExpired() {
-        return expired;
-    }
-
-    public void setExpired(boolean expired) {
-        this.expired = expired;
+    public void setAllOfModalitiesInStudy(boolean allOfModalitiesInStudy) {
+        this.allOfModalitiesInStudy = allOfModalitiesInStudy;
     }
 
     public boolean isWithoutStudies() {
@@ -188,20 +173,28 @@ public class QueryParam {
         this.retrieveFailed = retrieveFailed;
     }
 
-    public String getSendingApplicationEntityTitleOfSeries() {
-        return sendingApplicationEntityTitleOfSeries;
+    public boolean isStorageVerificationFailed() {
+        return storageVerificationFailed;
     }
 
-    public void setSendingApplicationEntityTitleOfSeries(String sendingApplicationEntityTitleOfSeries) {
-        this.sendingApplicationEntityTitleOfSeries = sendingApplicationEntityTitleOfSeries;
+    public void setStorageVerificationFailed(boolean storageVerificationFailed) {
+        this.storageVerificationFailed = storageVerificationFailed;
     }
 
-    public String getStudyReceiveDateTime() {
-        return studyReceiveDateTime;
+    public boolean isMetadataUpdateFailed() {
+        return metadataUpdateFailed;
     }
 
-    public void setStudyReceiveDateTime(String studyReceiveDateTime) {
-        this.studyReceiveDateTime = studyReceiveDateTime;
+    public void setMetadataUpdateFailed(boolean metadataUpdateFailed) {
+        this.metadataUpdateFailed = metadataUpdateFailed;
+    }
+
+    public boolean isCompressionFailed() {
+        return compressionfailed;
+    }
+
+    public void setCompressionFailed(boolean compressionfailed) {
+        this.compressionfailed = compressionfailed;
     }
 
     public String getExternalRetrieveAET() {
@@ -218,5 +211,74 @@ public class QueryParam {
 
     public void setExternalRetrieveAETNot(String externalRetrieveAETNot) {
         this.externalRetrieveAETNot = externalRetrieveAETNot;
+    }
+
+    public String getNotSubscribedByAET() {
+        return notSubscribedByAET;
+    }
+
+    public void setNotSubscribedByAET(String notSubscribedByAET) {
+        this.notSubscribedByAET = notSubscribedByAET;
+    }
+
+    public Patient.VerificationStatus getPatientVerificationStatus() {
+        return patientVerificationStatus;
+    }
+
+    public void setPatientVerificationStatus(Patient.VerificationStatus patientVerificationStatus) {
+        this.patientVerificationStatus = patientVerificationStatus;
+    }
+
+    public String getExpirationDate() {
+        return expirationDate;
+    }
+
+    public void setExpirationDate(String expirationDate) {
+        this.expirationDate = expirationDate;
+    }
+
+    public List<String> getStudyStorageIDs() {
+        return studyStorageIDs;
+    }
+
+    public void setStudyStorageIDs(List<String> studyStorageIDs) {
+        this.studyStorageIDs = studyStorageIDs;
+    }
+
+    public boolean noMatches() {
+        return studyStorageIDs != null && studyStorageIDs.isEmpty();
+    }
+
+    public long getMinStudySize() {
+        return minStudySize;
+    }
+
+    public long getMaxStudySize() {
+        return maxStudySize;
+    }
+
+    public void setStudySizeRange(String studySizeInKB) {
+        if (studySizeInKB == null || studySizeInKB.isEmpty())
+            return;
+
+        int delim = studySizeInKB.indexOf('-');
+        if (delim == -1) {
+            long size = Long.parseLong(studySizeInKB) * 1000;
+            minStudySize = size;
+            maxStudySize = size + 999;
+        } else {
+            if (delim > 0)
+                minStudySize =  Long.parseLong(studySizeInKB.substring(0, delim)) * 1000;
+            if (delim < studySizeInKB.length() - 1)
+                maxStudySize =  (Long.parseLong(studySizeInKB.substring(delim+1)) * 1000) + 999;
+        }
+    }
+
+    public ExpirationState[] getExpirationState() {
+        return expirationState;
+    }
+
+    public void setExpirationState(ExpirationState... expirationState) {
+        this.expirationState = expirationState;
     }
 }

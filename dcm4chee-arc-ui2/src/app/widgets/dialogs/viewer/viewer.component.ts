@@ -1,9 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 import {j4care} from "../../../helpers/j4care.service";
 import {AppService} from "../../../app.service";
-import {MdDialogRef} from "@angular/material";
+import {MatDialogRef} from "@angular/material";
 import {J4careHttpService} from "../../../helpers/j4care-http.service";
 import {HttpErrorHandler} from "../../../helpers/http-error-handler";
+import {KeycloakService} from "../../../helpers/keycloak-service/keycloak.service";
 
 @Component({
   selector: 'app-viewer',
@@ -20,11 +21,12 @@ export class ViewerComponent implements OnInit {
     xhr = new XMLHttpRequest();
     showLoader;
     constructor(
-        public dialogRef: MdDialogRef<ViewerComponent>,
+        public dialogRef: MatDialogRef<ViewerComponent>,
         private j4care:j4care,
         private mainservice:AppService,
         private $http:J4careHttpService,
-        public httpErrorHandler:HttpErrorHandler
+        public httpErrorHandler:HttpErrorHandler,
+        private _keycloakService: KeycloakService
     ) { }
 
     ngOnInit() {
@@ -37,14 +39,9 @@ export class ViewerComponent implements OnInit {
     loadImage(){
         let token;
         let $this = this;
-        this.$http.refreshToken().subscribe((response)=>{
+        this._keycloakService.getToken().subscribe((response)=>{
             if(!this.mainservice.global.notSecure){
-                if(response && response.length != 0){
-                    $this.$http.resetAuthenticationInfo(response);
-                    token = response['token'];
-                }else{
-                    token = this.mainservice.global.authentication.token;
-                }
+                token = response.token;
             }
             this.showLoader = true;
             let url = this._url;

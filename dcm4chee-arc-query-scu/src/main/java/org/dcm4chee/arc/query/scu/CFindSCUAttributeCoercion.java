@@ -83,6 +83,11 @@ public class CFindSCUAttributeCoercion implements AttributesCoercion {
     }
 
     @Override
+    public String remapUID(String uid) {
+        return uid;
+    }
+
+    @Override
     public void coerce(Attributes attrs, Attributes modified) {
         String studyIUID = attrs.getString(Tag.StudyInstanceUID);
         Attributes newAttrs = queryStudy(studyIUID);
@@ -103,8 +108,7 @@ public class CFindSCUAttributeCoercion implements AttributesCoercion {
         Attributes newAttrs = null;
         try {
             ArchiveDeviceExtension arcdev = localAE.getDevice().getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
-            List<Attributes> matches = cfindSCU.find(localAE, leadingCFindSCP, Priority.NORMAL,
-                    QueryRetrieveLevel2.STUDY, studyIUID, null, null,
+            List<Attributes> matches = cfindSCU.findStudy(localAE, leadingCFindSCP, Priority.NORMAL, studyIUID,
                     arcdev.returnKeysForLeadingCFindSCP(leadingCFindSCP));
             if (!matches.isEmpty())
                 newAttrs = matches.get(0);

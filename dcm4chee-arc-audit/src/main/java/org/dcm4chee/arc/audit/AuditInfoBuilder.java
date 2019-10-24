@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2018
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -43,8 +43,10 @@ package org.dcm4chee.arc.audit;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.IDWithIssuer;
 import org.dcm4che3.data.Tag;
+import org.dcm4chee.arc.ConnectionEvent;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.ShowPatientInfo;
+import org.dcm4chee.arc.entity.Patient;
 
 /**
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
@@ -67,16 +69,29 @@ class AuditInfoBuilder {
     final String mppsUID;
     final String queryPOID;
     final String queryString;
-    final String destAET;
+    final String destUserID;
     final String destNapID;
-    final String moveAET;
+    final String moveUserID;
     final String warning;
     final boolean failedIUIDShow;
     final String submissionSetUID;
     final boolean isExport;
-    final boolean isExternalHL7;
-    final String hl7SenderExternal;
-    final String hl7ReceiverExternal;
+    final boolean isOutgoingHL7;
+    final String outgoingHL7Sender;
+    final String outgoingHL7Receiver;
+    final String filters;
+    final int count;
+    final String queueMsg;
+    final String taskPOID;
+    final String errorCode;
+    final String patMismatchCode;
+    final ConnectionEvent.Type connType;
+    final Patient.VerificationStatus patVerificationStatus;
+    final String pdqServiceURI;
+    final String impaxEndpoint;
+    final int failed;
+    final String expirationDate;
+    final String studyAccessCtrlID;
 
     static class Builder {
         private String callingHost;
@@ -94,16 +109,29 @@ class AuditInfoBuilder {
         private String mppsUID;
         private String queryPOID;
         private String queryString;
-        private String destAET;
+        private String destUserID;
         private String destNapID;
-        private String moveAET;
+        private String moveUserID;
         private String warning;
         private boolean failedIUIDShow;
         private String submissionSetUID;
         private boolean isExport;
-        private boolean isExternalHL7;
-        private String hl7SenderExternal;
-        private String hl7ReceiverExternal;
+        private boolean isOutgoingHL7;
+        private String outgoingHL7Sender;
+        private String outgoingHL7Receiver;
+        private String filters;
+        private int count;
+        private String queueMsg;
+        private String taskPOID;
+        private String errorCode;
+        private String patMismatchCode;
+        private ConnectionEvent.Type connType;
+        private Patient.VerificationStatus patVerificationStatus;
+        private String pdqServiceURI;
+        private String impaxEndpoint;
+        private int failed;
+        private String expirationDate;
+        private String studyAccessCtrlID;
 
         Builder callingHost(String val) {
             callingHost = val;
@@ -121,20 +149,39 @@ class AuditInfoBuilder {
             calledHost = val;
             return this;
         }
-        Builder studyUID(String val) {
+        Builder pIDAndName(Attributes attr, ArchiveDeviceExtension arcDev) {
+            pID = arcDev.auditUnknownPatientID();
+            if (attr != null) {
+                pName = toPatName(attr.getString(Tag.PatientName), arcDev);
+                IDWithIssuer pidWithIssuer = IDWithIssuer.pidOf(attr);
+                if (pidWithIssuer != null)
+                    pID = toPID(pidWithIssuer, arcDev);
+            }
+            return this;
+        }
+        Builder patID(String pid, ArchiveDeviceExtension arcDev) {
+            pID = pid == null ? arcDev.auditUnknownPatientID() : toPID(new IDWithIssuer(pid), arcDev);
+            return this;
+        }
+        Builder patName(String patName, ArchiveDeviceExtension arcDev) {
+            pName = toPatName(patName, arcDev);
+            return this;
+        }
+        Builder studyUIDAccNumDate(Attributes attrs, ArchiveDeviceExtension arcDev) {
+            studyUID = arcDev.auditUnknownStudyInstanceUID();
+            if (attrs != null) {
+                studyUID = attrs.getString(Tag.StudyInstanceUID);
+                accNum = attrs.getString(Tag.AccessionNumber);
+                studyDate = attrs.getString(Tag.StudyDate);
+            }
+            return this;
+        }
+        Builder studyIUID(String val) {
             studyUID = val;
             return this;
         }
-        Builder pIDAndName(Attributes attr, ArchiveDeviceExtension arcDev) {
-            String[] val = toPIDAndName(attr, arcDev);
-            pID = val[0];
-            pName = val[1];
-            return this;
-        }
-        Builder studyUIDAccNumDate(Attributes attrs) {
-            studyUID = attrs.getString(Tag.StudyInstanceUID);
-            accNum = attrs.getString(Tag.AccessionNumber);
-            studyDate = attrs.getString(Tag.StudyDate);
+        Builder accNum(String val) {
+            accNum = val;
             return this;
         }
         Builder outcome(String val) {
@@ -161,16 +208,16 @@ class AuditInfoBuilder {
             queryString = val;
             return this;
         }
-        Builder destAET(String val) {
-            destAET = val;
+        Builder destUserID(String val) {
+            destUserID = val;
             return this;
         }
         Builder destNapID(String val) {
             destNapID = val;
             return this;
         }
-        Builder moveAET(String val) {
-            moveAET = val;
+        Builder moveUserID(String val) {
+            moveUserID = val;
             return this;
         }
         Builder warning(String val) {
@@ -189,16 +236,68 @@ class AuditInfoBuilder {
             isExport = true;
             return this;
         }
-        Builder isExternalHL7() {
-            isExternalHL7 = true;
+        Builder isOutgoingHL7() {
+            isOutgoingHL7 = true;
             return this;
         }
-        Builder hl7SenderExternal(String val) {
-            hl7SenderExternal = val;
+        Builder outgoingHL7Sender(String val) {
+            outgoingHL7Sender = val;
             return this;
         }
-        Builder hl7ReceiverExternal(String val) {
-            hl7ReceiverExternal = val;
+        Builder outgoingHL7Receiver(String val) {
+            outgoingHL7Receiver = val;
+            return this;
+        }
+        Builder filters(String val) {
+            filters = val;
+            return this;
+        }
+        Builder count(int val) {
+            count = val;
+            return this;
+        }
+        Builder queueMsg(String val) {
+            queueMsg = val;
+            return this;
+        }
+        Builder taskPOID(String val) {
+            taskPOID = val;
+            return this;
+        }
+        Builder errorCode(int val) {
+            errorCode = errorCodeAsString(val);
+            return this;
+        }
+        Builder patMismatchCode(String val) {
+            patMismatchCode = val;
+            return this;
+        }
+        Builder connType(ConnectionEvent.Type val) {
+            connType = val;
+            return this;
+        }
+        Builder patVerificationStatus(Patient.VerificationStatus val) {
+            patVerificationStatus = val;
+            return this;
+        }
+        Builder pdqServiceURI(String val) {
+            pdqServiceURI = val;
+            return this;
+        }
+        Builder impaxEndpoint(String val) {
+            impaxEndpoint = val;
+            return this;
+        }
+        Builder failed(int val) {
+            failed = val;
+            return this;
+        }
+        Builder expirationDate(String val) {
+            expirationDate = val;
+            return this;
+        }
+        Builder studyAccessCtrlID(String val) {
+            studyAccessCtrlID = val;
             return this;
         }
         AuditInfoBuilder build() {
@@ -222,34 +321,45 @@ class AuditInfoBuilder {
         mppsUID = builder.mppsUID;
         queryPOID = builder.queryPOID;
         queryString = builder.queryString;
-        destAET = builder.destAET;
+        destUserID = builder.destUserID;
         destNapID = builder.destNapID;
-        moveAET = builder.moveAET;
+        moveUserID = builder.moveUserID;
         warning = builder.warning;
         failedIUIDShow = builder.failedIUIDShow;
         submissionSetUID = builder.submissionSetUID;
         isExport = builder.isExport;
-        isExternalHL7 = builder.isExternalHL7;
-        hl7SenderExternal = builder.hl7SenderExternal;
-        hl7ReceiverExternal = builder.hl7ReceiverExternal;
+        isOutgoingHL7 = builder.isOutgoingHL7;
+        outgoingHL7Sender = builder.outgoingHL7Sender;
+        outgoingHL7Receiver = builder.outgoingHL7Receiver;
+        filters = builder.filters;
+        count = builder.count;
+        queueMsg = builder.queueMsg;
+        taskPOID = builder.taskPOID;
+        errorCode = builder.errorCode;
+        patMismatchCode = builder.patMismatchCode;
+        connType = builder.connType;
+        patVerificationStatus = builder.patVerificationStatus;
+        pdqServiceURI = builder.pdqServiceURI;
+        impaxEndpoint = builder.impaxEndpoint;
+        failed = builder.failed;
+        expirationDate = builder.expirationDate;
+        studyAccessCtrlID = builder.studyAccessCtrlID;
     }
 
-    private static String[] toPIDAndName(Attributes attr, ArchiveDeviceExtension arcDev) {
-        ShowPatientInfo showPatientInfo = arcDev.showPatientInfoInAuditLog();
-        String[] pInfo = new String[2];
-        pInfo[0] = arcDev.auditUnknownPatientID();
-        if (attr != null) {
-            IDWithIssuer pidWithIssuer = IDWithIssuer.pidOf(attr);
-            String pName = attr.getString(Tag.PatientName);
-            pInfo[0] = pidWithIssuer != null
-                    ? showPatientInfo == ShowPatientInfo.HASH_NAME_AND_ID
-                    ? String.valueOf(pidWithIssuer.hashCode())
-                    : pidWithIssuer.toString()
-                    : arcDev.auditUnknownPatientID();
-            pInfo[1] = pName != null && showPatientInfo != ShowPatientInfo.PLAIN_TEXT
-                    ? String.valueOf(pName.hashCode())
-                    : pName;
-        }
-        return pInfo;
+    private static String toPID(IDWithIssuer pidWithIssuer, ArchiveDeviceExtension arcDev) {
+        return arcDev.showPatientInfoInAuditLog() == ShowPatientInfo.HASH_NAME_AND_ID
+                ? String.valueOf(pidWithIssuer.hashCode())
+                : pidWithIssuer.toString();
+    }
+
+    private static String toPatName(String pName, ArchiveDeviceExtension arcDev) {
+        return pName != null && arcDev.showPatientInfoInAuditLog() != ShowPatientInfo.PLAIN_TEXT
+                ? String.valueOf(pName.hashCode())
+                : pName;
+    }
+
+    private static String errorCodeAsString(int errorCode) {
+        String errorCodeAsString = Integer.toHexString(errorCode).toUpperCase();
+        return errorCodeAsString.length() == 3 ? "x0" + errorCodeAsString : errorCodeAsString;
     }
 }

@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -58,8 +58,8 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -84,29 +84,51 @@ public class QueryAttributeFilter {
     @NoCache
     @Path("/{Entity}")
     @Produces("application/json")
-    public StreamingOutput getAttributeFilter(@PathParam("Entity") String entityName) throws Exception {
-        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+    public Response getAttributeFilter(@PathParam("Entity") String entityName) {
+        logRequest();
         final Entity entity;
         try {
             entity = Entity.valueOf(entityName);
-        } catch (IllegalArgumentException e) {
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
-        }
-
-        final AttributeFilter filter = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class)
-                .getAttributeFilter(entity);
-        if (filter == null)
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
-
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+            final AttributeFilter filter = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class)
+                    .getAttributeFilter(entity);
+            return Response.ok((StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JsonWriter writer = new JsonWriter(gen);
                 jsonConf.getJsonConfigurationExtension(JsonArchiveConfiguration.class)
                         .writeAttributeFilter(writer, entity, filter);
                 gen.flush();
-            }
-        };
+            }).build();
+        } catch (IllegalArgumentException e) {
+            return errResponse(e.getMessage(), Response.Status.BAD_REQUEST);
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

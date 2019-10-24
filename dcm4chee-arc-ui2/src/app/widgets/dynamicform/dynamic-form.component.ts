@@ -2,7 +2,7 @@
  * Created by shefki on 9/20/16.
  */
 import {Component, OnInit, Input, EventEmitter} from '@angular/core';
-import {FormGroup} from '@angular/forms';
+import {FormBuilder, FormGroup} from '@angular/forms';
 import {FormService} from '../../helpers/form/form.service';
 import {FormElement} from '../../helpers/form/form-element';
 import {Output} from '@angular/core';
@@ -10,6 +10,9 @@ import {OrderByPipe} from '../../pipes/order-by.pipe';
 import * as _ from 'lodash';
 import {SearchPipe} from '../../pipes/search.pipe';
 import {AppService} from "../../app.service";
+import {DeviceConfiguratorComponent} from "../../configuration/device-configurator/device-configurator.component";
+import {ActivatedRoute} from "@angular/router";
+import {KeycloakService} from "../../helpers/keycloak-service/keycloak.service";
 
 @Component({
     selector: 'dynamic-form',
@@ -19,6 +22,9 @@ import {AppService} from "../../app.service";
 export class DynamicFormComponent implements OnInit{
     @Input() formelements: FormElement<any>[] = [];
     @Input() model;
+    @Input() dontShowSearch;
+    @Input() dontGroup;
+    @Input() readOnlyMode;
     @Output() submitFunction = new EventEmitter<any>();
     form: FormGroup;
     payLoad = '';
@@ -27,7 +33,13 @@ export class DynamicFormComponent implements OnInit{
     pressedKey = [];
     listStateBeforeSearch: FormElement<any>[];
     filteredFormElements: FormElement<any>[];
-    constructor(private formservice: FormService, private mainservice:AppService){}
+    exceptionValidation = false;
+    constructor(
+        private formservice: FormService,
+        private mainservice:AppService,
+        private route: ActivatedRoute,
+        private fb: FormBuilder
+    ){}
     // submi(){
     //     console.log("in submitfunctiondynamicform");
     //     this.submitFunction.emmit("test");
@@ -37,7 +49,7 @@ export class DynamicFormComponent implements OnInit{
     }
     initCheck(retries){
         let $this = this;
-        if(_.hasIn(this.mainservice,"global.authentication") || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
+        if((KeycloakService.keycloakAuth && KeycloakService.keycloakAuth.authenticated) || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
             this.init();
         }else{
             if (retries){
@@ -51,44 +63,68 @@ export class DynamicFormComponent implements OnInit{
     }
     init(): void {
         console.log('formelements', this.formelements);
-        let orderedGroup: any = new OrderByPipe().transform(this.formelements, 'order');
+        let orderedGroupClone:any;
+        let orderedGroup: any;
         let orderValue = 0;
         let order = 0;
+        let diffState = 0;
+        let materialIconName;
+        orderedGroup = new OrderByPipe().transform(this.formelements, 'order');
+        orderedGroupClone = _.cloneDeep(orderedGroup);
+        orderedGroupClone = new OrderByPipe().transform(orderedGroupClone, 'order');
         // this.filteredFormElements = _.cloneDeep(this.formelements);
+        // let orderedGroupClone =  new OrderByPipe().transform(this.formelements, 'order');
         _.forEach(orderedGroup, (m, i) => {
             if (orderValue != parseInt(m.order)){
                 let title = '';
                 if (1 <= m.order && m.order < 3){
                     title = 'Extensions';
+                    materialIconName = 'extension';
                     order = 0;
                 }else{
                     if (3 <= m.order && m.order  < 4) {
                         title = 'Child Objects';
+                        materialIconName = 'subdirectory_arrow_right';
                         order = 2;
                     }else{
                         title = 'Attributes';
+                        materialIconName = 'list';
                         order = 4;
                     }
                 }
-                orderedGroup.splice(i, 0, {
+                orderedGroupClone.splice(i+diffState, 0, {
                     controlType: 'togglebutton',
                     title: title,
                     orderId: order,
-                    order: order
+                    order: order,
+                    materialIconName: materialIconName
                 });
+                diffState++;
             }
             orderValue = parseInt(m.order);
         });
-        this.formelements = orderedGroup;
-        let formGroup: any = this.formservice.toFormGroup(orderedGroup);
+        this.formelements = orderedGroupClone;
+        let formGroup: FormGroup = this.formservice.toFormGroup(orderedGroupClone);
         this.form = formGroup;
+        console.log("hr",window.location);
         console.log('after convert form', this.form);
         //Test setting some values
         console.log('this.model=', this.model);
+        this.route.params
+            .subscribe((params) => {
+                console.log("params",params);
+                console.log("this.model",this.model);
+                if(params.devicereff === "dcmDevice.dcmArchiveDevice" && (!this.model || (this.model && !_.hasIn(this.model,"dcmDevice.dcmArchiveDevice")))){
+                    // console.log("this.service.device",this.service.device);
+                    // _.set(this.service.device,"dcmDevice.dcmArchiveDevice",{});
+                    this.exceptionValidation = true;
+                }
+            });
 /*        if(this.model){
             this.form.patchValue(this.model);
         }*/
 
+/*
         this.form.valueChanges
             .debounceTime(500)
             .distinctUntilChanged()
@@ -96,6 +132,7 @@ export class DynamicFormComponent implements OnInit{
                 console.log('insubscribe changes fe', fe);
                 console.log('form', this.form);
             });
+*/
 
         console.log('form', this.form);
     }

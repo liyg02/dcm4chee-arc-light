@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -44,7 +44,9 @@ import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.soundex.FuzzyStr;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.AttributeFilter;
@@ -54,6 +56,7 @@ import org.dcm4chee.arc.entity.Study;
 import org.dcm4chee.arc.study.StudyMgtContext;
 
 import javax.servlet.http.HttpServletRequest;
+import java.net.Socket;
 import java.time.LocalDate;
 
 /**
@@ -64,8 +67,10 @@ import java.time.LocalDate;
 public class StudyMgtContextImpl implements StudyMgtContext {
     private final AttributeFilter studyAttributeFilter;
     private final FuzzyStr fuzzyStr;
-    private final HttpServletRequest httpRequest;
-    private final ArchiveAEExtension arcAE;
+    private HttpServletRequest httpRequest;
+    private ArchiveAEExtension arcAE;
+    private Socket socket;
+    private UnparsedHL7Message msg;
     private Study study;
     private Attributes attributes;
     private Patient patient;
@@ -74,13 +79,35 @@ public class StudyMgtContextImpl implements StudyMgtContext {
     private Exception exception;
     private LocalDate expirationDate;
     private String seriesInstanceUID;
+    private String expirationExporterID;
+    private boolean freezeExpirationDate;
+    private boolean unfreezeExpirationDate;
+    private String accessControlID;
 
-    StudyMgtContextImpl(Device device, HttpServletRequest httpRequest, ApplicationEntity ae) {
+    StudyMgtContextImpl(Device device) {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        this.arcAE = ae.getAEExtension(ArchiveAEExtension.class);
         this.studyAttributeFilter = arcDev.getAttributeFilter(Entity.Study);
         this.fuzzyStr = arcDev.getFuzzyStr();
+    }
+
+    StudyMgtContextImpl withApplicationEntity(ApplicationEntity ae) {
+        this.arcAE = ae.getAEExtension(ArchiveAEExtension.class);
+        return this;
+    }
+
+    StudyMgtContextImpl withHttpRequest(HttpServletRequest httpRequest) {
         this.httpRequest = httpRequest;
+        return this;
+    }
+
+    StudyMgtContextImpl withSocket(Socket socket) {
+        this.socket = socket;
+        return this;
+    }
+
+    StudyMgtContextImpl withUnparsedHL7Message(UnparsedHL7Message msg) {
+        this.msg = msg;
+        return this;
     }
 
     public AttributeFilter getStudyAttributeFilter() {
@@ -98,8 +125,16 @@ public class StudyMgtContextImpl implements StudyMgtContext {
     }
 
     @Override
+    public UnparsedHL7Message getUnparsedHL7Message() {
+        return msg;
+    }
+
+    @Override
     public String getRemoteHostName() {
-        return httpRequest.getRemoteHost();
+        return httpRequest != null
+                ? httpRequest.getRemoteHost()
+                : socket != null
+                ? ReverseDNS.hostNameOf(socket.getInetAddress()) : null;
     }
 
     @Override
@@ -189,7 +224,47 @@ public class StudyMgtContextImpl implements StudyMgtContext {
     }
 
     @Override
-    public void setSeriesInstanceUID(String studyUID) {
-        this.seriesInstanceUID = studyUID;
+    public void setSeriesInstanceUID(String seriesUID) {
+        this.seriesInstanceUID = seriesUID;
+    }
+
+    @Override
+    public String getExpirationExporterID() {
+        return expirationExporterID;
+    }
+
+    @Override
+    public void setExpirationExporterID(String expirationExporterID) {
+        this.expirationExporterID = expirationExporterID;
+    }
+
+    @Override
+    public boolean isFreezeExpirationDate() {
+        return freezeExpirationDate;
+    }
+
+    @Override
+    public void setFreezeExpirationDate(boolean freezeExpirationDate) {
+        this.freezeExpirationDate = freezeExpirationDate;
+    }
+
+    @Override
+    public boolean isUnfreezeExpirationDate() {
+        return unfreezeExpirationDate;
+    }
+
+    @Override
+    public void setUnfreezeExpirationDate(boolean unfreezeExpirationDate) {
+        this.unfreezeExpirationDate = unfreezeExpirationDate;
+    }
+
+    @Override
+    public String getAccessControlID() {
+        return accessControlID;
+    }
+
+    @Override
+    public void setAccessControlID(String accessControlID) {
+        this.accessControlID = accessControlID;
     }
 }

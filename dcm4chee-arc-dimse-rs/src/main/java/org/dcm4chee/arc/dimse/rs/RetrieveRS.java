@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -38,13 +38,19 @@
 
 package org.dcm4chee.arc.dimse.rs;
 
+import org.dcm4che3.conf.api.ConfigurationException;
+import org.dcm4che3.conf.api.IApplicationEntityCache;
+import org.dcm4che3.conf.api.IDeviceCache;
 import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4che3.util.TagUtils;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
 import org.dcm4chee.arc.retrieve.ExternalRetrieveContext;
 import org.dcm4chee.arc.retrieve.mgt.RetrieveManager;
@@ -64,10 +70,12 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jul 2017
  */
 @RequestScoped
@@ -83,6 +91,12 @@ public class RetrieveRS {
     private Device device;
 
     @Inject
+    private IApplicationEntityCache aeCache;
+
+    @Inject
+    private IDeviceCache deviceCache;
+
+    @Inject
     private Event<ExternalRetrieveContext> instancesRetrievedEvent;
 
     @PathParam("AETitle")
@@ -95,8 +109,28 @@ public class RetrieveRS {
     @Pattern(regexp = "0|1|2")
     private String priority;
 
-    @QueryParam("queue")
-    private boolean queue;
+    @QueryParam("dcmQueueName")
+    @Pattern(regexp =
+            "Retrieve1|" +
+            "Retrieve2|" +
+            "Retrieve3|" +
+            "Retrieve4|" +
+            "Retrieve5|" +
+            "Retrieve6|" +
+            "Retrieve7|" +
+            "Retrieve8|" +
+            "Retrieve9|" +
+            "Retrieve10|" +
+            "Retrieve11|" +
+            "Retrieve12|" +
+            "Retrieve13")
+    private String queueName;
+
+    @QueryParam("batchID")
+    private String batchID;
+
+    @QueryParam("dicomDeviceName")
+    private String deviceName;
 
     @Inject
     private CMoveSCU moveSCU;
@@ -114,7 +148,7 @@ public class RetrieveRS {
     @Produces("application/json")
     public Response exportStudy(
             @PathParam("StudyUID") String studyUID,
-            @PathParam("DestinationAET") String destinationAET) throws Exception {
+            @PathParam("DestinationAET") String destinationAET) {
         return export(destinationAET, studyUID);
     }
 
@@ -124,7 +158,7 @@ public class RetrieveRS {
     public Response exportSeries(
             @PathParam("StudyUID") String studyUID,
             @PathParam("SeriesUID") String seriesUID,
-            @PathParam("DestinationAET") String destinationAET) throws Exception {
+            @PathParam("DestinationAET") String destinationAET) {
         return export(destinationAET, studyUID, seriesUID);
     }
 
@@ -135,8 +169,38 @@ public class RetrieveRS {
             @PathParam("StudyUID") String studyUID,
             @PathParam("SeriesUID") String seriesUID,
             @PathParam("ObjectUID") String objectUID,
-            @PathParam("DestinationAET") String destinationAET) throws Exception {
+            @PathParam("DestinationAET") String destinationAET) {
         return export(destinationAET, studyUID, seriesUID, objectUID);
+    }
+
+    @POST
+    @Path("/studies/{StudyUID}/mark4retrieve/dicom:{DestinationAET}")
+    @Produces("application/json")
+    public Response markStudy4Retrieve(
+            @PathParam("StudyUID") String studyUID,
+            @PathParam("DestinationAET") String destinationAET) {
+        return createRetrieveTask(destinationAET, studyUID);
+    }
+
+    @POST
+    @Path("/studies/{StudyUID}/series/{SeriesUID}/mark4retrieve/dicom:{DestinationAET}")
+    @Produces("application/json")
+    public Response markSeries4Retrieve(
+            @PathParam("StudyUID") String studyUID,
+            @PathParam("SeriesUID") String seriesUID,
+            @PathParam("DestinationAET") String destinationAET) {
+        return createRetrieveTask(destinationAET, studyUID, seriesUID);
+    }
+
+    @POST
+    @Path("/studies/{StudyUID}/series/{SeriesUID}/instances/{ObjectUID}/mark4retrieve/dicom:{DestinationAET}")
+    @Produces("application/json")
+    public Response markInstance4Retrieve(
+            @PathParam("StudyUID") String studyUID,
+            @PathParam("SeriesUID") String seriesUID,
+            @PathParam("ObjectUID") String objectUID,
+            @PathParam("DestinationAET") String destinationAET) {
+        return createRetrieveTask(destinationAET, studyUID, seriesUID, objectUID);
     }
 
     private int priority() {
@@ -147,31 +211,78 @@ public class RetrieveRS {
         return s != null ? Integer.parseInt(s) : defval;
     }
 
-    private Response export(String destAET, String... uids) throws Exception {
-        LOG.info("Process POST {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        Attributes keys = toKeys(uids);
-        return queue ? queueExport(destAET, keys) : export(destAET, keys);
+    private Response export(String destAET, String... uids) {
+        logRequest();
+        if (uids[0].startsWith("csv"))
+            return errResponse("Missing Content-type Header in 'Retrieve Studies specified in CSV from external archive' service " +
+                            "causes invocation of 'Retrieve Study from external archive' service.",
+                    Response.Status.BAD_REQUEST);
+
+        try {
+            validate();
+            Attributes keys = toKeys(uids);
+            return queueName != null
+                    ? queueExport(destAET, toKeys(uids))
+                    : export(destAET, keys);
+        } catch (IllegalStateException | ConfigurationException e) {
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
+        } catch (IllegalArgumentException e) {
+            return errResponse(e.getMessage(), Response.Status.BAD_REQUEST);
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private Response createRetrieveTask(String destAET, String... uids) {
+        logRequest();
+        if (queueName == null)
+            queueName = "Retrieve1";
+
+        try {
+            validate();
+            Attributes keys = toKeys(uids);
+            retrieveManager.createRetrieveTask(createExtRetrieveCtx(destAET, keys));
+        } catch (IllegalStateException | IllegalArgumentException | ConfigurationException e) {
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
+        return Response.noContent().build();
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
     }
 
     private Response queueExport(String destAET, Attributes keys) {
         try {
-            retrieveManager.scheduleRetrieveTask(priority(), toInstancesRetrieved(destAET, keys));
+            retrieveManager.scheduleRetrieveTask(
+                    priority(), createExtRetrieveCtx(destAET, keys), null, 0L);
         } catch (QueueSizeLimitExceededException e) {
-            return Response.status(Response.Status.SERVICE_UNAVAILABLE).build();
+            return errResponse(e.getMessage(), Response.Status.SERVICE_UNAVAILABLE);
         }
         return Response.accepted().build();
     }
 
-    private Response export(String destAET, Attributes keys) throws Exception {
-        ApplicationEntity localAE = getApplicationEntity();
+    private Response export(String destAET, Attributes keys)
+            throws Exception {
+        ApplicationEntity localAE = device.getApplicationEntity(aet, true);
+        if (localAE == null || !localAE.isInstalled())
+            throw new ConfigurationException("No such Application Entity: " + aet);
+
         Association as = moveSCU.openAssociation(localAE, externalAET);
         try {
             final DimseRSP rsp = moveSCU.cmove(as, priority(), destAET, keys);
             while (rsp.next());
             Attributes cmd = rsp.getCommand();
             instancesRetrievedEvent.fire(
-                    toInstancesRetrieved(destAET, keys)
-                    .setRemoteHostName(as.getSocket().getInetAddress().getHostName())
+                    createExtRetrieveCtx(destAET, keys)
+                    .setRemoteHostName(ReverseDNS.hostNameOf(as.getSocket().getInetAddress()))
                     .setResponse(cmd));
             return status(cmd).entity(entity(cmd)).build();
         } finally {
@@ -183,16 +294,57 @@ public class RetrieveRS {
         }
     }
 
-    private ExternalRetrieveContext toInstancesRetrieved(String destAET, Attributes keys) {
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private void validate() throws ConfigurationException {
+        aeCache.findApplicationEntity(externalAET);
+        if (deviceName != null) {
+            Device device = deviceCache.findDevice(deviceName);
+            ApplicationEntity ae = device.getApplicationEntity(aet, true);
+            if (ae == null || !ae.isInstalled())
+                throw new ConfigurationException("No such Application Entity: " + aet + " found in device: " + deviceName);
+
+            validateQueue(device);
+        } else
+            validateQueue(device);
+    }
+
+    private void validateQueue(Device device) {
+        if (queueName == null)
+            return;
+        
+        device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).getQueueDescriptorNotNull(queueName);
+    }
+
+    private ExternalRetrieveContext createExtRetrieveCtx(String destAET, Attributes keys) {
         return new ExternalRetrieveContext()
+                .setDeviceName(deviceName != null ? deviceName : device.getDeviceName())
+                .setQueueName(queueName)
+                .setBatchID(batchID)
                 .setLocalAET(aet)
                 .setRemoteAET(externalAET)
                 .setDestinationAET(destAET)
-                .setRequestInfo(request)
+                .setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(request))
                 .setKeys(keys);
     }
 
-    private static Attributes toKeys(String[] iuids) {
+    private Attributes toKeys(String[] iuids) {
         int n = iuids.length;
         Attributes keys = new Attributes(n + 1);
         keys.setString(Tag.QueryRetrieveLevel, VR.CS, QueryRetrieveLevel2.values()[n].name());
@@ -237,9 +389,7 @@ public class RetrieveRS {
     }
 
     private Object entity(Attributes cmd) {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        return (StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JsonWriter writer = new JsonWriter(gen);
                 gen.writeStartObject();
@@ -250,17 +400,7 @@ public class RetrieveRS {
                 writer.writeNotDef("failed", cmd.getInt(Tag.NumberOfFailedSuboperations, -1), -1);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
-    }
-
-    private ApplicationEntity getApplicationEntity() {
-        ApplicationEntity ae = device.getApplicationEntity(aet, true);
-        if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
-                    "No such Application Entity: " + aet,
-                    Response.Status.NOT_FOUND);
-        return ae;
     }
 
 }

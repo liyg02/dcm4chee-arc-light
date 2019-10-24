@@ -40,7 +40,6 @@
 
 package org.dcm4chee.arc.stgcmt.impl;
 
-import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.Scheduler;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Duration;
@@ -61,9 +60,6 @@ import java.util.Date;
 public class PurgeStgCmtScheduler extends Scheduler {
 
     private static final Logger LOG = LoggerFactory.getLogger(PurgeStgCmtScheduler.class);
-
-    @Inject
-    private Device device;
 
     @Inject
     private StgCmtManager ejb;
@@ -94,6 +90,8 @@ public class PurgeStgCmtScheduler extends Scheduler {
             return;
 
         Date before = new Date(System.currentTimeMillis() - delay.getSeconds() * 1000);
-        ejb.deleteStgCmts(status, before);
+        int deleted = ejb.deleteStgCmts(status, before);
+        if (deleted > 0)
+            LOG.info("Purged {} storage commitments", deleted);
     }
 }

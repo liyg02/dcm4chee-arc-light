@@ -53,8 +53,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.security.KeyStore;
-import java.security.cert.X509Certificate;
 import java.util.EnumSet;
 
 import static org.dcm4chee.arc.conf.Assert.assertDeviceEquals;
@@ -66,13 +64,11 @@ import static org.junit.Assert.assertNotNull;
  * @since Jul 2015
  */
 public class ArchiveDeviceConfigurationTest {
-    private KeyStore keyStore;
     private DicomConfiguration config;
     private HL7Configuration hl7Config;
 
     @Before
     public void setUp() throws Exception {
-        keyStore = SSLManagerFactory.loadKeyStore("JKS", ResourceLocator.resourceURL("cacerts.jks"), "secret");
         config = LdapArchiveConfigurationFactory.newLdapDicomConfiguration(
                 ArchiveDeviceConfigurationTest.class.getResource("/ldap.properties"));
         hl7Config = config.getDicomConfigurationExtension(HL7Configuration.class);
@@ -118,10 +114,6 @@ public class ArchiveDeviceConfigurationTest {
                 otherDevices[ArchiveDeviceFactory.STORESCU_INDEX],
                 otherDevices[ArchiveDeviceFactory.MPPSSCU_INDEX]
         );
-
-        X509Certificate cacert = (X509Certificate) keyStore.getCertificate("cacert");
-        String deviceRef = config.deviceRef("dcm4chee-arc");
-        arc.setAuthorizedNodeCertificates(deviceRef, cacert);
         config.persist(arc, register);
 
         Device keycloak = ArchiveDeviceFactory.createKeycloakDevice("keycloak", arrDevice, configType);
@@ -133,10 +125,29 @@ public class ArchiveDeviceConfigurationTest {
 
     private void cleanUp() throws Exception {
         config.unregisterAETitle("DCM4CHEE");
-        config.unregisterAETitle("DCM4CHEE_ADMIN");
-        config.unregisterAETitle("DCM4CHEE_TRASH");
+        config.unregisterAETitle("IOCM_REGULAR_USE");
+        config.unregisterAETitle("IOCM_EXPIRED");
+        config.unregisterAETitle("IOCM_QUALITY");
+        config.unregisterAETitle("IOCM_PAT_SAFETY");
+        config.unregisterAETitle("IOCM_WRONG_MWL");
+        config.unregisterAETitle("AS_RECEIVED");
         config.unregisterAETitle("SCHEDULEDSTATION");
         hl7Config.unregisterHL7Application("HL7RCV|DCM4CHEE");
+        config.unregisterWebAppName("DCM4CHEE");
+        config.unregisterWebAppName("DCM4CHEE-WADO");
+        config.unregisterWebAppName("IOCM_REGULAR_USE");
+        config.unregisterWebAppName("IOCM_REGULAR_USE-WADO");
+        config.unregisterWebAppName("IOCM_EXPIRED");
+        config.unregisterWebAppName("IOCM_EXPIRED-WADO");
+        config.unregisterWebAppName("IOCM_QUALITY");
+        config.unregisterWebAppName("IOCM_QUALITY-WADO");
+        config.unregisterWebAppName("IOCM_PAT_SAFETY");
+        config.unregisterWebAppName("IOCM_PAT_SAFETY-WADO");
+        config.unregisterWebAppName("IOCM_WRONG_MWL");
+        config.unregisterWebAppName("IOCM_WRONG_MWL-WADO");
+        config.unregisterWebAppName("AS_RECEIVED");
+        config.unregisterWebAppName("AS_RECEIVED-WADO");
+        config.unregisterWebAppName("dcm4chee-arc");
         for (String aet : ArchiveDeviceFactory.OTHER_AES)
             config.unregisterAETitle(aet);
         try {

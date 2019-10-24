@@ -218,27 +218,42 @@
     <xsl:param name="meaning"/>
     <xsl:if test="$code and $scheme and $meaning">
       <DicomAttribute tag="{$sqtag}" vr="SQ">
-        <Item number="1">
-          <!-- Code Value -->
-          <DicomAttribute tag="00080100" vr="SH">
-            <Value number="1">
-              <xsl:value-of select="substring($code,1,16)"/>
-            </Value>
-          </DicomAttribute>
-          <!-- Coding Scheme Designator -->
-          <DicomAttribute tag="00080102" vr="SH">
-            <Value number="1">
-              <xsl:value-of select="substring($scheme,1,16)"/>
-            </Value>
-          </DicomAttribute>
-          <!-- Code Meaning -->
-          <DicomAttribute tag="00080104" vr="LO">
-            <Value number="1">
-              <xsl:value-of select="substring($meaning,1,64)"/>
-            </Value>
-          </DicomAttribute>
-        </Item>
+        <xsl:call-template name="codeItem1">
+          <xsl:with-param name="itemNo" select="'1'"/>
+          <xsl:with-param name="code" select="$code"/>
+          <xsl:with-param name="scheme" select="$scheme"/>
+          <xsl:with-param name="meaning" select="$meaning"/>
+        </xsl:call-template>
       </DicomAttribute>
+    </xsl:if>
+  </xsl:template>
+
+  <xsl:template name="codeItem1">
+    <xsl:param name="itemNo"/>
+    <xsl:param name="code"/>
+    <xsl:param name="scheme"/>
+    <xsl:param name="meaning"/>
+    <xsl:if test="$code and $scheme and $meaning">
+      <Item number="{$itemNo}">
+        <!-- Code Value -->
+        <xsl:call-template name="attr">
+          <xsl:with-param name="val" select="substring($code,1,16)"/>
+          <xsl:with-param name="vr" select="'SH'"/>
+          <xsl:with-param name="tag" select="'00080100'"/>
+        </xsl:call-template>
+        <!-- Coding Scheme Designator -->
+        <xsl:call-template name="attr">
+          <xsl:with-param name="val" select="substring($scheme,1,16)"/>
+          <xsl:with-param name="vr" select="'SH'"/>
+          <xsl:with-param name="tag" select="'00080102'"/>
+        </xsl:call-template>
+        <!-- Code Meaning -->
+        <xsl:call-template name="attr">
+          <xsl:with-param name="val" select="substring($meaning,1,64)"/>
+          <xsl:with-param name="vr" select="'LO'"/>
+          <xsl:with-param name="tag" select="'00080104'"/>
+        </xsl:call-template>
+      </Item>
     </xsl:if>
   </xsl:template>
 
@@ -429,15 +444,18 @@
     <xsl:param name="vr"/>
     <xsl:param name="sqtag"/>
     <xsl:param name="ei"/>
-    <xsl:if test="$ei/text()">
+    <xsl:variable name="val" select="$ei/text()"/>
+    <xsl:if test="$val">
       <DicomAttribute tag="{$tag}" vr="{$vr}">
-        <Value number="1">
-          <xsl:value-of select="$ei/text()"/>
-        </Value>
+        <xsl:if test="$val != '&quot;&quot;'">
+          <Value number="1">
+            <xsl:value-of select="$val"/>
+          </Value>
+        </xsl:if>
       </DicomAttribute>
-      <xsl:if test="$ei/component">
-        <DicomAttribute tag="{$sqtag}" vr="SQ">
-          <Item number="1">
+      <DicomAttribute tag="{$sqtag}" vr="SQ">
+        <Item number="1">
+          <xsl:if test="$ei/component and $val != '&quot;&quot;'">
             <xsl:if test="$ei/component[1]">
               <DicomAttribute tag="00400031" vr="UT">
                 <Value number="1">
@@ -457,9 +475,9 @@
                 </Value>
               </DicomAttribute>
             </xsl:if>
-          </Item>
-         </DicomAttribute>
-      </xsl:if>
+          </xsl:if>
+        </Item>
+      </DicomAttribute>
     </xsl:if>
   </xsl:template>
   <xsl:template name="attrDATM">

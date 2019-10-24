@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2017
+ * Portions created by the Initial Developer are Copyright (C) 2017-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,16 +41,17 @@
 package org.dcm4chee.arc.export.mgt.impl;
 
 import org.dcm4che3.net.Device;
+import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.ExporterDescriptor;
+import org.dcm4chee.arc.entity.ExportTask;
 import org.dcm4chee.arc.entity.QueueMessage;
-import org.dcm4chee.arc.export.mgt.ExportManager;
 import org.dcm4chee.arc.exporter.ExportContext;
 import org.dcm4chee.arc.exporter.Exporter;
 import org.dcm4chee.arc.exporter.ExporterFactory;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.dcm4chee.arc.qmgt.QueueManager;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -71,19 +72,16 @@ public class ExportManagerMDB implements MessageListener {
     private static final Logger LOG = LoggerFactory.getLogger(ExportManagerMDB.class);
 
     @Inject
-    private ExportManager ejb;
-
-    @Inject
     private QueueManager queueManager;
 
     @Inject
     private ExporterFactory exporterFactory;
 
     @Inject
-    private Event<ExportContext> exportEvent;
+    private Device device;
 
     @Inject
-    private Device device;
+    private Event<ExportContext> exportEvent;
 
     @Override
     public void onMessage(Message msg) {
@@ -98,33 +96,37 @@ public class ExportManagerMDB implements MessageListener {
         if (queueMessage == null)
             return;
 
-        Long exportTaskPk = (Long) queueMessage.getMessageBody();
         Outcome outcome;
+        ExportContext exportContext = null;
         try {
-            ejb.updateExportTask(exportTaskPk);
-            Exporter exporter = exporterFactory.getExporter(getExporterDescriptor(msg.getStringProperty("ExporterID")));
-            ExportContext exportContext = exporter.createExportContext();
+            ExportTask exportTask = queueMessage.getExportTask();
+            ExporterDescriptor exporterDesc = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class)
+                    .getExporterDescriptorNotNull(exportTask.getExporterID());
+            Exporter exporter = exporterFactory.getExporter(exporterDesc);
+            exportContext = exporter.createExportContext();
             exportContext.setMessageID(msgID);
-            exportContext.setStudyInstanceUID(msg.getStringProperty("StudyInstanceUID"));
-            exportContext.setSeriesInstanceUID(msg.getStringProperty("SeriesInstanceUID"));
-            exportContext.setSopInstanceUID(msg.getStringProperty("SopInstanceUID"));
-            exportContext.setAETitle(msg.getStringProperty("AETitle"));
+            exportContext.setBatchID(queueMessage.getBatchID());
+            exportContext.setStudyInstanceUID(exportTask.getStudyInstanceUID());
+            exportContext.setSeriesInstanceUID(StringUtils.nullify(exportTask.getSeriesInstanceUID(), "*"));
+            exportContext.setSopInstanceUID(StringUtils.nullify(exportTask.getSopInstanceUID(), "*"));
+            exportContext.setAETitle(exporterDesc.getAETitle());
             exportContext.setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(msg));
             outcome = exporter.export(exportContext);
             exportContext.setOutcome(outcome);
-            exportEvent.fire(exportContext);
         } catch (Throwable e) {
+            if (exportContext != null)
+                exportContext.setException(e);
             LOG.warn("Failed to process {}", msg, e);
             queueManager.onProcessingFailed(msgID, e);
-            ejb.updateExportTask(exportTaskPk);
             return;
+        } finally {
+            if (exportContext != null)
+                try {
+                    exportEvent.fire(exportContext);
+                } catch (Exception e) {
+                    LOG.warn("Failed on firing export context {}", msg, e);
+                }
         }
         queueManager.onProcessingSuccessful(msgID, outcome);
-        ejb.updateExportTask(exportTaskPk);
-    }
-
-    private ExporterDescriptor getExporterDescriptor(String exporterID) {
-        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        return arcDev != null ? arcDev.getExporterDescriptorNotNull(exporterID) : null;
     }
 }

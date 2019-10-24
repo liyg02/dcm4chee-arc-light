@@ -56,11 +56,12 @@ import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.Arrays;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Comparator;
 
 /**
@@ -82,11 +83,10 @@ public class QueryQueues {
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput query() throws Exception {
-        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    public StreamingOutput query() {
+        logRequest();
+        try {
+            return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
                 for (QueueDescriptor queueDesc : sortedQueueDescriptors()) {
@@ -98,14 +98,40 @@ public class QueryQueues {
                 }
                 gen.writeEnd();
                 gen.flush();
-            }
-        };
+            };
+        } catch (Exception e) {
+            throw new WebApplicationException(
+                    errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR));
+        }
     }
 
     private QueueDescriptor[] sortedQueueDescriptors() {
-        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        QueueDescriptor[] queueDescriptors = arcDev.getQueueDescriptors().toArray(new QueueDescriptor[arcDev.getQueueDescriptors().size()]);
-        Arrays.sort(queueDescriptors, Comparator.comparing(QueueDescriptor::getQueueName));
-        return queueDescriptors;
+        return device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class)
+                .getQueueDescriptors().stream()
+                .sorted(Comparator.comparing(QueueDescriptor::getQueueName))
+                .toArray(QueueDescriptor[]::new);
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

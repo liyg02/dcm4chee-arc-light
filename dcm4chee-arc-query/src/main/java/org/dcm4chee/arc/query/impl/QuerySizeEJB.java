@@ -47,10 +47,12 @@ import javax.ejb.Stateless;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.persistence.EntityManager;
+import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Nov 2017
  */
 @Stateless
@@ -81,16 +83,27 @@ public class QuerySizeEJB {
     }
 
     public long calculateSeriesSize(Long seriesPk) {
-        Long size = StringUtils.maskNull(
-                em.createNamedQuery(Location.SIZE_OF_SERIES, Long.class)
-                    .setParameter(1, seriesPk)
-                    .setParameter(2, Location.ObjectType.DICOM_FILE)
-                    .getSingleResult(),
-                ZERO);
+        Object result = em.createNamedQuery(Location.SIZE_OF_SERIES)
+                .setParameter(1, seriesPk)
+                .setParameter(2, Location.ObjectType.DICOM_FILE.ordinal())
+                .getSingleResult();
+        long size = result instanceof Number ? ((Number) result).longValue() : 0L;
         em.createNamedQuery(Series.SET_SERIES_SIZE)
                 .setParameter(1, seriesPk)
                 .setParameter(2, size)
                 .executeUpdate();
         return size;
+    }
+
+    public long calculateStudySize(String studyUID) {
+        Long studyPk;
+        try {
+            studyPk = em.createNamedQuery(Study.FIND_PK_BY_STUDY_UID, Long.class)
+                    .setParameter(1, studyUID)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return -1L;
+        }
+        return calculateStudySize(studyPk);
     }
 }

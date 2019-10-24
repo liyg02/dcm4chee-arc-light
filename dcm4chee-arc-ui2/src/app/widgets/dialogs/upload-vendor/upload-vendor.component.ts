@@ -1,8 +1,9 @@
 import { Component, OnInit } from '@angular/core';
-import {FileUploader} from 'ng2-file-upload';
-import {MdDialogRef} from '@angular/material';
+// import {FileUploader} from 'ng2-file-upload';
+import {MatDialogRef} from '@angular/material';
 import {J4careHttpService} from "../../../helpers/j4care-http.service";
 import {AppService} from "../../../app.service";
+import {KeycloakService} from "../../../helpers/keycloak-service/keycloak.service";
 
 @Component({
   selector: 'app-upload-files',
@@ -13,9 +14,10 @@ export class UploadVendorComponent implements OnInit {
     private _deviceName;
     selectedFile;
     constructor(
-        public dialogRef: MdDialogRef<UploadVendorComponent>,
+        public dialogRef: MatDialogRef<UploadVendorComponent>,
         public $http:J4careHttpService,
-        public mainservice:AppService
+        public mainservice:AppService,
+        private _keycloakService: KeycloakService
     ) { }
 
     ngOnInit() {
@@ -26,14 +28,9 @@ export class UploadVendorComponent implements OnInit {
     uploadFile(dialogRef){
         let $this = this;
         let token;
-        this.$http.refreshToken().subscribe((response)=>{
-            if(!this.mainservice.global.notSecure) {
-                if(response && response.length != 0){
-                    $this.$http.resetAuthenticationInfo(response);
-                    token = response['token'];
-                }else{
-                    token = this.mainservice.global.authentication.token;
-                }
+        this._keycloakService.getToken().subscribe((response) => {
+            if(!this.mainservice.global.notSecure){
+                token = response.token;
             }
             let xmlHttpRequest = new XMLHttpRequest();
             xmlHttpRequest.open('PUT', `../devices/${this._deviceName}/vendordata`, true);

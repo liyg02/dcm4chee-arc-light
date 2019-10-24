@@ -45,7 +45,7 @@
   <parent>
     <artifactId>dcm4chee-arc-parent</artifactId>
     <groupId>org.dcm4che.dcm4chee-arc</groupId>
-    <version>5.11.1</version>
+    <version>5.19.1</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
@@ -53,15 +53,16 @@
   <packaging>war</packaging>
 
   <properties>
-    <frontend-maven-plugin.version>1.2</frontend-maven-plugin.version>
-    <node.version>v6.9.1</node.version>
-    <yarn.version>v0.23.4</yarn.version>
+    <frontend-maven-plugin.version>1.6</frontend-maven-plugin.version>
+    <node.version>v6.12.0</node.version>
+    <yarn.version>v1.3.2</yarn.version>
+    <yarn.run>prod</yarn.run>
   </properties>
 
   <dependencies>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
-      <artifactId>dcm4chee-arc-realm-rs</artifactId>
+      <artifactId>dcm4chee-arc-conf-keycloak</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>
@@ -92,12 +93,12 @@
                 </configuration>
               </execution>
               <execution>
-                <id>yarn install</id>
+                <id>yarn install --pure-lockfile</id>
                 <goals>
                   <goal>yarn</goal>
                 </goals>
                 <configuration>
-                  <arguments>install</arguments>
+                  <arguments>install --pure-lockfile</arguments>
                 </configuration>
               </execution>
               <execution>
@@ -109,7 +110,7 @@
                 </goals>
                 <configuration>
                   <!--<arguments>run-script prod</arguments> //use this for production-->
-                  <arguments>run prod</arguments>
+                  <arguments>run ${yarn.run}</arguments>
                 </configuration>
               </execution>
             </executions>

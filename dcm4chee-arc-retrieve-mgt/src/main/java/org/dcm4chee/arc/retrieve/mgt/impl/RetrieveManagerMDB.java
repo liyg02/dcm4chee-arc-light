@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -40,16 +40,15 @@ package org.dcm4chee.arc.retrieve.mgt.impl;
 
 import org.dcm4che3.data.Attributes;
 import org.dcm4chee.arc.entity.QueueMessage;
+import org.dcm4chee.arc.entity.RetrieveTask;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.dcm4chee.arc.qmgt.QueueManager;
 import org.dcm4chee.arc.retrieve.ExternalRetrieveContext;
 import org.dcm4chee.arc.retrieve.mgt.RetrieveManager;
-import org.dcm4chee.arc.retrieve.scu.CMoveSCU;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.ejb.ActivationConfigProperty;
-import javax.ejb.MessageDriven;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
 import javax.inject.Inject;
@@ -62,11 +61,6 @@ import javax.jms.ObjectMessage;
  * @author Gunter Zeilinger <gunterze@gmail.com>
  * @since Jul 2017
  */
-@MessageDriven(activationConfig = {
-        @ActivationConfigProperty(propertyName = "destinationType", propertyValue = "javax.jms.Queue"),
-        @ActivationConfigProperty(propertyName = "destination", propertyValue = RetrieveManager.JNDI_NAME),
-        @ActivationConfigProperty(propertyName = "maxSession", propertyValue = "5")
-})
 @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
 public class RetrieveManagerMDB implements MessageListener {
 
@@ -77,9 +71,6 @@ public class RetrieveManagerMDB implements MessageListener {
 
     @Inject
     private QueueManager queueManager;
-
-    @Inject
-    private RetrieveManagerEJB ejb;
 
     @Override
     public void onMessage(Message msg) {
@@ -97,7 +88,7 @@ public class RetrieveManagerMDB implements MessageListener {
             Attributes keys = (Attributes) ((ObjectMessage) msg).getObject();
             Outcome outcome = retrieveManager.cmove(
                     msg.getIntProperty("Priority"),
-                    toExternalRetrieveContext(msg, keys),
+                    toExternalRetrieveContext(msg, queueMessage.getRetrieveTask(), keys),
                     queueMessage);
             queueManager.onProcessingSuccessful(msgID, outcome);
         } catch (Throwable e) {
@@ -106,14 +97,12 @@ public class RetrieveManagerMDB implements MessageListener {
         }
     }
 
-    private ExternalRetrieveContext toExternalRetrieveContext(Message msg, Attributes keys) throws Exception {
+    private ExternalRetrieveContext toExternalRetrieveContext(Message msg, RetrieveTask task, Attributes keys) {
         return new ExternalRetrieveContext()
-                .setLocalAET(msg.getStringProperty("LocalAET"))
-                .setRemoteAET(msg.getStringProperty("RemoteAET"))
-                .setDestinationAET(msg.getStringProperty("DestinationAET"))
-                .setRequesterUserID(msg.getStringProperty("RequesterUserID"))
-                .setRequesterHostName(msg.getStringProperty("RequesterHostName"))
-                .setRequestURI(msg.getStringProperty("RequestURI"))
+                .setLocalAET(task.getLocalAET())
+                .setRemoteAET(task.getRemoteAET())
+                .setDestinationAET(task.getDestinationAET())
+                .setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(msg))
                 .setKeys(keys);
     }
 }

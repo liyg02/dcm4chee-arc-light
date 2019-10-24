@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -57,24 +57,7 @@ import java.util.Date;
         name = StgCmtResult.FIND_BY_TRANSACTION_UID,
         query = "select result from StgCmtResult result " +
                 "where result.transactionUID = ?1"
-),
-@NamedQuery(
-        name = StgCmtResult.FIND_BY_STATUS_AND_UPDATED_BEFORE,
-        query = "select result from StgCmtResult result " +
-                "where result.status = ?1 " +
-                "and result.updatedTime <= ?2"),
-@NamedQuery(
-        name = StgCmtResult.FIND_BY_STATUS,
-        query = "select result from StgCmtResult result " +
-                "where result.status = ?1 "),
-@NamedQuery(
-        name = StgCmtResult.FIND_BY_UPDATED_BEFORE,
-        query = "select result from StgCmtResult result " +
-                "where result.updatedTime <= ?1"),
-@NamedQuery(
-        name = StgCmtResult.FIND_ALL,
-        query = "select result from StgCmtResult result ")
-})
+)})
 
 @Entity
 @Table(name = "stgcmt_result",
@@ -83,6 +66,8 @@ import java.util.Date;
             @Index(columnList = "updated_time"),
             @Index(columnList = "device_name"),
             @Index(columnList = "exporter_id"),
+            @Index(columnList = "msg_id"),
+            @Index(columnList = "batch_id"),
             @Index(columnList = "study_iuid"),
             @Index(columnList = "stgcmt_status")
     }
@@ -92,10 +77,6 @@ public class StgCmtResult {
     public enum Status { PENDING, COMPLETED, WARNING, FAILED }
 
     public static final String FIND_BY_TRANSACTION_UID = "StgCmtResult.findByTransactionUID";
-    public static final String FIND_BY_STATUS_AND_UPDATED_BEFORE = "StgCmtResult.findByStatusAndUpdatedBefore";
-    public static final String FIND_BY_STATUS = "StgCmtResult.findByStatus";
-    public static final String FIND_BY_UPDATED_BEFORE = "StgCmtResult.findByUpdatedBefore";
-    public static final String FIND_ALL = "StgCmtResult.findAll";
 
     @Id
     @GeneratedValue(strategy= GenerationType.IDENTITY)
@@ -120,9 +101,15 @@ public class StgCmtResult {
     @Column(name = "device_name", updatable = false)
     private String deviceName;
 
-    @Basic(optional = false)
+    @Basic
     @Column(name = "exporter_id", updatable = false)
     private String exporterID;
+
+    @Column(name = "msg_id")
+    private String messageID;
+
+    @Column(name = "batch_id", updatable = false)
+    private String batchID;
 
     @Basic(optional = false)
     @Column(name = "study_iuid", updatable = false)
@@ -176,6 +163,22 @@ public class StgCmtResult {
 
     public void setExporterID(String exporterID) {
         this.exporterID = exporterID;
+    }
+
+    public String getMessageID() {
+        return messageID;
+    }
+
+    public void setMessageID(String messageID) {
+        this.messageID = messageID;
+    }
+
+    public String getBatchID() {
+        return batchID;
+    }
+
+    public void setBatchID(String batchID) {
+        this.batchID = batchID;
     }
 
     public String getStudyInstanceUID() {

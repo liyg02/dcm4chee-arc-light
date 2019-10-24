@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015-2017
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,25 +42,23 @@ package org.dcm4chee.arc.hl7;
 
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
+import org.dcm4che3.data.VR;
 import org.dcm4che3.hl7.ERRSegment;
 import org.dcm4che3.hl7.HL7Exception;
+import org.dcm4che3.hl7.HL7Message;
 import org.dcm4che3.hl7.HL7Segment;
+import org.dcm4che3.net.Connection;
 import org.dcm4che3.net.hl7.HL7Application;
 import org.dcm4che3.net.hl7.UnparsedHL7Message;
+import org.dcm4che3.net.hl7.service.DefaultHL7Service;
 import org.dcm4che3.net.hl7.service.HL7Service;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
 import org.dcm4chee.arc.entity.Patient;
-import org.dcm4chee.arc.patient.CircularPatientMergeException;
-import org.dcm4chee.arc.patient.PatientMgtContext;
-import org.dcm4chee.arc.patient.PatientService;
-import org.dcm4chee.arc.patient.PatientTrackingNotAllowedException;
-import org.xml.sax.SAXException;
+import org.dcm4chee.arc.patient.*;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.inject.Typed;
 import javax.inject.Inject;
-import javax.xml.transform.TransformerConfigurationException;
-import java.io.IOException;
 import java.net.Socket;
 
 /**
@@ -70,7 +68,7 @@ import java.net.Socket;
  */
 @ApplicationScoped
 @Typed(HL7Service.class)
-class PatientUpdateService extends AbstractHL7Service {
+class PatientUpdateService extends DefaultHL7Service {
 
     private static final String[] MESSAGE_TYPES = {
             "ADT^A01",
@@ -99,17 +97,25 @@ class PatientUpdateService extends AbstractHL7Service {
     }
 
     @Override
-    protected void process(HL7Application hl7App, Socket s, UnparsedHL7Message msg) throws Exception {
-        updatePatient(hl7App, s, msg, patientService);
+    public UnparsedHL7Message onMessage(HL7Application hl7App, Connection conn, Socket s, UnparsedHL7Message msg)
+            throws HL7Exception {
+        ArchiveHL7Message archiveHL7Message = new ArchiveHL7Message(
+                HL7Message.makeACK(msg.msh(), HL7Exception.AA, null).getBytes(null));
+        updatePatient(hl7App, s, msg, patientService, archiveHL7Message);
+        return archiveHL7Message;
     }
 
-    static Patient updatePatient(HL7Application hl7App, Socket s, UnparsedHL7Message msg, PatientService patientService)
-            throws HL7Exception, IOException, SAXException, TransformerConfigurationException {
+    static Patient updatePatient(HL7Application hl7App, Socket s, UnparsedHL7Message msg, PatientService patientService,
+                                 ArchiveHL7Message archiveHL7Message)
+            throws HL7Exception {
         ArchiveHL7ApplicationExtension arcHL7App =
                 hl7App.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
         HL7Segment msh = msg.msh();
-        String hl7cs = msh.getField(17, hl7App.getHL7DefaultCharacterSet());
-        Attributes attrs = SAXTransformer.transform(msg.data(), hl7cs, arcHL7App.patientUpdateTemplateURI(), null);
+
+        Attributes attrs = transform(msg, arcHL7App);
+        if (arcHL7App.hl7VeterinaryUsePatientName())
+            useHL7VeterinaryPatientName(attrs);
+
         PatientMgtContext ctx = patientService.createPatientMgtContextHL7(hl7App, s, msg);
         ctx.setAttributes(attrs);
         if (ctx.getPatientID() == null)
@@ -119,8 +125,28 @@ class PatientUpdateService extends AbstractHL7Service {
                             .setErrorLocation("PID^1^3")
                             .setUserMessage("Missing PID-3"));
         Attributes mrg = attrs.getNestedDataset(Tag.ModifiedAttributesSequence);
-        if (mrg == null)
-            return patientService.updatePatient(ctx);
+        if (mrg == null) {
+            try {
+                Patient patient = patientService.updatePatient(ctx);
+                archiveHL7Message.setPatRecEventActionCode(ctx.getEventActionCode());
+                return patient;
+            } catch (PatientMergedException e) {
+                throw new HL7Exception(
+                        new ERRSegment(msg.msh())
+                                .setHL7ErrorCode(ERRSegment.UnknownKeyIdentifier)
+                                .setUserMessage(e.getMessage()));
+            } catch (NonUniquePatientException e) {
+                throw new HL7Exception(
+                        new ERRSegment(msg.msh())
+                                .setHL7ErrorCode(ERRSegment.DuplicateKeyIdentifier)
+                                .setUserMessage(e.getMessage()));
+            } catch (Exception e) {
+                throw new HL7Exception(
+                        new ERRSegment(msg.msh())
+                                .setHL7ErrorCode(ERRSegment.ApplicationInternalError)
+                                .setUserMessage(e.getMessage()));
+            }
+        }
 
         ctx.setPreviousAttributes(mrg);
         if (ctx.getPreviousPatientID() == null)
@@ -145,6 +171,39 @@ class PatientUpdateService extends AbstractHL7Service {
                             .setHL7ErrorCode(ERRSegment.DuplicateKeyIdentifier)
                             .setErrorLocation("MRG^1^1")
                             .setUserMessage("MRG-1 matches PID-3"));
+        } catch (Exception e) {
+            throw new HL7Exception(
+                    new ERRSegment(msg.msh())
+                            .setHL7ErrorCode(ERRSegment.ApplicationInternalError)
+                            .setUserMessage(e.getMessage()));
+        } finally {
+            archiveHL7Message.setPatRecEventActionCode(ctx.getEventActionCode());
+        }
+    }
+
+    private static void useHL7VeterinaryPatientName(Attributes attrs) {
+        String patientName = attrs.getString(Tag.PatientName);
+        String responsiblePerson = attrs.getString(Tag.ResponsiblePerson);
+        int index = patientName.indexOf('^', patientName.indexOf('^') + 1);
+        patientName = index != -1
+                ? patientName.substring(0, index)
+                : !patientName.contains("^") && responsiblePerson != null
+                    ? (responsiblePerson.contains("^")
+                        ? responsiblePerson.substring(0, responsiblePerson.indexOf('^')) : responsiblePerson)
+                        + '^' + patientName
+                    : patientName;
+        attrs.setString(Tag.PatientName, VR.PN, patientName);
+    }
+
+    private static Attributes transform(UnparsedHL7Message msg, ArchiveHL7ApplicationExtension arcHL7App) throws HL7Exception {
+        try {
+            return SAXTransformer.transform(
+                    msg,
+                    arcHL7App,
+                    arcHL7App.patientUpdateTemplateURI(),
+                    null);
+        } catch (Exception e) {
+            throw new HL7Exception(new ERRSegment(msg.msh()).setUserMessage(e.getMessage()), e);
         }
     }
 }

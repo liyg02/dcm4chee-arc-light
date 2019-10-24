@@ -4,11 +4,10 @@ import {StudiesService} from './studies.service';
 import {AppService} from '../app.service';
 import {User} from '../models/user';
 import {Globalvar} from '../constants/globalvar';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import * as _ from 'lodash';
 import {MessagingComponent} from '../widgets/messaging/messaging.component';
 import {SelectItem} from 'primeng/components/common/api';
-import {MdDialogConfig, MdDialog, MdDialogRef} from '@angular/material';
+import {MatDialogConfig, MatDialog, MatDialogRef} from '@angular/material';
 import {EditPatientComponent} from '../widgets/dialogs/edit-patient/edit-patient.component';
 import {EditMwlComponent} from '../widgets/dialogs/edit-mwl/edit-mwl.component';
 import {CopyMoveObjectsComponent} from '../widgets/dialogs/copy-move-objects/copy-move-objects.component';
@@ -29,8 +28,17 @@ import {HttpErrorHandler} from "../helpers/http-error-handler";
 import {J4careHttpService} from "../helpers/j4care-http.service";
 import {j4care} from "../helpers/j4care.service";
 import {ViewerComponent} from "../widgets/dialogs/viewer/viewer.component";
+import {PermissionService} from "../helpers/permissions/permission.service";
+import {LoadingBarModule, LoadingBarService} from "@ngx-loading-bar/core";
+import {ActivatedRoute} from "@angular/router";
+import {SelectDropdown} from "../interfaces";
 declare var Keycloak: any;
 declare var $: any;
+import "rxjs/add/operator/retry";
+import {DropdownList} from "../helpers/form/dropdown-list";
+import {RetrieveMonitoringService} from "../monitoring/external-retrieve/retrieve-monitoring.service";
+import {HttpHeaders} from "@angular/common/http";
+import {KeycloakService} from "../helpers/keycloak-service/keycloak.service";
 
 @Component({
     selector: 'app-studies',
@@ -39,7 +47,7 @@ declare var $: any;
 export class StudiesComponent implements OnDestroy,OnInit{
 
     // @ViewChildren(MessagingComponent) msg;
-
+    queues;
     orderby = Globalvar.ORDERBY;
     orderbyExternal = Globalvar.ORDERBY_EXTERNAL;
     limit = 20;
@@ -56,36 +64,59 @@ export class StudiesComponent implements OnDestroy,OnInit{
     trashaktive = false;
     clipboard: any = {};
     showCheckboxes = false;
-    disabled = {};
+    disabled = {
+        IssuerOfPatientID:false,
+        LocalNamespaceEntityID:false
+    };
     patientmode = false;
+    withoutstudies = false;
     ExternalRetrieveAETchecked = false;
     StudyReceiveDateTime = {
         from: undefined,
         to: undefined
     };
+    diffFilter = false;
     externalInternalAetMode = "internal";
     filter = {
         orderby: '-StudyDate,-StudyTime',
         ModalitiesInStudy: '',
         'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate': '',
         'ScheduledProcedureStepSequence.ScheduledProcedureStepStatus': '',
-        returnempty: false,
+        //returnempty: false,
         PatientSex: '',
-        PatientBirthDate: ''
+        PatientName:'',
+        PatientBirthDate: '',
+        PatientID:'',
+        StudyDate:'',
+        IssuerOfPatientID:'',
+        fuzzymatching:'',
+        StudyTime:'',
+        SplitStudyDateRange:'',
+        compressionfailed:false,
+        storageVerificationFailed:false,
+        StudyInstanceUID:"",
+        onlyDefault:false
     };
+    diffQueue = false;
+    missing = true;
+    different = true;
+    diffAttributeSet;
+    batchID;
+    comparefield;
     queryMode = 'queryStudies';
-    ScheduledProcedureStepSequence: any = {
-        ScheduledProcedureStepStartTime: {
-            from: '',
-            to: ''
-        },
-        ScheduledProcedureStepStartDate: {
-            from: this.service.getTodayDate(),
-            to: this.service.getTodayDate(),
-            toObject: new Date(),
-            fromObject: new Date()
-        }
-    };
+    moreDiffs;
+    // ScheduledProcedureStepSequence: any = {
+    //     ScheduledProcedureStepStartTime: {
+    //         from: '',
+    //         to: ''
+    //     },
+    //     ScheduledProcedureStepStartDate: {
+    //         from: this.service.getTodayDate(),
+    //         to: this.service.getTodayDate(),
+    //         toObject: new Date(),
+    //         fromObject: new Date()
+    //     }
+    // };
     moreMWL;
     morePatients;
     moreStudies;
@@ -96,6 +127,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
     clipboardHasScrollbar = false;
     target;
     allAes;
+    diffModeShow = false;
     // birthDate;
     clipBoardNotEmpty(){
         if (this.clipboard && ((_.size(this.clipboard.otherObjects) > 0) || (_.size(this.clipboard.patients) > 0))){
@@ -105,7 +137,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
         }
     }
     _ = _;
-    jsonHeader = new Headers({ 'Content-Type': 'application/json' });
+    jsonHeader = new HttpHeaders({ 'Content-Type': 'application/json' });
     aet1;
     aet2;
     count;
@@ -123,7 +155,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
         this.studyDate.toObject = null;
         this.studyDate.from = '';
         this.studyDate.to = '';
+        this.filter.StudyDate = "";
     }
+
     clearForm(){
         _.forEach(this.filter, (m, i) => {
             if (i != 'orderby'){
@@ -144,14 +178,14 @@ export class StudiesComponent implements OnDestroy,OnInit{
         // this.birthDate = {};
         // this.birthDate.object = null;
         // this.birthDate.opened = false;
-        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.fromObject = null;
+/*        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.fromObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.toObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.from = '';
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.to = '';
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.fromObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.toObject = null;
         this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.from = '';
-        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.to = '';
+        this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime.to = '';*/
     };
     options = {genders:
                         [
@@ -183,7 +217,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
         modus: 'patient',
         showmwls: true
     };
-    isRole: any;
+    isRole(rule){
+        return true;
+    };
     study =  {
         modus: 'study',
         selected: false
@@ -237,33 +273,43 @@ export class StudiesComponent implements OnDestroy,OnInit{
     };
     pressedKey;
     selectModality(key){
-        this.filter.ModalitiesInStudy = key;
-        this.filter['ScheduledProcedureStepSequence.Modality'] = key;
+        this.filter.ModalitiesInStudy = '';
+        this.filter['ScheduledProcedureStepSequence.Modality'] = '';
+        if(this.filterMode === 'mwl')
+            this.filter['ScheduledProcedureStepSequence.Modality'] = key;
+        else
+            this.filter.ModalitiesInStudy = key;
         $('.Modality').show();
         this.showModalitySelector = false;
     };
 
-
-    dialogRef: MdDialogRef<any>;
+    showGetSizeLoader;
+    showGetCountLoader;
+    dialogRef: MatDialogRef<any>;
     subscription: Subscription;
-
+    taskPK;
     constructor(
         public $http: J4careHttpService,
         public service: StudiesService,
         public mainservice: AppService,
-        public cfpLoadingBar: SlimLoadingBarService,
-        public viewContainerRef: ViewContainerRef ,
-        public dialog: MdDialog,
-        public config: MdDialogConfig,
+        public cfpLoadingBar: LoadingBarService,
+        private loadingBar:LoadingBarService,
+        private viewContainerRef: ViewContainerRef ,
+        private dialog: MatDialog,
+        private config: MatDialogConfig,
         public httpErrorHandler:HttpErrorHandler,
-        public j4care:j4care
+        public j4care:j4care,
+        public permissionService:PermissionService,
+        private route: ActivatedRoute,
+        private retrieveMonitoringService:RetrieveMonitoringService,
+        private _keycloakService:KeycloakService
     ) {}
     ngOnInit(){
         this.initCheck(10);
     }
     initCheck(retries){
         let $this = this;
-        if(_.hasIn(this.mainservice,"global.authentication") || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
+        if((KeycloakService.keycloakAuth && KeycloakService.keycloakAuth.authenticated) || (_.hasIn(this.mainservice,"global.notSecure") && this.mainservice.global.notSecure)){
             this.init();
         }else{
             if (retries){
@@ -275,189 +321,201 @@ export class StudiesComponent implements OnDestroy,OnInit{
             }
         }
     }
+
     private init(){
-        this.showFilterWarning = true;
-        console.log('getglobal', this.mainservice.global);
-        let $this = this;
-        let dateset = localStorage.getItem('dateset');
-        console.log('dateset', dateset);
-        if (dateset === 'no'){
-            this.clearStudyDate();
-            this.filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate'] = null;
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.fromObject = null;
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.toObject = null;
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.from = '';
-            this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate.to = '';
-        }
-
-        if (_.hasIn(this.mainservice.global, 'state')){
-            // $this = $this.mainservice.global.studyThis;
-            // _.merge(this,$this.mainservice.global.studyThis);
-            let selectedAet;
-            _.forEach(this.mainservice.global.state, (m, i) => {
-                if (m && i != 'aetmodel'){
-                    $this[i] = m;
-                }
-                if (i === 'aetmodel'){
-                    selectedAet = m;
-                }
-            });
-            let selectedAetIndex = _.indexOf($this.aes, selectedAet);
-            if (selectedAetIndex > -1){
-                $this.aetmodel = $this.aes[selectedAetIndex];
-            }
-        }
-        // if(_.hasIn(this.mainservice.global,"patients")){
-        //     this.patients = this.mainservice.global.patients;
-        // }
-        this.cfpLoadingBar.interval = 200;
-        this.modalities = Globalvar.MODALITIES;
-
-        this.initAETs(2);
-        this.getAllAes(2);
-        this.initAttributeFilter('Patient', 1);
-        this.initExporters(2);
-        this.initRjNotes(2);
-        // this.user = this.mainservice.user;
-        if (!this.mainservice.user){
-            // console.log("in if studies ajax");
-            this.mainservice.user = this.mainservice.getUserInfo().share();
-            this.mainservice.user
-                .subscribe(
-                    (response) => {
-                        $this.user.user  = response.user;
-                        $this.mainservice.user.user = response.user;
-                        $this.user.roles = response.roles;
-                        $this.mainservice.user.roles = response.roles;
-                        $this.isRole = (role) => {
-                            if (response.user === null && response.roles.length === 0){
-                                return true;
-                            }else{
-                                if (response.roles && response.roles.indexOf(role) > -1){
-                                    return true;
-                                }else{
-                                    return false;
-                                }
-                            }
-                        };
-                    },
-                    (response) => {
-                        // $this.user = $this.user || {};
-                        $this.user.user = 'user';
-                        $this.mainservice.user.user = 'user';
-                        $this.user.roles = ['user', 'admin'];
-                        $this.mainservice.user.roles = ['user', 'admin'];
-                        $this.isRole = (role) => {
-                            if (role === 'admin'){
-                                return false;
-                            }else{
-                                return true;
-                            }
-                        };
-                    }
-                );
-
-        }else{
-            this.user = this.mainservice.user;
-            this.isRole = this.mainservice.isRole;
-            // console.log("isroletest",this.user.applyisRole("admin"));
-        }
-        this.hoverdic.forEach((m, i) => {
-            $(document.body).on('mouseover mouseleave', m, function(e){
-                if (e.type === 'mouseover' && $this.visibleHeaderIndex != i){
-                    $($this).addClass('hover');
-                    $(m).addClass('hover');
-                    $('.headerblock .header_block .thead').addClass('animated fadeOut');
-                    setTimeout(function(){
-                        $this.visibleHeaderIndex = i;
-                        $('.div-table .header_block .thead').removeClass('fadeOut').addClass('fadeIn');
-                    }, 200);
-                    setTimeout(function(){
-                        $('.headerblock .header_block .thead').removeClass('animated');
-                    }, 200);
-                }
-            });
-        });
-        $(document).keydown(function(e){
-            $this.pressedKey = e.keyCode;
-            if ($this.keysdown && $this.keysdown[e.keyCode]) {
-                // Ignore it
-                return;
-            }
-            console.log('$this.keysdown', this.keysdown);
-            console.log('e.keyCode', e.keyCode);
-            console.log('isrole admin=', $this.isRole('admin'));
-            // console.log("isrole admin=",this.mainservice.isRole);
-            // Remember it's down
-            let validKeys = [16, 17, 67, 77, 86, 88, 91, 93, 224];
-            if (validKeys.indexOf(e.keyCode) > -1){
-                console.log('in if ');
-                $this.keysdown[e.keyCode] = true;
-            }
-            //ctrl + c clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[67] === true && $this.isRole('admin')){
-                console.log('ctrl + c');
-                $this.ctrlC();
-                $this.keysdown = {};
-            }
-            //ctrl + v clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[86] === true && $this.isRole('admin')){
-                $this.ctrlV();
-                $this.keysdown = {};
-            }
-            //ctrl + m clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[77] === true && $this.isRole('admin')){
-                $this.merge();
-                $this.keysdown = {};
-            }
-            //ctrl + x clicked
-            if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[88] === true && $this.isRole('admin')){
-                console.log('ctrl + x');
-                $this.ctrlX();
-                $this.keysdown = {};
-            }
-
-        });
-        $(document).keyup(function(e){
-            console.log('keyUP', e.keyCode);
-            $this.pressedKey = null;
-            console.log('$this.keysdown', this.keysdown);
-            delete $this.keysdown[e.keyCode];
-        });
-
-        //Detect in witch column is the mouse position and select the header.
-        $(document.body).on('mouseover mouseleave', '.hover_cell', function(e){
+        console.log("study global PDQs",this.mainservice.global.PDQs);
+        console.log("mainservice",this.mainservice);
+        this.route.queryParams.subscribe(params => {
+            console.log("params",params);
+            this.checkDiffView(params);
+            this.showFilterWarning = true;
+            console.log('getglobal', this.mainservice.global);
             let $this = this;
-            if (e.type === 'mouseover'){
-                $('.headerblock > .header_block > .thead').each((i, m) => {
-                    $(m).find('.cellhover').removeClass('cellhover');
-                    $(m).find('.th:eq(' + $($this).index() + ')').addClass('cellhover');
-                });
-            }else{
-                $('.headerblock > .header_block > .thead > .tr_row > .cellhover').removeClass('cellhover');
+            let dateset = localStorage.getItem('dateset');
+            console.log('dateset', dateset);
+            if (dateset === 'no'){
+                this.clearStudyDate();
+                this.filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate'] = null;
             }
-        });
 
-        this.headers.forEach((m, i) => {
-            this.items[i] = this.items[i] || {};
-            $(window).scroll(() => {
-                if ($(m).length){
-                    $this.items[i].itemOffset = $(m).offset().top;
-                    $this.items[i].scrollTop = $(window).scrollTop();
-                    if ($this.items[i].scrollTop >= $this.items[i].itemOffset){
-                        $this.items[i].itemOffsetOld = $this.items[i].itemOffsetOld || $(m).offset().top;
-                        $('.headerblock').addClass('fixed');
+            if (_.hasIn(this.mainservice.global, 'state')){
+                // $this = $this.mainservice.global.studyThis;
+                // _.merge(this,$this.mainservice.global.studyThis);
+                let selectedAet;
+                _.forEach(this.mainservice.global.state, (m, i) => {
+                    if (m && i != 'aetmodel'){
+                        $this[i] = m;
                     }
-                    if ($this.items[i].itemOffsetOld  && ($this.items[i].scrollTop < $this.items[i].itemOffsetOld)){
-                        $('.headerblock').removeClass('fixed');
+                    if (i === 'aetmodel'){
+                        selectedAet = m;
                     }
+                });
+                let selectedAetIndex = _.indexOf($this.aes, selectedAet);
+                if (selectedAetIndex > -1){
+                    $this.aetmodel = $this.aes[selectedAetIndex];
+                }
+            }
+            this.modalities = Globalvar.MODALITIES;
+
+            this.initAETs(2,);
+            this.getAllAes(2);
+            this.initAttributeFilter('Patient', 1);
+            this.initExporters(2);
+            this.initRjNotes(2);
+            this.getDiffAttributeSet();
+            this.hoverdic.forEach((m, i) => {
+                $(document.body).on('mouseover mouseleave', m, function(e){
+                    if (e.type === 'mouseover' && $this.visibleHeaderIndex != i){
+                        $($this).addClass('hover');
+                        $(m).addClass('hover');
+                        $('.headerblock .header_block .thead').addClass('animated fadeOut');
+                        setTimeout(function(){
+                            $this.visibleHeaderIndex = i;
+                            $('.div-table .header_block .thead').removeClass('fadeOut').addClass('fadeIn');
+                        }, 200);
+                        setTimeout(function(){
+                            $('.headerblock .header_block .thead').removeClass('animated');
+                        }, 200);
+                    }
+                });
+            });
+            $(document).keydown(function(e){
+                $this.pressedKey = e.keyCode;
+                if ($this.keysdown && $this.keysdown[e.keyCode]) {
+                    // Ignore it
+                    return;
+                }
+                // Remember it's down
+                let validKeys = [16, 17, 67, 77, 86, 88, 91, 93, 224];
+                if (validKeys.indexOf(e.keyCode) > -1){
+                    console.log('in if ');
+                    $this.keysdown[e.keyCode] = true;
+                }
+                //ctrl + c clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[67] === true && $this.isRole('admin')){
+                    console.log('ctrl + c');
+                    $this.ctrlC();
+                    $this.keysdown = {};
+                }
+                //ctrl + v clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[86] === true && $this.isRole('admin')){
+                    $this.ctrlV();
+                    $this.keysdown = {};
+                }
+                //ctrl + m clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[77] === true && $this.isRole('admin')){
+                    $this.merge();
+                    $this.keysdown = {};
+                }
+                //ctrl + x clicked
+                if ($this.keysdown && ($this.keysdown[17] === true || $this.keysdown[91] === true || $this.keysdown[93] === true || $this.keysdown[224] === true) && $this.keysdown[88] === true && $this.isRole('admin')){
+                    console.log('ctrl + x');
+                    $this.ctrlX();
+                    $this.keysdown = {};
+                }
+
+            });
+            $(document).keyup(function(e){
+                console.log('keyUP', e.keyCode);
+                $this.pressedKey = null;
+                console.log('$this.keysdown', this.keysdown);
+                delete $this.keysdown[e.keyCode];
+            });
+
+            //Detect in witch column is the mouse position and select the header.
+            $(document.body).on('mouseover mouseleave', '.hover_cell', function(e){
+                let $this = this;
+                if (e.type === 'mouseover'){
+                    $('.headerblock > .header_block > .thead').each((i, m) => {
+                        $(m).find('.cellhover').removeClass('cellhover');
+                        $(m).find('.th:eq(' + $($this).index() + ')').addClass('cellhover');
+                    });
+                }else{
+                    $('.headerblock > .header_block > .thead > .tr_row > .cellhover').removeClass('cellhover');
                 }
             });
-        });
 
-        this.subscription = this.mainservice.createPatient$.subscribe(patient => {
-            console.log('patient in subscribe messagecomponent ', patient);
-            this.createPatient();
+            this.headers.forEach((m, i) => {
+                this.items[i] = this.items[i] || {};
+                $(window).scroll(() => {
+                    if ($(m).length){
+                        $this.items[i].itemOffset = $(m).offset().top;
+                        $this.items[i].scrollTop = $(window).scrollTop();
+                        if ($this.items[i].scrollTop >= $this.items[i].itemOffset){
+                            $this.items[i].itemOffsetOld = $this.items[i].itemOffsetOld || $(m).offset().top;
+                            $('.headerblock').addClass('fixed');
+                        }
+                        if ($this.items[i].itemOffsetOld  && ($this.items[i].scrollTop < $this.items[i].itemOffsetOld)){
+                            $('.headerblock').removeClass('fixed');
+                        }
+                    }
+                });
+            });
+
+            this.subscription = this.mainservice.createPatient$.subscribe(patient => {
+                console.log('patient in subscribe messagecomponent ', patient);
+                this.createPatient();
+            });
+            this.getQueueNames();
+        });
+    }
+    orderByChanged(order){
+        this.setOrderByParam(order);
+        this.extendedFilter(false);
+        this.fireQueryOnChange(order)
+    }
+    setOrderByParam(order){
+        this.showoptionlist = false;
+        this.filter.orderby = order.value;
+        this.orderbytext = order.label;
+        this.filterMode = order.mode;
+    }
+    checkDiffView(params){
+        if(_.hasIn(params, "mode") && params.mode === "diff"){
+            setTimeout(()=>{
+                this.diffModeShow = true;
+                this.taskPK = params["pk"];
+                this.setOrderByParam(this.orderby.filter(orderby =>orderby.mode === "diff")[0]);
+                let filters = Object.assign({},params);
+                delete filters['mode'];
+                this.getDiffTaskResults(filters, 0);
+            },1);
+        }
+    }
+    getDiffTaskResults(params,offset?){
+        let filter = Object.assign({},params);
+        filter['offset'] = offset ? offset:0;
+        filter['limit'] = this.limit + 1;
+        let mode = 'pk';
+        this.cfpLoadingBar.start();
+        if(this.taskPK != ''){
+            filter['pk'] = this.taskPK;
+        }else{
+            mode = 'batch';
+            filter['batchID'] = this.batchID;
+        }
+        this.service.gitDiffTaskResults(filter,mode).subscribe(res=>{
+            console.log("res",res);
+            this.patients = [];
+            this.morePatients = undefined;
+            this.moreDiffs = undefined;
+            this.moreStudies = undefined;
+
+            if (_.size(res) > 0) {
+                // this.moreDiffs = res.length > this.limit;
+                this.prepareDiffData(res, offset);
+            }else{
+                this.mainservice.setMessage({
+                    'title': 'Info',
+                    'text': 'No Diff Results found!',
+                    'status': 'info'
+                });
+            }
+            this.cfpLoadingBar.complete();
+        },err=>{
+            this.patients = [];
+            this.httpErrorHandler.handleError(err);
+            this.cfpLoadingBar.complete();
         });
     }
     // initAETs(retries) {
@@ -494,6 +552,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
             this.orderbytext = "Study";
             this.filterMode = "study";
         }
+        this.filter.SplitStudyDateRange = '';
     }
 
     /*
@@ -567,6 +626,20 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 newObject[mapCodes[i].code].vr = mapCodes[i].vr;
             }
         }
+    }
+    uploadInPatient(object){
+        console.log("in uuploadInPatient",object);
+        this.$http.post(
+            '../aets/' + this.aet + '/rs/studies',
+            object.attrs,
+            new HttpHeaders({ 'Content-Type': 'application/dicom+json' })
+        ).subscribe(res=>{
+            console.log("study created",res);
+            this.upload({attrs:res},"study");
+        },err=>{
+            console.log("err",err);
+            this.httpErrorHandler.handleError(err);
+        });
     }
     upload(object,mode){
         if(mode === "mwl"){
@@ -659,6 +732,14 @@ export class StudiesComponent implements OnDestroy,OnInit{
             if (_.hasIn(param, 'orderby')){
                 delete param['orderby'];
             }
+            if(_.size(param) < 1){
+                return true
+            }else{
+                for(let p in param){
+                    if(param[p] == "")
+                        delete param[p];
+                }
+            }
             return (_.size(param) < 1) ? true : false;
         }else{
             return false;
@@ -668,17 +749,6 @@ export class StudiesComponent implements OnDestroy,OnInit{
         let $this = this;
         if (offset < 0 || offset === undefined) offset = 0;
         this.cfpLoadingBar.start();
-        if(this.externalInternalAetMode === 'internal'){
-            this.service.getCount(
-                this.rsURL(),
-                'studies',
-                queryParameters
-            ).subscribe((res)=>{
-                this.count = res.count;
-            });
-        }else{
-            this.count = "";
-        }
         this.service.queryStudies(
             this.rsURL(),
             queryParameters
@@ -688,20 +758,22 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 //           $this.studies = [];
                 $this.morePatients = undefined;
                 $this.moreStudies = undefined;
+                $this.count = "";
+                $this.size = "";
                 if (_.size(res) > 0) {
-                    //Add number of patient related studies manuelly hex(00201200) => dec(2101760)
                     let index = 0;
-                    while ($this.attributeFilters.Patient.dcmTag[index] && ($this.attributeFilters.Patient.dcmTag[index] < 2101760)) {
+                    let pat, study, patAttrs, tags = $this.attributeFilters.Patient.dcmTag;
+                    while (tags && (tags[index] < '00201200')) {
                         index++;
                     }
-                    $this.attributeFilters.Patient.dcmTag.splice(index, 0, 2101760);
-
-                    let pat, study, patAttrs, tags = $this.attributeFilters.Patient.dcmTag;
+                    tags.splice(index, 0, '00201200');
+                    tags.push('77770010','77771010','77771011','77771012','77771013','77771014');
+                    console.log("tags",tags);
                     console.log('res', res);
                     res.forEach(function (studyAttrs, index) {
                         patAttrs = {};
                         $this.extractAttrs(studyAttrs, tags, patAttrs);
-                        if (!(pat && _.isEqual(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
+                        if (!(pat && $this.equalsIgnoreSpecificCharacterSet(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
                             pat = {
                                 attrs: patAttrs,
                                 studies: [],
@@ -771,18 +843,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
     queryDiff(queryParameters, offset){
         let $this = this;
         if (offset < 0 || offset === undefined) offset = 0;
-        let haederCodes = [
-            "00200010",
-            "0020000D",
-            "00080020",
-            "00080030",
-            "00080090",
-            "00080050",
-            "00080061",
-            "00081030",
-            "00201206",
-            "00201208"
-        ];
+
         if(!this.aet2) {
             this.mainservice.setMessage({
                 'title': 'Warning',
@@ -797,80 +858,41 @@ export class StudiesComponent implements OnDestroy,OnInit{
             queryParameters
         ).subscribe(
             (res) => {
-
                 $this.patients = [];
                 //           $this.studies = [];
                 $this.morePatients = undefined;
                 $this.moreStudies = undefined;
                 if (_.size(res) > 0) {
                     //Add number of patient related studies manuelly hex(00201200) => dec(2101760)
-                    let index = 0;
-                    while ($this.attributeFilters.Patient.dcmTag[index] && ($this.attributeFilters.Patient.dcmTag[index] < 2101760)) {
-                        index++;
-                    }
-                    $this.attributeFilters.Patient.dcmTag.splice(index, 0, 2101760);
-
-                    let pat, study, patAttrs, tags = $this.attributeFilters.Patient.dcmTag;
-                    console.log('res', res);
-                    res.forEach(function (studyAttrs, index) {
-                        patAttrs = {};
-                        $this.extractAttrs(studyAttrs, tags, patAttrs);
-                        if (!(pat && _.isEqual(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
-                            pat = {
-                                attrs: patAttrs,
-                                studies: [],
-                                showAttributes: false,
-                                showStudies:true
-                            };
-                            // $this.$apply(function () {
-                            $this.patients.push(pat);
-                            // });
-                        }
-                        let showBorder = false;
-                        let diffHeaders = {};
-                        _.forEach(haederCodes,(m)=>{
-                            diffHeaders[m] = $this.getDiffHeader(studyAttrs,m);
-                        });
-                        study = {
-                            patient: pat,
-                            offset: offset + index,
-                            moreSeries: false,
-                            attrs: studyAttrs,
-                            series: null,
-                            showAttributes: false,
-                            fromAllStudies: false,
-                            selected: false,
-                            showBorder:false,
-                            diffHeaders:diffHeaders
-                        };
-                        pat.studies.push(study);
-                        $this.extendedFilter(false);
-                        //                   $this.studies.push(study); //sollte weg kommen
-                    });
-                    if ($this.moreStudies = (res.length > $this.limit)) {
-                        pat.studies.pop();
-                        if (pat.studies.length === 0) {
-                            $this.patients.pop();
-                        }
-                        // this.studies.pop();
-                    }
+                    this.prepareDiffData(res, offset);
                     console.log('global set', $this.mainservice.global);
                     $this.cfpLoadingBar.complete();
 
                 } else {
-                    console.log('in else setmsg');
-                    $this.patients = [];
+                    if(queryParameters['queue']){
+                        $this.mainservice.setMessage({
+                            'title': 'Info',
+                            'text': 'Command executed successfully!',
+                            'status': 'info'
+                        });
+                    }else{
+                        if(res === null)
+                            $this.mainservice.setMessage({
+                                'title': 'Info',
+                                'text': 'No matching study found at primary C-FIND SCP',
+                                'status': 'info'
+                            });
+                        else
+                            $this.mainservice.setMessage({
+                                'title': 'Info',
+                                'text': 'No diffs found!',
+                                'status': 'info'
+                            });
+                    }
 
-                    $this.mainservice.setMessage({
-                        'title': 'Info',
-                        'text': 'No matching Studies found!',
-                        'status': 'info'
-                    });
+                    $this.patients = [];
                     $this.cfpLoadingBar.complete();
                 }
-                // setTimeout(function(){
-                //     togglePatientsHelper("hide");
-                // }, 1000);
                 $this.cfpLoadingBar.complete();
             },(err)=>{
                 $this.cfpLoadingBar.complete();
@@ -878,6 +900,70 @@ export class StudiesComponent implements OnDestroy,OnInit{
             }
         );
     };
+    prepareDiffData(res, offset){
+        let haederCodes = [
+            "00200010",
+            "0020000D",
+            "00080020",
+            "00080030",
+            "00080090",
+            "00080050",
+            "00080061",
+            "00081030",
+            "00201206",
+            "00201208"
+        ];
+        let index = 0;
+        while (this.attributeFilters.Patient.dcmTag[index] && (this.attributeFilters.Patient.dcmTag[index] < '00201200')) {
+            index++;
+        }
+        this.attributeFilters.Patient.dcmTag.splice(index, 0, '00201200');
+
+        let pat, study, patAttrs, tags = this.attributeFilters.Patient.dcmTag;
+        console.log('res', res);
+        res.forEach((studyAttrs, index)=> {
+            patAttrs = {};
+            this.extractAttrs(studyAttrs, tags, patAttrs);
+            if (!(pat && this.equalsIgnoreSpecificCharacterSet(pat.attrs, patAttrs))) { //angular.equals replaced with Rx.helpers.defaultComparer
+                pat = {
+                    attrs: patAttrs,
+                    studies: [],
+                    showAttributes: false,
+                    showStudies:true
+                };
+                // this.$apply(function () {
+                this.patients.push(pat);
+                // });
+            }
+            let showBorder = false;
+            let diffHeaders = {};
+            _.forEach(haederCodes,(m)=>{
+                diffHeaders[m] = this.getDiffHeader(studyAttrs,m);
+            });
+            study = {
+                patient: pat,
+                offset: offset + index,
+                moreSeries: false,
+                attrs: studyAttrs,
+                series: null,
+                showAttributes: false,
+                fromAllStudies: false,
+                selected: false,
+                showBorder:false,
+                diffHeaders:diffHeaders
+            };
+            pat.studies.push(study);
+            this.extendedFilter(false);
+            //                   this.studies.push(study); //sollte weg kommen
+        });
+        if (this.moreStudies = (res.length > this.limit)) {
+            pat.studies.pop();
+            if (pat.studies.length === 0) {
+                this.patients.pop();
+            }
+            // this.studies.pop();
+        }
+    }
     getDiffHeader(study,code){
         let value;
         let sqValue;
@@ -999,12 +1085,26 @@ export class StudiesComponent implements OnDestroy,OnInit{
         this.queryDiffs(0);
     }
     queryDiffs(offset){
-        this.queryMode = 'queryDiff';
-        this.moreMWL = undefined;
-        this.morePatients = undefined;
-        let $this = this;
-        let queryParameters = this.createQueryParams(offset, this.limit + 1, this.createStudyFilterParams());
-        this.queryDiff(queryParameters, offset);
+        if(this.diffModeShow){
+            let params = {
+/*                offset:offset,
+                limit: this.limit + 1,
+                pk:this.taskPK,
+                batchID:this.batchID*/
+            };
+            this.getDiffTaskResults(params, offset);
+        }else{
+            this.queryMode = 'queryDiff';
+            this.moreMWL = undefined;
+            this.morePatients = undefined;
+            let queryParameters = this.createQueryParams(offset, this.limit + 1, this.createStudyFilterParams());
+            queryParameters['queue'] = this.diffQueue;
+            queryParameters['missing'] = this.missing;
+            queryParameters['different'] = this.different;
+            if(this.batchID) queryParameters['batchID'] = this.batchID;
+            if(this.comparefield && this.different) queryParameters['comparefield'] = this.comparefield;
+            this.queryDiff(queryParameters, offset);
+        }
     };
     setExpiredDate(study){
         this.setExpiredDateQuery(study,false);
@@ -1018,57 +1118,29 @@ export class StudiesComponent implements OnDestroy,OnInit{
         );
     }
     setExpiredDateQuery(study, infinit){
-        let $this = this;
-        let expiredDate;
-        let yearRange = "1800:2100";
-        if(infinit){
-            expiredDate = new Date();
-            expiredDate.setDate(31);
-            expiredDate.setMonth(11);
-            expiredDate.setFullYear(9999);
-            yearRange = "2017:9999";
-        }else{
-            if(_.hasIn(study,"attrs.77771023.Value.0") && study["attrs"]["77771023"].Value[0] != ""){
-                console.log("va",study["77771023"].Value[0]);
-                let expiredDateString = study["attrs"]["77771023"].Value[0];
-                expiredDate = new Date(expiredDateString.substring(0, 4)+ '.' + expiredDateString.substring(4, 6) + '.' + expiredDateString.substring(6, 8));
-            }else{
-                expiredDate = new Date();
-            }
-        }
-        let parameters: any = {
-            content: 'Set expired date',
-            pCalendar: [{
-                dateFormat:"dd.mm.yy",
-                yearRange:yearRange,
-                monthNavigator:true,
-                yearNavigator:true,
-                placeholder:"Expired date"
-            }],
-            result: {pCalendar:[expiredDate]},
-            saveButton: 'SAVE'
-        };
-        this.confirm(parameters).subscribe(result => {
+        this.confirm(this.service.getPrepareParameterForExpiriationDialog(study,this.exporters, infinit)).subscribe(result => {
             if(result){
-                $this.cfpLoadingBar.start();
-                let dateAsString = $this.dateToString(result.pCalendar[0]);
-                $this.service.setExpiredDate($this.aet, _.get(study,"attrs.0020000D.Value[0]"), dateAsString).subscribe(
-                    (res)=>{
-                        _.set(study,"attrs.77771023.Value[0]",$this.dateToString(result.pCalendar[0]));
-                        _.set(study,"attrs.77771023.vr","DA");
-                        $this.mainservice.setMessage( {
-                            'title': 'Info',
-                            'text': 'Expired date set successfully!',
-                            'status': 'info'
-                        });
-                        $this.cfpLoadingBar.complete();
-                    },
-                    (err)=>{
-                        $this.httpErrorHandler.handleError(err);
-                        $this.cfpLoadingBar.complete();
-                    }
-                );
-                // study["77771023"].Value[0] = result.pCalendar[0];
+                this.cfpLoadingBar.start();
+                if(result.schema_model.expiredDate){
+                    this.service.setExpiredDate(this.aet, _.get(study,"attrs.0020000D.Value[0]"), result.schema_model.expiredDate, result.schema_model.exporter).subscribe(
+                        (res)=>{
+                            _.set(study,"attrs.77771023.Value[0]",result.schema_model.expiredDate);
+                            _.set(study,"attrs.77771023.vr","DA");
+                            this.mainservice.setMessage( {
+                                'title': 'Info',
+                                'text': 'Expired date set successfully!',
+                                'status': 'info'
+                            });
+                            this.cfpLoadingBar.complete();
+                        },
+                        (err)=>{
+                            this.httpErrorHandler.handleError(err);
+                            this.cfpLoadingBar.complete();
+                        }
+                    );
+                }else{
+                    this.mainservice.showError("Expired date is requred!");
+                }
             }
         });
     }
@@ -1102,9 +1174,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
     studyReceiveDateTimeChanged(e, mode){
         this.filter['StudyReceiveDateTime'] = this.filter['StudyReceiveDateTime'] || {};
         this['StudyReceiveDateTime'][mode] = e;
+        let datePipeEn = new DatePipe('us-US');
         if (this.StudyReceiveDateTime.from && this.StudyReceiveDateTime.to){
-            let datePipeEn = new DatePipe('us-US');
             this.filter['StudyReceiveDateTime'] = datePipeEn.transform(this.StudyReceiveDateTime.from, 'yyyyMMddHHmmss') + '-' + datePipeEn.transform(this.StudyReceiveDateTime.to, 'yyyyMMddHHmmss');
+        }
+        if ((this.StudyReceiveDateTime.from && !this.StudyReceiveDateTime.to) || (!this.StudyReceiveDateTime.from && this.StudyReceiveDateTime.to)){
+            this.filter['StudyReceiveDateTime'] = (this.StudyReceiveDateTime.from) ? datePipeEn.transform(this.StudyReceiveDateTime.from, 'yyyyMMddHHmmss') + '-' : '-' + datePipeEn.transform(this.StudyReceiveDateTime.to, 'yyyyMMddHHmmss');
         }
     }
     deleteRejectedInstances(){
@@ -1139,7 +1214,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 $this.$http.delete(
                     '../reject/' + re.reject + '?' + $this.mainservice.param(params)
                 )
-                    .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+                    // .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
                     .subscribe(
                     (res) => {
                         console.log('in res', res);
@@ -1268,7 +1343,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                     $this.$http.post(
                         '../aets/' + $this.aet + '/rs/mwlitems',
                         local,
-                        {headers: new Headers({ 'Content-Type': 'application/dicom+json' })}
+                         new HttpHeaders({ 'Content-Type': 'application/dicom+json' })
                     ).subscribe((response) => {
                         if (mode === 'edit'){
                             // _.assign(mwl, mwlFiltered);
@@ -1387,7 +1462,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                     $this.$http.post(
                         '../aets/' + $this.aet + '/rs/studies',
                         local,
-                        {headers: new Headers({ 'Content-Type': 'application/dicom+json' })}
+                         new HttpHeaders({ 'Content-Type': 'application/dicom+json' })
                     ).subscribe(
                         (response) => {
                             if (mode === 'edit'){
@@ -1551,7 +1626,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
         this.config.viewContainerRef = this.viewContainerRef;
         let oldPatientID;
         this.lastPressedCode = 0;
-
+        let modifyPatientService;
         if (mode === 'edit'){
             _.forEach(patient.attrs, function(value, index) {
                 let checkValue = '';
@@ -1568,8 +1643,8 @@ export class StudiesComponent implements OnDestroy,OnInit{
             oldPatientID = this.service.getPatientId(patient.attrs);
         }
         let $this = this;
-        this.service.getPatientIod().subscribe((res) => {
-            $this.service.patientIod = res;
+        this.service.getPatientIod().subscribe((iod) => {
+            $this.service.patientIod = iod;
 
             $this.service.initEmptyValue(patient.attrs);
             $this.scrollToDialog();
@@ -1581,16 +1656,84 @@ export class StudiesComponent implements OnDestroy,OnInit{
             $this.dialogRef.componentInstance.mode = mode;
             $this.dialogRef.componentInstance.patient = patient;
             $this.dialogRef.componentInstance.patientkey = patientkey;
-            $this.dialogRef.componentInstance.dropdown = $this.service.getArrayFromIod(res);
-            $this.dialogRef.componentInstance.iod = $this.service.replaceKeyInJson(res, 'items', 'Value');
+            $this.dialogRef.componentInstance.dropdown = $this.service.getArrayFromIod(iod);
+            $this.dialogRef.componentInstance.iod = $this.service.replaceKeyInJson(iod, 'items', 'Value');
             $this.dialogRef.componentInstance.saveLabel = $this.saveLabel;
             $this.dialogRef.componentInstance.titleLabel = $this.titleLabel;
             $this.dialogRef.componentInstance.externalInternalAetMode = $this.externalInternalAetMode;
             $this.dialogRef.afterClosed().subscribe(result => {
                 //If user clicked save
                 if (result){
-                    if(oldPatientID === $this.service.getPatientId(patient.attrs) || $this.externalInternalAetMode === "internal" || mode === "create"){
-                        let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                    if(mode === "create"){
+                        if(this.service.getPatientId(patient.attrs)){
+                            modifyPatientService = $this.service.modifyPatient(patient, iod, oldPatientID, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode,this.externalInternalAetMode === "external");
+                            if(modifyPatientService){
+                                modifyPatientService.save.subscribe((response)=>{
+                                    this.fireRightQuery();
+                                    this.mainservice.setMessage({
+                                        'title': 'Info',
+                                        'text': modifyPatientService.successMsg,
+                                        'status': 'info'
+                                    });
+                                },(err)=>{
+                                    _.assign(patient, originalPatientObject);
+                                    $this.httpErrorHandler.handleError(err);
+                                });
+                            }
+                        }else{
+                            this.service.createPatient(
+                                patient.attrs,
+                                this.aet,
+                                this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes),
+                                this.externalInternalAetModel.hl7ApplicationName,
+                                this.externalInternalAetMode
+                            ).subscribe((res)=>{
+                                this.mainservice.setMessage({
+                                    'title': 'Info',
+                                    'text': 'Patient created successfully!',
+                                    'status': 'info'
+                                });
+                            },(err)=>{
+                                this.httpErrorHandler.handleError(err);
+                            });
+                        }
+                    }else{
+                        this.service.changePatientID(
+                            oldPatientID,
+                            this.service.getPatientId(patient.attrs),
+                            patient.attrs,
+                            this.aet,
+                            this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes),
+                            this.externalInternalAetModel.hl7ApplicationName,
+                            this.externalInternalAetMode
+                        ).subscribe((idChanged)=>{
+                            let id = oldPatientID;
+                            if(idChanged)
+                                id = this.service.getPatientId(patient.attrs);
+                            modifyPatientService = $this.service.modifyPatient(patient, iod, id, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode, this.externalInternalAetMode === "external");
+                            if(modifyPatientService){
+                                modifyPatientService.save.subscribe((response)=>{
+                                    this.fireRightQuery();
+                                    this.mainservice.setMessage({
+                                        'title': 'Info',
+                                        'text': modifyPatientService.successMsg,
+                                        'status': 'info'
+                                    });
+                                },(err)=>{
+                                    _.assign(patient, originalPatientObject);
+                                    $this.httpErrorHandler.handleError(err);
+                                });
+                            }else{
+                                _.assign(patient, originalPatientObject);
+                            }
+                        },(err)=>{
+                            _.assign(patient, originalPatientObject);
+                            this.httpErrorHandler.handleError(err);
+                        });
+                    }
+/*
+                    if(oldPatientID === $this.service.getPatientId(patient.attrs) && ($this.externalInternalAetMode === "internal" || mode === "create")){
+                        let modifyPatientService = $this.service.modifyPatient(patient, iod, oldPatientID, $this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
                         if(modifyPatientService){
                             modifyPatientService.save.subscribe((response)=>{
                                 this.fireRightQuery();
@@ -1615,7 +1758,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                     'status': 'info'
                                 });
                                 if(this.service.otherAttributesButIDWasChanged(originalPatientObject.attrs,patient.attrs)){
-                                    let modifyPatientService = $this.service.modifyPatient(patient, res, oldPatientID,$this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
+                                    let modifyPatientService = $this.service.modifyPatient(patient, iod, oldPatientID,$this.aet, $this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes), $this.externalInternalAetModel.hl7ApplicationName,  mode, $this.externalInternalAetMode);
                                     if(modifyPatientService){
                                         modifyPatientService.save.subscribe((response)=>{
                                             this.fireRightQuery();
@@ -1635,7 +1778,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                 $this.httpErrorHandler.handleError(err);
                             });
                         }
-                    }
+                    }*/
                 }else{
                     _.assign(patient, originalPatientObject);
                 }
@@ -1682,7 +1825,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 if(value){
                     $http({
                         method: 'DELETE',
-                        url:"../aets/"+$scope.aet+"/rs/studies/"+study.attrs["0020000D"].Value[0],
+                        url:"./rs/aets/"+$scope.aet+"/rs/studies/"+study.attrs["0020000D"].Value[0],
                     }).then(
                         function successCallback(response) {
                             DeviceService.msg($scope, {
@@ -1937,14 +2080,14 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 'status': 'error'
             });
             this.cfpLoadingBar.complete();
-        }else if (_.hasIn(patient, 'attrs["00201200"].Value[0]') && patient.attrs['00201200'].Value[0] === 0){
+        }else{
             let $this = this;
             this.confirm({
                 content: 'Are you sure you want to delete this patient?'
             }).subscribe(result => {
                 if (result){
                     $this.cfpLoadingBar.start();
-                    $this.$http.delete('../aets/' + $this.aet + '/rs/patients/' + this.service.getPatientId(patient.attrs)).subscribe(
+                    $this.$http.delete('../aets/' + $this.aet + '/rs/patients/' + encodeURIComponent(this.service.getPatientId(patient.attrs)),undefined, true).subscribe(
                         (response) => {
                             $this.mainservice.setMessage({
                                 'title': 'Info',
@@ -1965,15 +2108,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                     );
                 }
             });
-        }else{
-            this.mainservice.setMessage({
-                'title': 'Error',
-                'text': 'Patient not empty!',
-                'status': 'error'
-            });
-            this.cfpLoadingBar.complete();
         }
-        // angular.element("#querypatients").trigger('click');
     };
     deleteMWL(mwl){
 
@@ -2011,7 +2146,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
         }
     }
     retrieveMultipleStudies(){
-        this.cfpLoadingBar.start();
+/*        this.cfpLoadingBar.start();
         this.service.getCount(
             this.rsURL(),
             'studies',
@@ -2019,6 +2154,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
         ).subscribe((res)=>{
             this.cfpLoadingBar.complete();
             this.count = res.count;
+        });*/
             this.exporter(
                 // `/aets/${this.aet}/dimse/${this.externalAET}/studies/query:${this.queryAET}/export/dicom:${destinationAET}`,
                 '',
@@ -2028,6 +2164,162 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 {},
                 ""
             );
+    }
+    exportMultipleStudies(){
+        this.exporter(
+            '',
+            'Export all matching studies',
+            'Studies will not be sent!',
+            'multipleExport',
+            {},
+            "study"
+        );
+    }
+    downloadCSV(attr?, mode?){
+        let queryParameters = this.createQueryParams(0, 1000, this.createStudyFilterParams());
+        this.confirm({
+            content:"Do you want to use semicolon as delimiter?",
+            cancelButton:"No",
+            saveButton:"Yes",
+            result:"yes"
+        }).subscribe((ok)=>{
+            let semicolon = false;
+            if(ok)
+                semicolon = true;
+            let token;
+            let url = `${this.rsURL()}/studies`;
+            this._keycloakService.getToken().subscribe((response)=>{
+                if(!this.mainservice.global.notSecure){
+                    token = response.token;
+                }
+                let filterClone = _.cloneDeep(queryParameters);
+                delete filterClone['offset'];
+                delete filterClone['limit'];
+                filterClone["accept"] = `text/csv${(semicolon?';delimiter=semicolon':'')}`;
+                let fileName = "dcm4chee.csv";
+                if(attr && mode){
+                    filterClone["PatientID"] =  this.valueOf(attr['00100020']);
+                    filterClone["IssuerOfPatientID"] = this.valueOf(attr['00100021']);
+                    if(mode === "series" && _.hasIn(attr,'0020000D')){
+                        url =`${url}/${this.valueOf(attr['0020000D'])}/series`;
+                        fileName = `${this.valueOf(attr['0020000D'])}.csv`;
+                    }
+                    if(mode === "instance"){
+                        url =`${url}/${this.valueOf(attr['0020000D'])}/series/${this.valueOf(attr['0020000E'])}/instances`;
+                        fileName = `${this.valueOf(attr['0020000D'])}_${this.valueOf(attr['0020000E'])}.csv`;
+                    }
+                }
+                if(!this.mainservice.global.notSecure){
+                    filterClone["access_token"] = token;
+                }
+                j4care.downloadFile(`${url}?${this.mainservice.param(filterClone)}`,fileName);
+                // WindowRefService.nativeWindow.open(`${url}?${this.mainservice.param(filterClone)}`);
+            });
+        })
+    }
+    storageVerification(){
+        this.confirm({
+            content: 'Schedule Storage Verification of matching Studies',
+            doNotSave:true,
+            form_schema:[
+                [
+                    [
+                        {
+                            tag:"label",
+                            text:"Failed storage verification"
+                        },
+                        {
+                            tag:"checkbox",
+                            filterKey:"storageVerificationFailed"
+                        }
+                    ],[
+                        {
+                            tag:"label",
+                            text:"Verification Policy"
+                        },
+                        {
+                            tag:"select",
+                            options:[
+                                {
+                                    value:"DB_RECORD_EXISTS",
+                                    text:"DB_RECORD_EXISTS",
+                                    title:"Check for existence of DB records"
+                                },
+                                {
+                                    value:"OBJECT_EXISTS",
+                                    text:"OBJECT_EXISTS",
+                                    title:"check if object exists on Storage System"
+                                },
+                                {
+                                    value:"OBJECT_SIZE",
+                                    text:"OBJECT_SIZE",
+                                    title:"check size of object on Storage System"
+                                },
+                                {
+                                    value:"OBJECT_FETCH",
+                                    text:"OBJECT_FETCH",
+                                    title:"Fetch object from Storage System"
+                                },
+                                {
+                                    value:"OBJECT_CHECKSUM",
+                                    text:"OBJECT_CHECKSUM",
+                                    title:"recalculate checksum of object on Storage System"
+                                },
+                                {
+                                    value:"S3_MD5SUM",
+                                    text:"S3_MD5SUM",
+                                    title:"Check MD5 checksum of object on S3 Storage System"
+                                }
+                            ],
+                            showStar:true,
+                            filterKey:"storageVerificationPolicy",
+                            description:"Verification Policy",
+                            placeholder:"Verification Policy"
+                        }
+                    ],[
+                        {
+                            tag:"label",
+                            text:"Update Location DB"
+                        },
+                        {
+                            tag:"checkbox",
+                            filterKey:"storageVerificationUpdateLocationStatus"
+                        }
+                    ],[
+                        {
+                            tag:"label",
+                            text:"Batch ID"
+                        },
+                        {
+                            tag:"input",
+                            type:"text",
+                            filterKey:"batchID",
+                            description:"Batch ID",
+                            placeholder:"Batch ID"
+                        }
+                    ]
+                ]
+            ],
+            result: {
+                schema_model: {}
+            },
+            saveButton: 'SAVE'
+        }).subscribe((ok)=>{
+            if(ok){
+                this.cfpLoadingBar.start();
+                this.service.scheduleStorageVerification(_.merge(ok.schema_model , this.createStudyFilterParams()), this.aetmodel.dicomAETitle).subscribe(res=>{
+                    console.log("res");
+                    this.cfpLoadingBar.complete();
+                    this.mainservice.setMessage({
+                        'title': 'Info',
+                        'text': 'Storage Verification scheduled successfully!',
+                        'status': 'info'
+                    });
+                },err=>{
+                    this.cfpLoadingBar.complete();
+                    this.httpErrorHandler.handleError(err);
+                });
+            }
         });
     }
     exportStudy(study) {
@@ -2090,6 +2382,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
         this.dialogRef.componentInstance.externalInternalAetMode = this.externalInternalAetMode;
         this.dialogRef.componentInstance.title = title;
         this.dialogRef.componentInstance.mode = mode;
+        this.dialogRef.componentInstance.queues = this.queues;
         this.dialogRef.componentInstance.warning = warning;
         this.dialogRef.componentInstance.count = this.count;
         if($this.externalInternalAetMode === 'external') {
@@ -2097,38 +2390,54 @@ export class StudiesComponent implements OnDestroy,OnInit{
         }
         this.dialogRef.afterClosed().subscribe(result => {
             if (result){
+                let batchID = "";
+                let params = {};
+                if(result.batchID)
+                    batchID = `batchID=${result.batchID}&`;
                 $this.cfpLoadingBar.start();
                 if(mode === "multiple"){
-                    urlRest = `../aets/${result.selectedAet}/dimse/${result.externalAET}/studies/query:${result.queryAET}/export/dicom:${result.destinationAET}?${ this.mainservice.param(this.createStudyFilterParams())}` ;
+                    urlRest = `../aets/${result.selectedAet}/dimse/${result.externalAET}/studies/query:${result.queryAET}/export/dicom:${result.destinationAET}?${batchID}${ this.mainservice.param(this.createStudyFilterParams())}` ;
                 }else{
-                    if($this.externalInternalAetMode === 'external'){
-                        urlRest = `../aets/${this.aet}/dimse/${result.externalAET}/studies/${objectAttr['0020000D'].Value[0]}/export/dicom:${result.selectedAet}`;
-/*                        switch (dicomMode){
-                            case 'study':
-                                console.log("newUrl",this.studyURL(objectAttr));
-                                break;
-                            case 'series':
-                                console.log("newUrl",this.seriesURL(objectAttr));
-                                break;
-                            case 'instance':
-                                console.log("newUrl",this.instanceURL(objectAttr));
-                                break;
-                        }
-                        id = 'dicom:' + result.selectedAet;
-                        urlRest = url  + '/export/' + id + '?' + this.mainservice.param({queue:result.queue});*/
+                    if(mode === 'multipleExport'){
+                        let checkbox = `${(result.checkboxes['only-stgcmt'] && result.checkboxes['only-stgcmt'] === true)? 'only-stgcmt=true':''}${(result.checkboxes['only-ian'] && result.checkboxes['only-ian'] === true)? 'only-ian=true':''}`;
+                        if(checkbox != '' && this.mainservice.param(this.createStudyFilterParams()) != '')
+                            checkbox = '&' + checkbox;
+                        urlRest = `../aets/${this.aet}/export/${result.selectedExporter}/studies?${batchID}${this.mainservice.param(this.createStudyFilterParams())}${checkbox}`;
                     }else{
-                        if (result.exportType === 'dicom'){
-                            //id = result.dicomPrefix + result.selectedAet;
+                        if($this.externalInternalAetMode === 'external'){
+                            // let param = result.dcmQueueName ? `?${batchID}dcmQueueName=${result.dcmQueueName}` : '';
+                            if(result.dcmQueueName){
+                                params['dcmQueueName'] = result.dcmQueueName
+                            }
+                            urlRest = `${url}/export/dicom:${result.selectedAet}${j4care.param(params)}`;
+                            // urlRest = `../aets/${this.aet}/dimse/${result.externalAET}/studies/${objectAttr['0020000D'].Value[0]}/export/dicom:${result.selectedAet}${param}`;
+    /*                        switch (dicomMode){
+                                case 'study':
+                                    console.log("newUrl",this.studyURL(objectAttr));
+                                    break;
+                                case 'series':
+                                    console.log("newUrl",this.seriesURL(objectAttr));
+                                    break;
+                                case 'instance':
+                                    console.log("newUrl",this.instanceURL(objectAttr));
+                                    break;
+                            }
                             id = 'dicom:' + result.selectedAet;
+                            urlRest = url  + '/export/' + id + '?' + this.mainservice.param({queue:result.queue});*/
                         }else{
-                            id = result.selectedExporter;
+                            if (result.exportType === 'dicom'){
+                                //id = result.dicomPrefix + result.selectedAet;
+                                id = 'dicom:' + result.selectedAet;
+                            }else{
+                                id = result.selectedExporter;
+                            }
+                            urlRest = url  + '/export/' + id + '?'+ batchID + this.mainservice.param(result.checkboxes);
                         }
-                        urlRest = url  + '/export/' + id + '?' + this.mainservice.param(result.checkboxes);
                     }
                 }
                 $this.$http.post(
                     urlRest,
-                    {},
+                    undefined,
                     $this.jsonHeader
                 ).subscribe(
                     (result) => {
@@ -2166,6 +2475,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 this.createPatientFilterParams()
             ).subscribe((res)=>{
                 this.count = res.count;
+            },(err)=>{
+                this.cfpLoadingBar.complete();
+                this.httpErrorHandler.handleError(err);
             });
         }else{
             this.count = "";
@@ -2232,6 +2544,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 $this.cfpLoadingBar.complete();
             },
             (err) => {
+                $this.cfpLoadingBar.complete();
                 $this.httpErrorHandler.handleError(err);
             }
         );
@@ -2242,12 +2555,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
         if (this.aetmodel.dcmHideNotRejectedInstances === true){
             if (this.rjcode === null){
                 this.$http.get('../reject?dcmRevokeRejection=true')
-                    .map((res) => res.json())
-                    .subscribe(function (res) {
+                    // .map((res) => res.json())
+                    .subscribe((res)=>{
                         $this.rjcode = res[0];
                     });
             }
-            this.filter.returnempty = false;
+            //this.filter.returnempty = false;
             this.trashaktive = true;
         }else{
             this.trashaktive = false;
@@ -2294,7 +2607,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
             this.rsURL(),
             study.attrs['0020000D'].Value[0],
             this.createQueryParams(offset, this.limit + 1, { orderby: 'SeriesNumber'})
-        ).subscribe(function (res) {
+        ).subscribe((res) => {
             if (res){
                 if (res.length === 0){
                     this.mainservice.setMessage( {
@@ -2329,6 +2642,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
                     'status': 'info'
                 });
             }
+        },(err)=>{
+            $this.cfpLoadingBar.complete();
+            $this.httpErrorHandler.handleError(err);
         });
     };
 
@@ -2341,12 +2657,13 @@ export class StudiesComponent implements OnDestroy,OnInit{
             series.attrs['0020000D'].Value[0],
             series.attrs['0020000E'].Value[0],
             this.createQueryParams(offset, this.limit + 1, { orderby: 'InstanceNumber'})
-        ).subscribe(function (res) {
+        ).subscribe((res)=>{
                 if (res){
                     series.instances = res.map(function(attrs, index) {
                         let numberOfFrames = $this.valueOf(attrs['00280008']),
                             gspsQueryParams = $this.createGSPSQueryParams(attrs),
-                            video = $this.isVideo(attrs);
+                            video = $this.isVideo(attrs),
+                            image = $this.isImage(attrs);
                         $this.cfpLoadingBar.complete();
                         return {
                             series: series,
@@ -2360,6 +2677,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                 objectUID: attrs['00080018'].Value[0]
                             },
                             video: video,
+                            image: image,
                             numberOfFrames: numberOfFrames,
                             gspsQueryParams: gspsQueryParams,
                             views: $this.createArray(video || numberOfFrames || gspsQueryParams.length || 1),
@@ -2367,6 +2685,8 @@ export class StudiesComponent implements OnDestroy,OnInit{
                             selected: false
                         };
                     });
+                    console.log("series",series);
+                    console.log("series.instances",series.instances);
                 }else{
                     series.instances = {};
                 }
@@ -2375,7 +2695,10 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 }
                 // StudiesService.trim(this);
                 $this.cfpLoadingBar.complete();
-            });
+        },(err)=>{
+            $this.cfpLoadingBar.complete();
+            $this.httpErrorHandler.handleError(err);
+        });
     };
     queryAllStudiesOfPatient = function(patient, offset, event) {
         console.log('in queryallstudies');
@@ -2391,7 +2714,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 orderby: this.filter.orderby !== 'StudyDate,StudyTime' ? '-StudyDate,-StudyTime' : this.filter.orderby
             })
         )
-            .subscribe((res) => {
+        .subscribe((res) => {
             console.log('res in queryallstudy', res);
             if (res && res.length > 0){
                 patient.studies = res.map(function (attrs, index) {
@@ -2419,6 +2742,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 });
             }
             this.cfpLoadingBar.complete();
+        },(err)=>{
+                $this.cfpLoadingBar.complete();
+                $this.httpErrorHandler.handleError(err);
         });
     };
     getCount(){
@@ -2436,24 +2762,71 @@ export class StudiesComponent implements OnDestroy,OnInit{
             mode = "mwlitems"
             filters = this.createMwlFilterParams();
         }
+        if (this.showNoFilterWarning(filters)) {
+            this.confirm({
+                content: 'No filter are set, are you sure you want to continue?'
+            }).subscribe(result => {
+                if (result){
+                    this.getCountService(mode,filters);
+                }
+            });
+        }else{
+            this.getCountService(mode,filters);
+        }
+    }
+    getCountService(mode, filters){
+        let clonedFilters = _.cloneDeep(filters);
+        delete clonedFilters.orderby;
+        delete clonedFilters.limit;
+        this.showGetCountLoader = true;
         this.service.getCount(
             this.rsURL(),
             mode,
-            filters
+            clonedFilters
         ).subscribe((res)=>{
-            this.count = res.count;
+            this.showGetCountLoader = false;
+            try{
+                this.count = res.count;
+            }catch (e){
+                console.error("count error",e);
+            }
+        },(err)=>{
+            this.showGetCountLoader = false;
+            this.httpErrorHandler.handleError(err);
         });
     }
     getSize(){
+        let filters = this.createStudyFilterParams();
+        if (this.showNoFilterWarning(filters)) {
+            this.confirm({
+                content: 'No filter are set, are you sure you want to continue?'
+            }).subscribe(result => {
+                if (result){
+                    this.getSizeService(filters);
+                }
+            });
+        }else{
+            this.getSizeService(filters);
+        }
+    }
+    getSizeService(filters){
+        let clonedFilters = _.cloneDeep(filters);
+        delete clonedFilters.orderby;
+        delete clonedFilters.limit;
+        this.showGetSizeLoader = true;
         this.service.getSize(
             this.rsURL(),
-            this.createStudyFilterParams()
+            clonedFilters
         ).subscribe((res)=>{
+            this.showGetSizeLoader = false;
             try {
                 this.size = j4care.convertBtoHumanReadable(res.size,1);
             }catch (e){
                 console.log("convert byte error:",e);
             }
+        },(err)=>{
+            this.showGetSizeLoader = false;
+            this.httpErrorHandler.handleError(err);
         });
     }
     queryPatients = function(offset){
@@ -2509,6 +2882,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
             // }, 1000);
             $this.cfpLoadingBar.complete();
         },(err)=>{
+            $this.cfpLoadingBar.complete();
             $this.httpErrorHandler.handleError(err);
         });
     };
@@ -2540,14 +2914,11 @@ export class StudiesComponent implements OnDestroy,OnInit{
     // };
     downloadURL(inst, transferSyntax) {
         let token;
-        this.$http.refreshToken().subscribe((response)=>{
+        let url = "";
+        let fileName = "dcm4che.dcm";
+        this._keycloakService.getToken().subscribe((response)=>{
             if(!this.mainservice.global.notSecure){
-                if(response && response.length != 0){
-                    this.$http.resetAuthenticationInfo(response);
-                    token = response['token'];
-                }else{
-                    token = this.mainservice.global.authentication.token;
-                }
+                token = response.token;
             }
             let exQueryParams = { contentType: 'application/dicom'};
             if (transferSyntax){
@@ -2555,9 +2926,38 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 exQueryParams["transferSyntax"] = transferSyntax;
             }
             if(!this.mainservice.global.notSecure){
-                WindowRefService.nativeWindow.open(this.wadoURL(inst.wadoQueryParams, exQueryParams) + `&access_token=${token}`);
+                // WindowRefService.nativeWindow.open(this.wadoURL(inst.wadoQueryParams, exQueryParams) + `&access_token=${token}`);
+                url = this.wadoURL(inst.wadoQueryParams, exQueryParams) + `&access_token=${token}`;
             }else{
-                WindowRefService.nativeWindow.open(this.wadoURL(inst.wadoQueryParams, exQueryParams));
+                // WindowRefService.nativeWindow.open(this.wadoURL(inst.wadoQueryParams, exQueryParams));
+                url = this.wadoURL(inst.wadoQueryParams, exQueryParams);
+            }
+            if(j4care.hasSet(inst, "attrs[00080018].Value[0]")){
+                fileName = `${_.get(inst, "attrs[00080018].Value[0]")}.dcm`
+            }
+            j4care.downloadFile(url,fileName);
+        });
+    };
+    downloadZip(object, level, mode){
+        let token;
+        let param = 'accept=application/zip';
+        let url = this.studyURL(object.attrs);
+        let fileName = this.studyFileName(object.attrs);
+        if(mode === 'compressed'){
+            param += ';transfer-syntax=*';
+        }
+        if(level === 'serie'){
+            url = this.seriesURL(object.attrs);
+            fileName = this.seriesFileName(object.attrs);
+        }
+        this._keycloakService.getToken().subscribe((response)=>{
+            if(!this.mainservice.global.notSecure){
+                token = response.token;
+            }
+            if(!this.mainservice.global.notSecure){
+                j4care.downloadFile(`${url}?${param}&access_token=${token}`,`${fileName}.zip`)
+            }else{
+                j4care.downloadFile(`${url}?${param}`,`${fileName}.zip`)
             }
         });
     };
@@ -2566,27 +2966,22 @@ export class StudiesComponent implements OnDestroy,OnInit{
         let token;
         let url;
         let contentType;
-        this.$http.refreshToken().subscribe((response)=>{
+        this._keycloakService.getToken().subscribe((response)=>{
             if(!this.mainservice.global.notSecure){
-                if(response && response.length != 0){
-                    $this.$http.resetAuthenticationInfo(response);
-                    token = response['token'];
-                }else{
-                    token = this.mainservice.global.authentication.token;
-                }
+                token = response.token;
             }
             this.select_show = false;
-            if(inst.video || inst.numberOfFrames || inst.gspsQueryParams.length){
+            if(inst.video || inst.image || inst.numberOfFrames || inst.gspsQueryParams.length){
                 if (inst.gspsQueryParams.length){
                     url =  this.wadoURL(inst.gspsQueryParams[inst.view - 1]);
                 }
-                if (inst.numberOfFrames){
+                if (inst.numberOfFrames || (inst.image && !inst.video)){
                     contentType = 'image/jpeg';
                     url =  this.wadoURL(inst.wadoQueryParams, { contentType: 'image/jpeg'});
                 }
                 if (inst.video){
-                    contentType = 'video/mpeg';
-                    url =  this.wadoURL(inst.wadoQueryParams, { contentType: 'video/mpeg' });
+                    contentType = 'video/*';
+                    url =  this.wadoURL(inst.wadoQueryParams, { contentType: 'video/*' });
                 }
             }else{
                 url = this.wadoURL(inst.wadoQueryParams);
@@ -2596,7 +2991,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                     contentType = inst.attrs['00420012'].Value[0];
                 }
             }
-            if(contentType === 'application/pdf' || contentType === 'video/mpeg'){
+            if(!contentType || contentType.toLowerCase() === 'application/pdf' || contentType.toLowerCase().indexOf("video") > -1 || contentType.toLowerCase() === 'text/xml'){
                 // this.j4care.download(url);
                 if(!this.mainservice.global.notSecure){
                     WindowRefService.nativeWindow.open(this.renderURL(inst) + `&access_token=${token}`);
@@ -2607,7 +3002,8 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 this.config.viewContainerRef = this.viewContainerRef;
                 this.dialogRef = this.dialog.open(ViewerComponent, {
                     height: 'auto',
-                    width: 'auto'
+                    width: 'auto',
+                    panelClass:"viewer_dialog"
                 });
                 this.dialogRef.componentInstance.views = inst.views;
                 this.dialogRef.componentInstance.view = inst.view;
@@ -2760,7 +3156,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                 // this.selected['otherObjects'] = {};
             }
             if (modus === 'patient'){
-                console.log('this.selected', this.selected); //TODO when you have have a patient list, on ctrl and click the haspatient is still false
+                console.log('this.selected', this.selected);
                 //console.log("this.selectedkeys",Object.keys(this.selected.patients).length);
                 //console.log("patient.length",_.size(this.selected.patients));
                 if (_.size(this.selected.patients) > 0){
@@ -2983,18 +3379,16 @@ export class StudiesComponent implements OnDestroy,OnInit{
         if(this.externalInternalAetMode === "internal"){
             url = `../aets/${this.aet}/rs`;
         }*/
-        return this.service.rsURL(this.externalInternalAetMode,this.aet,this.aetmodel.dicomAETitle,this.externalInternalAetModel.dicomAETitle);
+        let externalInternalAetModel = this.externalInternalAetModel && this.externalInternalAetModel.dicomAETitle ? this.externalInternalAetModel.dicomAETitle : undefined;
+        let aetmodel = this.aetmodel && this.aetmodel.dicomAETitle ? this.aetmodel.dicomAETitle : undefined;
+        return this.service.rsURL(this.externalInternalAetMode,this.aet,aetmodel,externalInternalAetModel);
     }
     diffUrl(){
         if(!this.aet1){
             this.aet1 = this.aet;
         }
         if(!this.aet2){
-            this.mainservice.setMessage({
-                'title': 'Warning',
-                'text': "Secondary AET is empty!",
-                'status': 'warning'
-            });
+            this.mainservice.showMsg("Secondary AET is empty!");
         }else{
             return `../aets/${this.aet}/dimse/${this.aet1}/diff/${this.aet2}/studies`;
         }
@@ -3008,25 +3402,50 @@ export class StudiesComponent implements OnDestroy,OnInit{
     instanceURL(attrs) {
         return this.seriesURL(attrs) + '/instances/' + attrs['00080018'].Value[0];
     }
+    studyFileName(attrs) {
+        return attrs['0020000D'].Value[0];
+    }
+    seriesFileName(attrs) {
+        return this.studyFileName(attrs) + '_' + attrs['0020000E'].Value[0];
+    }
+    instanceFileName(attrs) {
+        return this.seriesFileName(attrs) + '_' + attrs['00080018'].Value[0];
+    }
     createPatientFilterParams() {
         let filter = Object.assign({}, this.filter);
+        delete filter["onlyDefault"];
+        if(!this.filter["onlyDefault"]){
+            filter["includefield"] = 'all';
+        }
         console.log('filter', filter);
         return filter;
     }
     createStudyFilterParams() {
         let filter = Object.assign({}, this.filter);
-        this.appendFilter(filter, 'StudyDate', this.studyDate, /-/g);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
-        this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);
+        delete filter["onlyDefault"];
+        delete filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate'];
+        delete filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime'];
+        if(!this.filter["onlyDefault"]){
+            filter["includefield"] = 'all';
+        }
+        // this.appendFilter(filter, 'StudyDate', this.studyDate, /-/g);
+        // this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
+        // this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
+        // this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);
         return filter;
     }
     createMwlFilterParams() {
         let filter = Object.assign({}, this.filter);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.studyDate, /-/g);
+        delete filter["onlyDefault"];
+        delete filter.StudyDate;
+        delete filter.StudyTime;
+        if(!this.filter["onlyDefault"]){
+            filter["includefield"] = 'all';
+        }
+/*        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.studyDate, /-/g);
         this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate, /-/g);
         this.appendFilter(filter, 'StudyTime', this.studyTime, /:/g);
-        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);
+        this.appendFilter(filter, 'ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime', this.ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime, /-/g);*/
         return filter;
     }
 
@@ -3040,12 +3459,15 @@ export class StudiesComponent implements OnDestroy,OnInit{
 
     createQueryParams(offset, limit, filter) {
         let params = {
-            includefield: 'all',
             offset: offset,
             limit: limit
         };
+        if(!this.filter["onlyDefault"]){
+            params["includefield"] = 'all';
+        }
+
         for (let key in filter){
-            if (filter[key] || filter === false){
+            if ((filter[key] || filter[key] === false) && key != "onlyDefault"){
                 params[key] = filter[key];
             }
         }
@@ -3089,7 +3511,8 @@ export class StudiesComponent implements OnDestroy,OnInit{
                         'status': 'info'
                     });
                 }else{
-                    this.service.MergeRecursive(this.clipboard, this.selected);
+                    // this.service.MergeRecursive(this.clipboard, this.selected);
+                    _.merge(this.clipboard, this.selected);
                     if (this.clipboard.action && this.clipboard.action === 'copy'){
                         let $this = this;
                         this.confirm({
@@ -3205,7 +3628,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
         console.log('ctrlv size', _.size(this.clipboard));
         if (_.size(this.clipboard) > 0 && (_.size(this.selected) > 0 || (_.hasIn(this.selected, 'hasPatient') && _.size(this.selected) > 1))) {
             this.cfpLoadingBar.start();
-            let headers: Headers = new Headers({'Content-Type': 'application/json'});
+            let headers: HttpHeaders = new HttpHeaders({'Content-Type': 'application/json'});
             if (!this.service.isTargetInClipboard(this.selected, this.clipboard) || this.target.modus === "mwl"){
 
                 let $this = this;
@@ -3249,7 +3672,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                     this.dialogRef.componentInstance.reject = this.reject;
                     this.dialogRef.componentInstance.saveLabel = action;
                     this.dialogRef.componentInstance.title = title;
-                    this.cfpLoadingBar.stop();
+                    this.cfpLoadingBar.complete();
                     this.dialogRef.afterClosed().subscribe(result => {
                         $this.cfpLoadingBar.start();
                         if (result) {
@@ -3264,7 +3687,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                 let object;
                                 let url;
                                 if(this.externalInternalAetMode === 'external'){
-                                    url = `../hl7apps/${$this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes)}/hl7/${$this.externalInternalAetModel.hl7ApplicationName}/patients/${$this.service.getPatientId($this.clipboard.patients)}/merge`;
+                                    url = `../hl7apps/${$this.service.getHl7ApplicationNameFormAETtitle($this.aet, $this.allAes)}/hl7/${$this.externalInternalAetModel.hl7ApplicationName}/patients/${$this.service.getPatientId($this.clipboard.patients)}/merge?queue=true`;
                                     object = $this.selected.patients[0].attrs;
 
                                 }else{
@@ -3301,9 +3724,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                         $this.selected = {};
                                         $this.clipboard = {};
                                         $this.fireRightQuery();
-                                        $this.cfpLoadingBar.stop();
+                                        $this.cfpLoadingBar.complete();
                                     }, (response) => {
-                                        $this.cfpLoadingBar.stop();
+                                        $this.cfpLoadingBar.complete();
                                         $this.httpErrorHandler.handleError(response);
                                     });
                             }
@@ -3324,11 +3747,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                         console.log('in map1', res);
                                         let resjson;
                                         try {
-                                            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                                          /*  let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
                                             if(pattern.exec(res.url)){
                                                 WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                                            }
-                                            resjson = res.json();
+                                            }*/
+                                            // resjson = res.json();
+                                            resjson = res;
                                         } catch (e) {
                                             resjson = {};
                                         }
@@ -3348,11 +3772,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                             console.log('in map1', res);
                                                             let resjson;
                                                             try {
-                                                                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                                                                /*let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
                                                                 if(pattern.exec(res.url)){
                                                                     WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                                                                }
-                                                                resjson = res.json();
+                                                                }*/
+                                                                // resjson = res.json();
+                                                                resjson = res;
                                                             } catch (e) {
                                                                 resjson = {};
                                                             }
@@ -3367,12 +3792,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                              'text': 'Object with the Study Instance UID ' + m.StudyInstanceUID + ' copied successfully!',
                                                              'status': 'info'
                                                              });
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.cfpLoadingBar.complete();
                                                             // $this.callBackFree = true;
                                                         }, (response) => {
                                                             console.log('resin err', response);
                                                             $this.clipboard = {};
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.cfpLoadingBar.complete();
                                                             $this.httpErrorHandler.handleError(response);
                                                             // $this.callBackFree = true;
                                                         });
@@ -3380,7 +3805,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                 $this.fireRightQuery();
                                             },
                                             (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 console.log('response', response);
                                             }
@@ -3397,11 +3822,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                 console.log('in map1', res);
                                                 let resjson;
                                                 try {
-                                                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                                                    /*let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
                                                     if(pattern.exec(res.url)){
                                                         WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                                                    }
-                                                    resjson = res.json();
+                                                    }*/
+                                                    // resjson = res.json();
+                                                    resjson = res;
                                                 } catch (e) {
                                                     resjson = {};
                                                 }
@@ -3409,7 +3835,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                             })
                                             .subscribe((response) => {
                                                 console.log('in then function');
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.mainservice.setMessage({
                                                     'title': 'Info',
                                                     'text': 'Object with the Study Instance UID ' + $this.target.attrs['0020000D'].Value[0] + ' copied successfully!',
@@ -3420,7 +3846,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                 $this.fireRightQuery();
                                                 // $this.callBackFree = true;
                                             }, (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 // $this.callBackFree = true;
                                             });
@@ -3444,11 +3870,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                             console.log('in map1', res);
                                             let resjson;
                                             try {
-                                                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                                               /* let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
                                                 if(pattern.exec(res.url)){
                                                     WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                                                }
-                                                resjson = res.json();
+                                                }*/
+                                                // resjson = res.json();
+                                                resjson = res;
                                             } catch (e) {
                                                 resjson = {};
                                             }
@@ -3465,11 +3892,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                         .map(res => {
                                                             let resjson;
                                                             try {
-                                                                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                                                                /*let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
                                                                 if(pattern.exec(res.url)){
                                                                     WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                                                                }
-                                                                resjson = res.json();
+                                                                }*/
+                                                                // resjson = res.json();
+                                                                resjson = res;
                                                             } catch (e) {
                                                                 resjson = {};
                                                             }
@@ -3479,7 +3907,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                             console.log('in then function');
                                                             $this.clipboard = {};
                                                             $this.selected = {};
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.cfpLoadingBar.complete();
                                                             $this.mainservice.setMessage({
                                                                 'title': 'Info',
                                                                 'text': 'Object with the Study Instance UID ' + m.StudyInstanceUID + ' moved successfully!',
@@ -3487,13 +3915,13 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                             });
                                                             $this.fireRightQuery();
                                                         }, (response) => {
-                                                            $this.cfpLoadingBar.stop();
+                                                            $this.cfpLoadingBar.complete();
                                                             $this.httpErrorHandler.handleError(response);
                                                         });
                                                 });
                                             },
                                             (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 console.log('response', response);
                                             }
@@ -3519,11 +3947,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                 console.log('in map1', res);
                                                 let resjson;
                                                 try {
-                                                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                                                    /*let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
                                                     if (pattern.exec(res.url)) {
                                                         WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                                                    }
-                                                    resjson = res.json();
+                                                    }*/
+                                                    // resjson = res.json();
+                                                    resjson = res;
                                                 } catch (e) {
                                                     resjson = {};
                                                 }
@@ -3531,7 +3960,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                             })
                                             .subscribe((response) => {
                                                 console.log('in then function');
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.mainservice.setMessage({
                                                     'title': 'Info',
                                                     'text': 'Object with the Study Instance UID ' + $this.target.attrs['0020000D'].Value[0] + ' moved successfully!',
@@ -3543,7 +3972,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                                                 }
                                                 $this.fireRightQuery();
                                             }, (response) => {
-                                                $this.cfpLoadingBar.stop();
+                                                $this.cfpLoadingBar.complete();
                                                 $this.httpErrorHandler.handleError(response);
                                                 if(index == Object.keys($this.clipboard.otherObjects).length){
                                                     $this.clipboard = {};
@@ -3560,7 +3989,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
                             $this.selected = {};
                             $this.clipboard = {};
                         }
-                        $this.cfpLoadingBar.stop();
+                        $this.cfpLoadingBar.complete();
                         this.dialogRef = null;
                     });
             }else {
@@ -3620,7 +4049,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
     };
     renderURL(inst) {
         if (inst.video)
-            return this.wadoURL(inst.wadoQueryParams, { contentType: 'video/mpeg' });
+            return this.wadoURL(inst.wadoQueryParams, { contentType: 'video/*' });
         if (inst.numberOfFrames)
             return this.wadoURL(inst.wadoQueryParams, { contentType: 'image/jpeg', frameNumber: inst.view });
         if (inst.gspsQueryParams.length)
@@ -3680,6 +4109,12 @@ export class StudiesComponent implements OnDestroy,OnInit{
         //     }
         // });
     }
+    equalsIgnoreSpecificCharacterSet(attrs, other) {
+        return Object.keys(attrs).filter(tag => tag != '00080005')
+                .every(tag => _.isEqual(attrs[tag],other[tag]))
+            && Object.keys(other).filter(tag => tag != '00080005')
+                .every(tag => attrs[tag]);
+    }
     binarySearch(ar, el) {
         let m = 0;
         let n = ar.length - 1;
@@ -3725,6 +4160,11 @@ export class StudiesComponent implements OnDestroy,OnInit{
             '1.2.840.10008.5.1.4.1.1.77.1.4.1']
             .indexOf(sopClass) != -1 ? 1 : 0;
     }
+    isImage(attrs){
+        let sopClass = this.valueOf(attrs['00080016']);
+        let bitsAllocated = this.valueOf(attrs['00280100']);
+        return ((bitsAllocated && bitsAllocated != "") && (sopClass != '1.2.840.10008.5.1.4.1.1.481.2'));
+    }
     valuesOf(attr) {
         return attr && attr.Value;
     }
@@ -3738,82 +4178,49 @@ export class StudiesComponent implements OnDestroy,OnInit{
         return a;
     }
     aesdropdown: SelectItem[] = [];
-    initAETs(retries) {
+    initAETs(retries, mode?) {
         if (!this.aes){
             let $this = this;
+            if(!mode){
+                mode = "internal";
+            }
            this.$http.get('../aets')
-                .map(res => {let resjson; try{
-                    let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                    if(pattern.exec(res.url)){
-                        WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                    }
-                    resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
-                .subscribe(
-                    function (res) {
-                        console.log('before call getAes', res, 'this user=', $this.user);
-                        $this.aes = $this.service.getAes($this.user, res);
-                        console.log('aes', $this.aes);
-                        // $this.aesdropdown = $this.aes;
-/*                        $this.aes.map((ae, i) => {
-                            console.log('in map ae', ae);
-                            console.log('in map i', i);
-                            console.log('aesi=', $this.aes[i]);
-                            $this.aesdropdown.push({label: ae.title, value: ae.title});
-                            $this.aes[i]['label'] = ae.title;
-                            $this.aes[i]['value'] = ae.value;
+                .map(res => j4care.redirectOnAuthResponse(res))
+                .map(aet=> this.permissionService.filterAetDependingOnUiConfig(aet,mode))
+                .subscribe((res)=> {
+                        $this.aes = j4care.extendAetObjectWithAlias($this.service.getAes($this.mainservice.user, res));
 
-                        });*/
-                        console.log('$this.aes after map', $this.aes);
-                        $this.aet = $this.aes[0].dicomAETitle.toString();
-                        if (!$this.aetmodel){
-                            $this.aetmodel = $this.aes[0];
+                        try{
+                            $this.aet = $this.aes[0].dicomAETitle.toString();
+                            if (!$this.aetmodel){
+                                $this.aetmodel = $this.aes[0];
+                            }
+                        }catch(e){
+                            console.warn(e);
                         }
                         // $this.mainservice.setGlobal({aet:$this.aet,aetmodel:$this.aetmodel,aes:$this.aes, aesdropdown:$this.aesdropdown});
                     },
-                    function (res) {
+                    (res)=> {
                         if (retries)
-                            $this.initAETs(retries - 1);
+                            $this.initAETs(retries - 1, mode);
                 });
         }
     }
     getAllAes(retries) {
         let $this = this;
         this.$http.get('../aes')
-            .map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
+            .map(res => j4care.redirectOnAuthResponse(res))
+            .map(aet=> this.permissionService.filterAetDependingOnUiConfig(aet,"external"))
             .subscribe(
-                function (res) {
-                    console.log('before call getAes', res, 'this user=', $this.user);
-                    $this.allAes = res.map((res)=>{
+                (res)=> {
+                    $this.allAes = j4care.extendAetObjectWithAlias(res.map((res)=>{
                         res['title'] = res['dicomAETitle'];
                         res['description'] = res['dicomDescription'];
                         return res;
-                    });
+                    }));
                     $this.externalInternalAetModel = $this.allAes[0];
-                    // $this.aes = $this.service.getAes($this.user, res);
-/*                    console.log('aes', $this.aes);
-                    // $this.aesdropdown = $this.aes;
-                    $this.aes.map((ae, i) => {
-                        console.log('in map ae', ae);
-                        console.log('in map i', i);
-                        console.log('aesi=', $this.aes[i]);
-                        $this.aesdropdown.push({label: ae.title, value: ae.title});
-                        $this.aes[i]['label'] = ae.title;
-                        $this.aes[i]['value'] = ae.value;
-
-                    });
-                    console.log('$this.aes after map', $this.aes);
-                    $this.aet = $this.aes[0].title.toString();
-                    if (!$this.aetmodel){
-                        $this.aetmodel = $this.aes[0];
-                    }*/
-                    // $this.mainservice.setGlobal({aet:$this.aet,aetmodel:$this.aetmodel,aes:$this.aes, aesdropdown:$this.aesdropdown});
                 },
-                function (res) {
+                (res)=> {
                     if (retries)
                         $this.getAllAes(retries - 1);
             });
@@ -3845,6 +4252,9 @@ export class StudiesComponent implements OnDestroy,OnInit{
 
             // this[model] = newValue;
         // }
+        if(model === 'aetmodel' || model === 'externalInternalAetModel'){
+         //TODO Show ForceQueryByStudyUID only if bouth selected aets are parte of an device the primary device type ARCHIVE
+        }
         if (model === 'aetmodel'){
             this.aet = newValue.dicomAETitle;
             // this.aetmodel = newValue;
@@ -3856,11 +4266,11 @@ export class StudiesComponent implements OnDestroy,OnInit{
         let $this = this;
        this.$http.get('../attribute-filter/' + entity)
             .map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                /*let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
                 if(pattern.exec(res.url)){
                     WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
+                }*/
+                resjson = res; }catch (e){resjson = {}; } return resjson; })
             .subscribe(
                 function (res) {
                     if (entity === 'Patient' && res.dcmTag){
@@ -3878,93 +4288,209 @@ export class StudiesComponent implements OnDestroy,OnInit{
     };
     storageCommitmen(mode, object){
         console.log('object', object);
-        this.cfpLoadingBar.start();
-        let url = '../aets/' + this.aet + '/rs/studies/';
-        switch (mode) {
-            case 'study':
-                url += object.attrs['0020000D'].Value[0] + '/stgcmt';
-                break;
-            case 'series':
-                url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/stgcmt';
-                break;
-            default:
-            case 'instance':
-                url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/instances/' + object.attrs['00080018'].Value[0] + '/stgcmt';
-                break;
-        }
-        let $this = this;
-        let headers = {headers: new Headers({ 'Content-Type': 'application/dicom+json' })};
-            this.$http.post(
-                url,
-                {},
-                headers
-            )
-            .map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+        this.service.getStorageSystems().subscribe(storages=>{
+            this.confirm({
+                content: 'Schedule Storage Verification',
+                doNotSave:true,
+                form_schema:[
+                    [
+                        [
+                        {
+                            tag:"label",
+                            text:"Verification Policy"
+                        },
+                        {
+                            tag:"select",
+                            options:[
+                                {
+                                    value:"DB_RECORD_EXISTS",
+                                    text:"DB_RECORD_EXISTS",
+                                    title:"Check for existence of DB records"
+                                },
+                                {
+                                    value:"OBJECT_EXISTS",
+                                    text:"OBJECT_EXISTS",
+                                    title:"check if object exists on Storage System"
+                                },
+                                {
+                                    value:"OBJECT_SIZE",
+                                    text:"OBJECT_SIZE",
+                                    title:"check size of object on Storage System"
+                                },
+                                {
+                                    value:"OBJECT_FETCH",
+                                    text:"OBJECT_FETCH",
+                                    title:"Fetch object from Storage System"
+                                },
+                                {
+                                    value:"OBJECT_CHECKSUM",
+                                    text:"OBJECT_CHECKSUM",
+                                    title:"recalculate checksum of object on Storage System"
+                                },
+                                {
+                                    value:"S3_MD5SUM",
+                                    text:"S3_MD5SUM",
+                                    title:"Check MD5 checksum of object on S3 Storage System"
+                                }
+                            ],
+                            showStar:true,
+                            filterKey:"storageVerificationPolicy",
+                            description:"Verification Policy",
+                            placeholder:"Verification Policy"
+                        }
+                    ],[
+                            {
+                                tag:"label",
+                                text:"Update Location DB"
+                            },
+                            {
+                                tag:"checkbox",
+                                filterKey:"storageVerificationUpdateLocationStatus"
+                            }
+                        ],[
+                            {
+                                tag:"label",
+                                text:"Storage ID"
+                            },{
+                                tag:"select",
+                                options:storages.map(storage=> new SelectDropdown(storage.dcmStorageID, storage.dcmStorageID)),
+                                showStar:true,
+                                filterKey:"storageVerificationStorageID",
+                                description:"Storage IDs",
+                                placeholder:"Storage IDs"
+                            }
+                        ]
+                    ]
+                ],
+                result: {
+                    schema_model: {}
+                },
+                saveButton: 'QUERY'
+            }).subscribe(ok=> {
+                if (ok) {
+                    this.cfpLoadingBar.start();
+                    let url = '../aets/' + this.aet + '/rs/studies/';
+                    switch (mode) {
+                        case 'study':
+                            url += object.attrs['0020000D'].Value[0] + '/stgver';
+                            break;
+                        case 'series':
+                            url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/stgver';
+                            break;
+                        default:
+                        case 'instance':
+                            url += object.attrs['0020000D'].Value[0] + '/series/' + object.attrs['0020000E'].Value[0] + '/instances/' + object.attrs['00080018'].Value[0] + '/stgver';
+                            break;
+                    }
+                    if (ok && ok.schema_model) {
+                        url += j4care.getUrlParams(ok.schema_model);
+                    }
+                    let $this = this;
+
+                    let headers = new HttpHeaders({'Content-Type': 'application/dicom+json'});
+                    this.$http.post(
+                        url,
+                        {},
+                        headers
+                    )
+                        .map(res => {
+                            let resjson;
+                            try {
+                               /* let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
+                                if (pattern.exec(res.url)) {
+                                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
+                                }*/
+                                resjson = res;
+                            } catch (e) {
+                                resjson = {};
+                            }
+                            return resjson;
+                        })
+                        .subscribe(
+                            (response) => {
+                                // console.log("response",response);
+                                let failed = (response[0]['00081198'] && response[0]['00081198'].Value) ? response[0]['00081198'].Value.length : 0;
+                                let success = (response[0]['00081199'] && response[0]['00081199'].Value) ? response[0]['00081199'].Value.length : 0;
+                                let msgStatus = 'Info';
+                                if (failed > 0 && success > 0) {
+                                    msgStatus = 'Warning';
+                                    this.mainservice.setMessage({
+                                        'title': msgStatus,
+                                        'text': failed + ' of ' + (success + failed) + ' failed!',
+                                        'status': msgStatus.toLowerCase()
+                                    });
+                                    console.log(failed + ' of ' + (success + failed) + ' failed!');
+                                }
+                                if (failed > 0 && success === 0) {
+                                    msgStatus = 'Error';
+                                    this.mainservice.setMessage({
+                                        'title': msgStatus,
+                                        'text': 'all (' + failed + ') failed!',
+                                        'status': msgStatus.toLowerCase()
+                                    });
+                                    console.log('all ' + failed + 'failed!');
+                                }
+                                if (failed === 0) {
+                                    console.log(success + ' verified successfully 0 failed!');
+                                    this.mainservice.setMessage({
+                                        'title': msgStatus,
+                                        'text': success + ' verified successfully\n 0 failed!',
+                                        'status': msgStatus.toLowerCase()
+                                    });
+                                }
+                                this.cfpLoadingBar.complete();
+                            },
+                            (response) => {
+                                $this.httpErrorHandler.handleError(response);
+                                this.cfpLoadingBar.complete();
+                            }
+                        );
                 }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
-            .subscribe(
-            (response) => {
-                // console.log("response",response);
-                let failed = (response[0]['00081198'] && response[0]['00081198'].Value) ? response[0]['00081198'].Value.length : 0;
-                let success = (response[0]['00081199'] && response[0]['00081199'].Value) ? response[0]['00081199'].Value.length : 0;
-                let msgStatus = 'Info';
-                if (failed > 0 && success > 0){
-                    msgStatus = 'Warning';
-                    this.mainservice.setMessage({
-                        'title': msgStatus,
-                        'text': failed + ' of ' + (success + failed) + ' failed!',
-                        'status': msgStatus.toLowerCase()
-                    });
-                    console.log(failed + ' of ' + (success + failed) + ' failed!');
-                }
-                if (failed > 0 && success === 0){
-                    msgStatus = 'Error';
-                    this.mainservice.setMessage( {
-                        'title': msgStatus,
-                        'text': 'all (' + failed + ') failed!',
-                        'status': msgStatus.toLowerCase()
-                    });
-                    console.log('all ' + failed + 'failed!');
-                }
-                if (failed === 0){
-                    console.log(success + ' verified successfully 0 failed!');
-                    this.mainservice.setMessage( {
-                        'title': msgStatus,
-                        'text': success + ' verified successfully\n 0 failed!',
-                        'status': msgStatus.toLowerCase()
-                    });
-                }
-                this.cfpLoadingBar.complete();
-            },
-            (response) => {
-                $this.httpErrorHandler.handleError(response);
-                this.cfpLoadingBar.complete();
-            }
-        );
+            });
+        },(err)=>{
+            this.httpErrorHandler.handleError(err);
+        });
     };
     openViewer(model, mode){
-        let url,
-            configuredUrl;
-        console.log('aetmodel', this.aetmodel);
-        switch (mode) {
-            case 'patient':
-                configuredUrl = this.aetmodel.dcmInvokeImageDisplayPatientURL;
-                console.log('configuredUrl', configuredUrl);
-                url = configuredUrl.substr(0, configuredUrl.length - 2) + model['00100020'].Value[0];
-                break;
-            case 'study':
-                configuredUrl = this.aetmodel.dcmInvokeImageDisplayStudyURL;
-                console.log('configuredUrl', configuredUrl);
-                url = configuredUrl.substr(0, configuredUrl.length - 2) + model['0020000D'].Value[0];
-                break;
-
+        try {
+            let token;
+            let target;
+            let url;
+            let configuredUrlString = mode === "study" ? this.aetmodel.dcmInvokeImageDisplayStudyURL : this.aetmodel.dcmInvokeImageDisplayPatientURL;
+            this._keycloakService.getToken().subscribe((response) => {
+                if (!this.mainservice.global.notSecure) {
+                    token = response.token;
+                }
+                console.groupCollapsed("OpenViewer");
+                console.log("Configure URL:",configuredUrlString);
+                console.log("aetmodel     :",this.aetmodel);
+                console.log("model:        ",model);
+                console.log("mode:         ",mode);
+                url = configuredUrlString.replace(/(&)(\w*)=(\{\}|_self|_blank)/g, (match, p1, p2, p3, offset, string) => {
+                    switch (p2) {
+                        case "studyUID":
+                            return `${p1}${p2}=${model['0020000D'].Value[0]}`;
+                        case "patientID":
+                            return `${p1}${p2}=${this.service.getPatientId(model)}`;
+                        case "access_token":
+                            return `${p1}${p2}=${token}`;
+                        case "target":
+                            target = `${p3}`;
+                            return "";
+                    }
+                }).trim();
+                console.log("Prepared URL: ", url);
+                console.groupEnd();
+                if (target) {
+                    this.service.getWindow().open(url, target);
+                } else {
+                    this.service.getWindow().open(url);
+                }
+            });
+        }catch(e){
+            j4care.log("Something went wrong while opening the Viewer",e);
+            this.mainservice.showError("Something went wrong while opening the Viewer open the inspect to see more details");
         }
-        console.log('url', url);
-        // $window.open(url);
-        this.service.getWindow().open(url);
     };
     showMoreFunction(e, elementLimit){
         let duration = 300;
@@ -4043,12 +4569,6 @@ export class StudiesComponent implements OnDestroy,OnInit{
     initExporters(retries) {
         let $this = this;
        this.$http.get('../export')
-            .map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
             .subscribe(
                 function (res) {
                     $this.exporters = res;
@@ -4072,12 +4592,6 @@ export class StudiesComponent implements OnDestroy,OnInit{
     initRjNotes(retries) {
         let $this = this;
        this.$http.get('../reject')
-            .map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
             .subscribe(
                 function (res) {
                     let rjnotes = res;
@@ -4108,12 +4622,6 @@ export class StudiesComponent implements OnDestroy,OnInit{
 
     testToken(){
         this.$http.get('../aes')
-            .map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; })
             .subscribe((res)=>{
                 console.log("testres",res);
             },(err)=>{
@@ -4158,6 +4666,90 @@ export class StudiesComponent implements OnDestroy,OnInit{
         //         }).catch(error => console.log(error));
         //     });
     }
+    queryNationalPationtRegister(patientId){
+        if(patientId.xroad){
+            delete patientId.xroad;
+        }else{
+            if(_.hasIn(this.mainservice,"global['PDQs']") && this.mainservice.global['PDQs'].length > 0){
+                //PDQ is configured
+                console.log("global",this.mainservice.global);
+                if(this.mainservice.global['PDQs'].length > 1){
+                    this.confirm({
+                        content: 'Schedule Storage Verification of matching Studies',
+                        doNotSave:true,
+                        form_schema:[
+                                [
+                                    [
+
+                                    {
+                                        tag:"label",
+                                        text:"Select PDQ Service"
+                                    },
+                                    {
+                                        tag:"select",
+                                        options:this.mainservice.global['PDQs'].map(pdq=>{
+                                            return new SelectDropdown(pdq.id, (pdq.description || pdq.id))
+                                        }),
+                                        filterKey:"PDQServiceID",
+                                        description:"PDQ ServiceID",
+                                        placeholder:"PDQ ServiceID"
+                                    }
+                                ]
+                            ]
+                        ],
+                        result: {
+                            schema_model: {}
+                        },
+                        saveButton: 'QUERY'
+                    }).subscribe(ok=>{
+                        if(ok && ok.schema_model.PDQServiceID){
+                            this.queryPDQ(patientId,ok.schema_model.PDQServiceID);
+                        }
+                    })
+                }else{
+                    this.queryPDQ(patientId, this.mainservice.global.PDQs[0].id);
+                }
+            }else{
+                console.log("global",this.mainservice.global);
+                this.cfpLoadingBar.start();
+                this.service.queryNationalPationtRegister(this.service.getPatientId(patientId.attrs)).subscribe((xroadAttr)=>{
+                    patientId.xroad = xroadAttr;
+                    this.cfpLoadingBar.complete();
+                },(err)=>{
+                    console.error("Error Quering National Pation Register",err);
+                    this.httpErrorHandler.handleError(err);
+                    this.cfpLoadingBar.complete();
+                });
+            }
+        }
+    }
+    queryPDQ(patientId, PDQServiceID){
+        this.cfpLoadingBar.start();
+        this.service.queryPatientDemographics(this.service.getPatientId(patientId.attrs),PDQServiceID).subscribe((xroadAttr)=>{
+            patientId.xroad = xroadAttr;
+            this.cfpLoadingBar.complete();
+        },(err)=>{
+            console.error("Error Quering National Patient Register",err);
+            this.httpErrorHandler.handleError(err);
+            this.cfpLoadingBar.complete();
+        });
+    }
+    getDiffAttributeSet(){
+        this.service.getDiffAttributeSet()
+            .retry(2)
+            .subscribe((res)=>{
+                this.diffAttributeSet = res.filter(attr => attr.type ==='DIFF_RS' && attr.id != 'all');
+            },(err)=>{
+                console.error("Error getting Diff Attribute Set",err);
+            });
+    }
+    getQueueNames(){
+        this.retrieveMonitoringService.getQueueNames().subscribe(names=>{
+            this.queues = names.map(name=> new SelectDropdown(name.name, name.description));
+        },err=>{
+            this.httpErrorHandler.handleError(err);
+        })
+    }
     ngOnDestroy() {
         // Save state of the study page in a global variable after leaving it
         let state = {
@@ -4176,7 +4768,7 @@ export class StudiesComponent implements OnDestroy,OnInit{
             limit: this.limit,
             trashaktive: this.trashaktive,
             patientmode: this.patientmode,
-            ScheduledProcedureStepSequence: this.ScheduledProcedureStepSequence,
+            // ScheduledProcedureStepSequence: this.ScheduledProcedureStepSequence,
             filterMode: this.filterMode,
             user: this.user,
             patients: this.patients,

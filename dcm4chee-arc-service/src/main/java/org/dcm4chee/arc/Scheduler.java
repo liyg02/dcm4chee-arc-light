@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2013-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,14 +40,15 @@
 
 package org.dcm4chee.arc;
 
+import org.dcm4che3.net.Device;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Duration;
 
 import javax.annotation.Resource;
 import javax.enterprise.concurrent.ManagedScheduledExecutorService;
-import java.time.LocalTime;
-import java.time.temporal.ChronoUnit;
-import java.util.Objects;
+import javax.inject.Inject;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -56,11 +57,11 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class Scheduler implements Runnable {
 
-    private static final int SECONDS_PER_DAY = 3600 * 24;
+    @Inject
+    protected Device device;
 
     private final Mode mode;
     volatile private long pollingIntervalInSeconds;
-    volatile private LocalTime startTime;
     volatile private ScheduledFuture<?> running;
 
     @Resource
@@ -72,20 +73,20 @@ public abstract class Scheduler implements Runnable {
 
     @Override
     public void run() {
+        log().info("start {}.execute()", getClass().getSimpleName());
         try {
             execute();
         } catch (Throwable e) {
-            log().warn("execute throws Exception", e);
+            log().warn("{}.execute() throws:\n", getClass().getSimpleName(), e);
         }
+        log().info("finished {}.execute()", getClass().getSimpleName());
     }
 
     public void start() {
         Duration pollingInterval = getPollingInterval();
         if (pollingInterval != null) {
             pollingIntervalInSeconds = pollingInterval.getSeconds();
-            startTime = getStartTime();
-            running = mode.schedule(
-                    this, startTime != null ? until(startTime) : pollingIntervalInSeconds, pollingIntervalInSeconds);
+            running = mode.schedule(this, getInitialDelay(), pollingIntervalInSeconds);
         }
     }
 
@@ -99,8 +100,7 @@ public abstract class Scheduler implements Runnable {
 
     public void reload() {
         Duration pollingInterval = getPollingInterval();
-        if (pollingInterval == null || pollingIntervalInSeconds != pollingInterval.getSeconds()
-                || !Objects.equals(startTime, getStartTime())) {
+        if (pollingInterval == null || pollingIntervalInSeconds != pollingInterval.getSeconds()) {
             stop();
             start();
         }
@@ -112,13 +112,9 @@ public abstract class Scheduler implements Runnable {
 
     protected abstract void execute();
 
-    protected LocalTime getStartTime() {
-        return null;
-    }
-
-    private long until(LocalTime time) {
-        long until = LocalTime.now().until(startTime, ChronoUnit.SECONDS);
-        return until > 0 ? until : until + SECONDS_PER_DAY;
+    protected long getInitialDelay() {
+        return device.getDeviceExtension(ArchiveDeviceExtension.class).getSchedulerMinStartDelay()
+                + ThreadLocalRandom.current().nextInt((int) pollingIntervalInSeconds);
     }
 
     public enum Mode {

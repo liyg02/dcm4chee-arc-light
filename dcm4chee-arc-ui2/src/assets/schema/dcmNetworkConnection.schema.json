@@ -25,7 +25,8 @@
           "DICOM",
           "HL7",
           "SYSLOG_TLS",
-          "SYSLOG_UDP"
+          "SYSLOG_UDP",
+          "HTTP"
       ]
     },
     "dcmHTTPProxy": {
@@ -173,6 +174,12 @@
       "description": "Timeout in ms for receive of C-GET-RSP or C-MOVE-RSP; no timeout if absent",
       "type": "integer",
       "minimum": 100
+    },
+    "dcmRetrieveTimeoutTotal": {
+      "title": "Retrieve Timeout Total",
+      "description": "Indicates if the timer with the specified timeout for outstanding C-GET and C-MOVE RSPs shall be restarted on receive of pending RSPs (=false) or not (=true).",
+      "type": "boolean",
+      "default": false
     },
     "dcmIdleTimeout": {
       "title": "Idle Timeout",

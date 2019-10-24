@@ -1,46 +1,10 @@
 <!--<button (click)="debugpre = !debugpre" style="position:fixed;top:0;left:100px;color:black;z-index: 99999999;">Show debug</button>
 <pre *ngIf="debugpre" style="position: absolute;width:70%;top:0;z-index: 9999999;">
-    <div style="float:left;width:50%">
-        <button (click)="testToken()">testtoken</button>
-    </div>
 &lt;!&ndash;    <div style="float:left;width:50%">
-    aes:{{aes|json}}
+        <button (click)="testToken()">testtoken</button>
     </div>&ndash;&gt;
 </pre>-->
 <div class="main_content studies">
-    <div *ngIf="user">
-
-    <!--  <pre style="position: absolute;width:50%;top:0;z-index: 9999999;">
-            queryMode:{{queryMode}}
-            <button (click)="fireRightQuery()">{{queryMode}}</button>
-    </pre> -->
-
-    <!-- contextmenu -->
-    <div class="dropdown contextmenu" > <!--contextmenu="meta.contextmenu"-->
-        <ul *ngIf="isRole('admin')" class="dropdown-menu" role="menu">
-            <!--     <li class="dropdown-header">
-                Test header
-                {{meta.contextmenu.item.modus}}
-                </li> -->
-            <!--<li [hidden]="meta.contextmenu.item.modus === 'patient._VALUE'" ><a role="menuitem" href="" (click)="ctrlC(meta.contextmenu.item)"><label>Copy</label><span>Ctrl + c</span></a></li>-->
-            <li><a role="menuitem" href="" (click)="ctrlV()"><label>Paste</label><span>Ctrl + v</span></a></li>
-            <!--<li [hidden]="meta.contextmenu.item.modus === 'patient._VALUE'" ><a role="menuitem" href="" (click)="ctrlX(meta.contextmenu.item)"><label>Cut</label><span>Ctrl + x</span></a></li>-->
-            <li>
-                <!--       <a role="menuitem" tabindex="-1" href (click)="editTest(meta.contextmenu.item)"
-                      >
-                        <span>Edit</span>
-                      </a> -->
-            </li>
-3            <!--     <li>
-                  <a role="menuitem" href
-                    (click)="delete(meta.contextmenu.item)"
-                  >
-                    <span>Delete</span>
-                  </a>
-                </li> -->
-        </ul>
-    </div>
-    <!-- /contextmenu -->
     <div id="clipboard" class="clipboard said"  *ngIf="clipBoardNotEmpty()">
         <div id="clipboardtoggle" class="toggle_button" (click)="showClipboardContent = !showClipboardContent">
             <i id="clipboardtoggle_icon" class="glyphicon glyphicon-copy"></i>
@@ -107,23 +71,23 @@
         </div>
     </div>
     <div class="headerblock" [ngClass]="{modality:showModalitySelector}" (keydown)="keyDownOnHeader($event)">
-        <div class="row filter">
+        <div class="row filter visible_filters">
             <div class="main_filter_block">
                 <div class="col-md-3 block-1-1">
                     <div class="row group_input">
                         <div class=" col-md-6">
-                            <md-select [(ngModel)]="externalInternalAetMode" (ngModelChange)="aetModeChange($event)">
-                                <md-option value="internal" title="Internal AET mode">Internal AET:</md-option>
-                                <md-option value="external" title="External AET mode">External AET:</md-option>
-                            </md-select>
+                            <mat-select [(ngModel)]="externalInternalAetMode" (ngModelChange)="aetModeChange($event)">
+                                <mat-option value="internal" title="Internal AET mode">Internal AET:</mat-option>
+                                <mat-option value="external" title="External AET mode">External AET:</mat-option>
+                            </mat-select>
                         </div>
                         <div class=" col-md-6">
-                            <md-select *ngIf="externalInternalAetMode === 'internal'" [(ngModel)]="aetmodel" (ngModelChange)="onChange($event, 'aetmodel')">
-                                <md-option *ngFor="let ae of aes" [value]="ae" title="{{ae.dicomDescription}}">{{ ae.dicomAETitle }}</md-option>
-                            </md-select>
-                            <md-select *ngIf="externalInternalAetMode === 'external'" [(ngModel)]="externalInternalAetModel" (ngModelChange)="onChange($event, 'externalInternalAetModel')">
-                                <md-option *ngFor="let ae of allAes" [value]="ae" title="{{ae.dicomDescription}}">{{ ae.dicomAETitle }}</md-option>
-                            </md-select>
+                            <mat-select *ngIf="externalInternalAetMode === 'internal'" [(ngModel)]="aetmodel" (ngModelChange)="onChange($event, 'aetmodel')">
+                                <mat-option *ngFor="let ae of aes" [value]="ae" title="{{ae.dicomDescription}}">{{ ae.dicomAETitle }}</mat-option>
+                            </mat-select>
+                            <mat-select *ngIf="externalInternalAetMode === 'external'" [(ngModel)]="externalInternalAetModel" (ngModelChange)="onChange($event, 'externalInternalAetModel')">
+                                <mat-option *ngFor="let ae of allAes" [value]="ae" title="{{ae.dicomDescription}}">{{ ae.dicomAETitle }}</mat-option>
+                            </mat-select>
                         </div>
                     </div>
                     <div class="row">
@@ -161,14 +125,15 @@
                         <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
                             <input id="ReferringPhysicianName" type="text" [(ngModel)]="filter.ReferringPhysicianName" placeholder="Referring physician name" title="Referring physician name" class="col-md-12" />
                         </div>
-                        <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
-                            <input type="text" size="5"  [(ngModel)]="filter.ModalitiesInStudy" (click)="showModalitySelector = !showModalitySelector" placeholder="Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
+                        <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff' || filterMode === 'mwl'" (clickOutside)='showModalitySelector = false'>
+                            <input *ngIf="filterMode === 'mwl'" type="text" size="5"  [(ngModel)]="filter['ScheduledProcedureStepSequence.Modality']" (click)="showModalitySelector = !showModalitySelector" placeholder="Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
+                            <input *ngIf="filterMode === 'study' || filterMode === 'diff'" type="text" size="5"  [(ngModel)]="filter.ModalitiesInStudy" (click)="showModalitySelector = !showModalitySelector" placeholder="Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
                             <div class="modality_selector [hidden]" *ngIf="showModalitySelector">
                                 <a href="" (click)="showModalitySelector=false" class="close"><i class="glyphicon glyphicon-remove"></i></a>
                                 <div class="common">
                                     <a href="" *ngFor="let value of modalities.common | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
                                 </div>
-                                <button (click)="filter.ModalitiesInStudy='';showModalitySelector=false;" class="clear custom_button">Clear</button>
+                                <button (click)="filter.ModalitiesInStudy='';filter.ScheduledProcedureStepSequence.Modality='';showModalitySelector=false;" class="clear custom_button">Clear</button>
                                 <!-- <div class="col-md-12"></div> -->
                                 <a href="" (click)="$event.preventDefault();showMore=true" *ngIf="!showMore" class="more">more<i class="glyphicon glyphicon-triangle-bottom"></i></a>
                                 <a href="" (click)="$event.preventDefault();showMore=false" *ngIf="showMore" class="more">less<i class="glyphicon glyphicon-triangle-top"></i></a>
@@ -176,27 +141,8 @@
                                     <a href="" *ngFor="let value of modalities.more | getKey;" (click)="$event.preventDefault();selectModality(value._KEY)" title="{{value._VALUE}}">{{value._KEY}}</a>
                                     <div class="form-group">
                                         <label>Custom modality code:</label>
-                                        <input [(ngModel)]="filter.ModalitiesInStudy" />
-                                        <button (click)="showModalitySelector=false" class="custom_button">Add</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6" *ngIf="filterMode === 'mwl'">
-                            <input type="text" size="5"  [(ngModel)]="filter['ScheduledProcedureStepSequence.Modality']" (click)="showModalitySelector = !showModalitySelector" placeholder="Modality"  class="col-md-12" ng-keypress="checkKeyModality($event)"/>
-                            <div class="modality_selector [hidden]" *ngIf="showModalitySelector">
-                                <a href="" (click)="showModalitySelector=false" class="close"><i class="glyphicon glyphicon-remove"></i></a>
-                                <div class="common">
-                                    <a href="" *ngFor="let value of modalities.common; let key = index;" (click)="selectModality(key)" title="{{value}}">{{key}}</a>
-                                </div>
-                                <button (click)="filter.ScheduledProcedureStepSequence.Modality='';showModalitySelector=false;" class="clear custom_button">Clear</button>
-                                <a href="" (click)="showMore=true" *ngIf="!showMore" class="more">more<i class="glyphicon glyphicon-triangle-bottom"></i></a>
-                                <a href="" (click)="showMore=false" *ngIf="showMore" class="more">less<i class="glyphicon glyphicon-triangle-top"></i></a>
-                                <div class="more_block" *ngIf="showMore">
-                                    <a href="" *ngFor="let value of modalities.more; let key = index;" (click)="selectModality(key)" title="{{value}}">{{key}}</a>
-                                    <div class="form-group">
-                                        <label>Custom modality code:</label>
-                                        <input [(ngModel)]="filter['ScheduledProcedureStepSequence.Modality']" />
+                                        <input *ngIf="filterMode === 'mwl'" [(ngModel)]="filter['ScheduledProcedureStepSequence.Modality']" />
+                                        <input *ngIf="filterMode === 'study' || filterMode === 'diff'" [(ngModel)]="filter.ModalitiesInStudy" />
                                         <button (click)="showModalitySelector=false" class="custom_button">Add</button>
                                     </div>
                                 </div>
@@ -205,10 +151,10 @@
                     </div>
                     <div class="row">
                         <div class="col-md-6">
-                            <label for="limit" class="block_seid pull-right">Page Size:</label>
+                            <input id="StudyInstanceUID" type="text" [(ngModel)]="filter.StudyInstanceUID" placeholder="Study Instance UID" title="study._VALUE instance UID" class="col-md-12 clearable" />
                         </div>
                         <div class="col-md-6">
-                            <input  id="limit" type="number" min="1" [(ngModel)]="limit" class="col-md-12" required/>
+                            <input  id="limit" type="number" min="1" [(ngModel)]="limit" class="col-md-12" title="Page Size" required/>
                         </div>
                     </div>
 
@@ -218,49 +164,75 @@
                         <label class="col-md-12">Scheduled Procedure Step Start Date / Time:</label>
                     </div>
                     <div class="row datetime">
-                        <div class="block_seid">
-                            <div class="col-md-12">
-                                <p-calendar dataType="string" [(ngModel)]="studyDate.from" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Start date from"></p-calendar>
+                        <!--<div class="block_seid">-->
+                            <div class="col-md-6">
+                                <range-picker [model]="filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate']" (modelChange)="filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartDate']= $event" mode="range" placeholder="Scheduled Procedure Step Start Date" title="Scheduled Procedure Step Start Date" dateFormat="yymmdd" onlyDate="true" ></range-picker>
+
+                                <!--<p-calendar dataType="string" [(ngModel)]="studyDate.from" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Start date from"></p-calendar>-->
                             </div>
-                            <div class="col-md-12">
-                                <p-calendar (onSelect)="selectTime('from')" (onBlur)="selectTime('from')" (click)="timeClose()" [(ngModel)]="studyTime.fromObject" timeOnly="true" hourFormat="24" placeholder="Start time from"></p-calendar>
+                            <div class="col-md-6">
+                                <range-picker [model]="filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime']" (modelChange)="filter['ScheduledProcedureStepSequence.ScheduledProcedureStepStartTime'] = $event" mode="range" placeholder="Scheduled Procedure Step Start Time" title="Scheduled Procedure Step Start Date" dateFormat="yymmdd" onlyTime="true"></range-picker>
+
+                                <!--<p-calendar (onSelect)="selectTime('from')" (onBlur)="selectTime('from')" (click)="timeClose()" [(ngModel)]="studyTime.fromObject" timeOnly="true" hourFormat="24" placeholder="Start time from"></p-calendar>-->
                             </div>
-                        </div>
-                        <div class="minus text-center">
+                        <!--</div>-->
+<!--                        <div class="minus text-center">
                             -
-                        </div>
-                        <div class="block_seid">
-                            <div class="col-md-12">
-                                <p-calendar dataType="string" [(ngModel)]="studyDate.to" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Start date to"></p-calendar>
+                        </div>-->
+                        <!--<div class="block_seid">-->
+                            <div class="col-md-6">
+                                <!--<p-calendar dataType="string" [(ngModel)]="studyDate.to" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Start date to"></p-calendar>-->
                             </div>
-                            <div class="col-md-12">
-                                <p-calendar (onSelect)="selectTime('to')" [(ngModel)]="studyTime.toObject" timeOnly="true" hourFormat="24" placeholder="Start time to"></p-calendar>
+                            <div class="col-md-6">
+                                <!--<p-calendar (onSelect)="selectTime('to')" [(ngModel)]="studyTime.toObject" timeOnly="true" hourFormat="24" placeholder="Start time to"></p-calendar>-->
                             </div>
-                        </div>
+                        <!--</div>-->
                     </div>
                 </div>
-                <div class="col-md-3 block-1-2" *ngIf="filterMode === 'study' || filterMode === 'diff' || filterMode === 'diff'">
-                    <div class="row">
+                <div class="col-md-3 block-1-2" *ngIf="filterMode === 'study' || filterMode === 'diff'">
+    <!--                <div class="row">
                         <label class="col-md-12">Study Date / Time:</label>
-                    </div>
+                    </div>-->
                     <div class="row datetime">
                         <div class="block_seid">
                             <div class="col-md-12">
-                                <p-calendar (change)="studyDateChanged($event)" (click)="studyDateChanged($event)" dataType="string" [(ngModel)]="studyDate.from" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Study date from"></p-calendar>
+                                <range-picker *ngIf="externalInternalAetMode === 'internal' && filterMode != 'diff'" [model]="filter.StudyDate" (modelChange)="filter.StudyDate = $event" mode="range" placeholder="Study date" dateFormat="yymmdd" onlyDate="true" title="Study date"></range-picker>
+                                <range-picker *ngIf="externalInternalAetMode === 'external' || filterMode === 'diff'" [model]="filter.StudyDate" (modelChange)="filter.StudyDate = $event" mode="range" placeholder="Study date" dateFormat="yymmdd" onlyDate="true" title="Study date" dateRange="true" (splitDateRangeChanged)="filter.SplitStudyDateRange = $event"></range-picker>
                             </div>
                             <div class="col-md-12">
-                                <p-calendar (onSelect)="selectTime('from')" (onBlur)="selectTime('from')" (click)="timeClose()" [(ngModel)]="studyTime.fromObject" timeOnly="true" hourFormat="24" placeholder="Study time from"></p-calendar>
+                                <range-picker [model]="filter.StudyTime" (modelChange)="filter.StudyTime = $event" mode="range" placeholder="Study time" dateFormat="yymmdd" onlyTime="true" title="Study time"></range-picker>
                             </div>
-                        </div>
-                        <div class="minus text-center">
+                            <div class="col-md-12">
+                                <input id="InstitutionalDepartmentName" type="text" [(ngModel)]="filter.InstitutionalDepartmentName" placeholder="Institutional Department Name" title="Institutional Department Name" class="col-md-12 clearable" />
+                            </div>
+
+                            </div>
+<!--                        <div class="minus text-center">
                             -
-                        </div>
+                        </div>-->
                         <div class="block_seid">
                             <div class="col-md-12">
-                                <p-calendar (change)="studyDateChanged($event)" (click)="studyDateChanged($event)" dataType="string" [(ngModel)]="studyDate.to" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Study date to"></p-calendar>
+                                <!--<p-calendar (change)="studyDateChanged($event)" (click)="studyDateChanged($event)" dataType="string" [(ngModel)]="studyDate.to" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Study date to"></p-calendar>-->
+                                <!--<input id="StudyInstanceUID" type="text" [(ngModel)]="filter.StudyInstanceUID" placeholder="Study Instance UID" title="study._VALUE instance UID" class="col-md-12 clearable" />-->
+
+                                <range-picker [model]="filter.StudyAccessDateTime" (modelChange)="filter.StudyAccessDateTime = $event" mode="range" placeholder="Study Access" title="Study Access Date Time" dateFormat="yymmdd"></range-picker>
+
                             </div>
-                            <div class="col-md-12">
-                                <p-calendar (onSelect)="selectTime('to')" [(ngModel)]="studyTime.toObject" timeOnly="true" hourFormat="24" placeholder="Study time to"></p-calendar>
+                            <div class="col-md-12" *ngIf="filterMode === 'study' || filterMode === 'diff'">
+                                <!--<p-calendar (onSelect)="selectTime('to')" [(ngModel)]="studyTime.toObject" timeOnly="true" hourFormat="24" placeholder="Study time to"></p-calendar>-->
+                                <range-picker [model]="filter.StudyReceiveDateTime" (modelChange)="filter.StudyReceiveDateTime = $event" mode="range" placeholder="Study created" title="Study created" dateFormat="yymmdd"></range-picker>
+
+                            </div>
+                        </div>
+                        <div class="block_seid">
+                            <div class="col-md-12" *ngIf="filterMode === 'study' || filterMode === 'diff'">
+                                <!--<p-calendar (change)="studyDateChanged($event)" (click)="studyDateChanged($event)" dataType="string" [(ngModel)]="studyDate.to" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Study date to"></p-calendar>-->
+                                <!--<input id="StudyInstanceUID" type="text" [(ngModel)]="filter.StudyInstanceUID" placeholder="Study Instance UID" title="study._VALUE instance UID" class="col-md-12 clearable" />-->
+                                <input id="SendingApplicationEntityTitleOfSeries" type="text" [(ngModel)]="filter.SendingApplicationEntityTitleOfSeries" placeholder="Sending Application Entity Title of Series" title="Sending Application Entity Title of Series" class="col-md-12 clearable" />
+                            </div>
+                            <div class="col-md-12" *ngIf="filterMode === 'study' || filterMode === 'diff'">
+                                <!--<p-calendar (onSelect)="selectTime('to')" [(ngModel)]="studyTime.toObject" timeOnly="true" hourFormat="24" placeholder="Study time to"></p-calendar>-->
+                                <!--<range-picker [model]="filter.StudyReceiveDateTime" (modelChange)="filter.StudyReceiveDateTime = $event" mode="range" placeholder="Study created" dateFormat="yymmdd"></range-picker>-->
                             </div>
                         </div>
                     </div>
@@ -270,53 +242,100 @@
                 </a>
             </div>
             <div class="buttons_block col-md-2">
-                <div class="row col-md-12" title="AE Title of first C-FIND SCP" *ngIf="filterMode === 'diff'">
-                    <md-select [(ngModel)]="aet1" placeholder="Primary AET" floatPlaceholder="never">
-                        <md-option *ngFor="let ae of allAes" [value]="ae.dicomAETitle" title="Aet from the device {{ae.dicomDeviceName}}">{{ ae.dicomAETitle }}</md-option>
-                    </md-select>
-                </div>
-                <i title="Switch the primary and secondary AET" (click)="swapDiff()" *ngIf="filterMode === 'diff'"  class="swap_icon material-icons">swap_vert</i>
-                <div class="row col-md-12" title="AE Title of second C-FIND SCP" *ngIf="filterMode === 'diff'">
-                    <md-select [(ngModel)]="aet2" placeholder="Secondary AET" floatPlaceholder="never">
-                        <md-option *ngFor="let ae of allAes" [value]="ae.dicomAETitle" title="Aet from the device {{ae.dicomDeviceName}}">{{ ae.dicomAETitle }}</md-option>
-                    </md-select>
-                </div>
-                <div class="count_block_total" *ngIf="filterMode==='study' && externalInternalAetMode === 'internal'" >
-                   <span class="count_text" title="Total size of filtered studies found">Size: <b>{{size}}</b></span>  <span (click)="getSize()" title="Get total size of filtered studies" class="glyphicon glyphicon-refresh"></span>
-                </div>
-                <div class="count_block_total" *ngIf="filterMode != 'diff'" [ngClass]="{single:externalInternalAetMode === 'external' || filterMode!='study'}">
-                   <span class="count_text" title="Total count of filtered studies found">Total count: <b>{{count}}</b></span>  <span (click)="getCount()" title="Get total count of filtered studies" class="glyphicon glyphicon-refresh"></span>
-                </div>
-                <div class="orderbyblock" [ngClass]="{notrash:trashaktive==false,diff:filterMode==='diff'}">
-                    <div class="btn-group" role="group" >
-                        <button id="showoptionlistbutton" type="button" class="btn btn-default selectedorderbutton" (click)="showoptionlist = !showoptionlist" >
-                            <span id="selectedorder" class="selectedorder"  [innerHtml]="orderbytext"></span>
-                            <span class="caret"></span>
-                        </button>
-                        <div class="optionlist" id="showoptionlist" *ngIf="showoptionlist && externalInternalAetMode === 'internal'" >
-                            <ul>
-                                <li *ngFor="let order of orderby; let i = index;" [ngClass]="{active:filter.orderby === order.value}" (click)="showoptionlist = false; filter.orderby = order.value; orderbytext = order.label; filterMode = order.mode;extendedFilter(false);fireQueryOnChange(order)" title="{{order.title}}" [innerHtml]="order.label"></li>
-                            </ul>
+                <ng-container *ngIf="!(filterMode === 'diff' && diffModeShow)">
+                    <div class="row col-md-12" title="AE Title of first C-FIND SCP" *ngIf="filterMode === 'diff'">
+                        <mat-select [(ngModel)]="aet1" placeholder="Primary AET" floatPlaceholder="never">
+                            <mat-option *ngFor="let ae of allAes" [value]="ae.dicomAETitle" title="Aet from the device {{ae.dicomDeviceName}}">{{ ae.dicomAETitle }}</mat-option>
+                        </mat-select>
+                    </div>
+                    <i title="Switch the primary and secondary AET" (click)="swapDiff()" *ngIf="filterMode === 'diff'"  class="swap_icon material-icons">swap_vert</i>
+                    <div class="row col-md-12" title="AE Title of second C-FIND SCP" *ngIf="filterMode === 'diff'">
+                        <mat-select [(ngModel)]="aet2" placeholder="Secondary AET" floatPlaceholder="never">
+                            <mat-option *ngFor="let ae of allAes" [value]="ae.dicomAETitle" title="Aet from the device {{ae.dicomDeviceName}}">{{ ae.dicomAETitle }}</mat-option>
+                        </mat-select>
+                    </div>
+                    <div class="row col-md-12 diff_input diff_toggle_button" *ngIf="filterMode === 'diff'" (click)="diffFilter = !diffFilter">
+                        <span class="click_outside_ignore">Diff Options <i *ngIf="!diffFilter" class="glyphicon glyphicon-triangle-bottom"></i><i *ngIf="diffFilter" class="glyphicon glyphicon-triangle-top"></i></span>
+                    </div>
+                    <div class="toggle_diff" *ngIf="diffFilter" (clickOutside)="diffFilter = false" [clickOutsideExceptionClass]="['diff_toggle_button', 'click_outside_ignore']">
+                        <div class="row col-md-12 diff_input" *ngIf="filterMode === 'diff'">
+                            <input type="checkbox" [(ngModel)]="diffQueue" placeholder="Queue" title="Queued diff" class="clearable" /> Queued
                         </div>
-                        <div class="optionlist" id="showoptionlistExternal" *ngIf="showoptionlist && externalInternalAetMode === 'external'" >
-                            <ul>
-                                <li *ngFor="let order of orderbyExternal; let i = index;" [ngClass]="{active:(filter.orderby === order.value && filterMode === order.mode)}" (click)="showoptionlist = false; filter.orderby = order.value; orderbytext = order.label; filterMode = order.mode;extendedFilter(false);fireQueryOnChange(order)" title="{{order.title}}" [innerHtml]="order.label"></li>
-                            </ul>
+                        <div class="row col-md-12 diff_input" *ngIf="filterMode === 'diff' && diffQueue">
+                            <input type="text" [(ngModel)]="batchID" title="Batch ID" class="clearable" placeholder="Batch ID"/>
                         </div>
-                        <button type="button" class="btn btn-info btn-default executebutton" *ngIf="filterMode==='patient'" id="querypatients" (click)="queryPatients(0);patientmode=true" title="Query Patients">
-                            <span class="glyphicon glyphicon-refresh"></span>
-                        </button>
-                        <button type="button" class="btn btn-default executebutton"
-                                *ngIf="filterMode==='study'" id="querystudies" (click)="queryStudies(0);patientmode=false" title="Query Studies">
-                            <span class="glyphicon glyphicon-refresh"></span>
-                        </button>
-                        <button *ngIf="filterMode==='mwl'" type="button" class="btn btn-default executebutton btn-info"  id="querymwl" (click)="queryMWL(0);patientmode=false" title="Query MWL">
-                            <span class="glyphicon glyphicon-refresh"></span>
-                        </button>
-                        <button *ngIf="filterMode==='diff'" type="button" class="btn btn-default executebutton btn-info"  id="querydiffs" (click)="queryDiffs(0);patientmode=false" title="Query Diff">
-                            <span class="glyphicon glyphicon-refresh"></span>
+                        <div class="row col-md-12 diff_input" *ngIf="filterMode === 'diff'">
+                            <input type="checkbox" [(ngModel)]="missing" title="Include Studies different at Secondary AET" class="clearable" /> Missing Studies
+                        </div>
+                        <div class="row col-md-12 diff_input" *ngIf="filterMode === 'diff'">
+                            <input type="checkbox" [(ngModel)]="different" title="Include Studies missing at Secondary AET" class="clearable" /> Different Studies
+                        </div>
+                        <mat-select *ngIf="different" [(ngModel)]="comparefield" placeholder="Attribute Set" floatPlaceholder="never">
+                            <mat-option value="">*</mat-option>
+                            <mat-option *ngFor="let attr of diffAttributeSet" [value]="attr.id" title="{{attr.description}}" >{{ attr.title }}</mat-option>
+                        </mat-select>
+
+                    </div>
+                    <div class="count_block_total" *ngIf="filterMode==='study' && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-size',param:'visible'}">
+                       <span class="count_text" title="Total size of filtered studies found">Size: <b class="nowrap">{{size|largeIntFormat}}</b></span>
+                        <span *ngIf="!showGetSizeLoader" (click)="getSize()" title="Get total size of filtered studies" class="glyphicon glyphicon-refresh"></span>
+                        <span *ngIf="showGetSizeLoader" class="fa fa-circle-o-notch fa-spin dashboard_loader"></span>
+                    </div>
+                    <div class="count_block_total" *ngIf="filterMode != 'diff'" [ngClass]="{single:externalInternalAetMode === 'external' || filterMode!='study'}" [permission]="{id:'action-studies-count',param:'visible'}">
+                       <span class="count_text" title="Total count of filtered studies found">Total count: <b class="nowrap">{{count|largeIntFormat}}</b></span>
+                            <span *ngIf="!showGetCountLoader" (click)="getCount()" title="Get total count of filtered studies" class="glyphicon glyphicon-refresh"></span>
+                            <span *ngIf="showGetCountLoader" class="fa fa-circle-o-notch fa-spin"></span>
+                    </div>
+                    <div class="orderbyblock" [ngClass]="{notrash:trashaktive==false,diff:filterMode==='diff'}">
+                        <div class="btn-group" role="group" (clickOutside)="showoptionlist = false">
+                            <button id="showoptionlistbutton" type="button" class="btn btn-default selectedorderbutton" (click)="showoptionlist = !showoptionlist" >
+                                <span id="selectedorder" class="selectedorder"  [innerHtml]="orderbytext"></span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="optionlist" id="showoptionlist" *ngIf="showoptionlist && externalInternalAetMode === 'internal'" >
+                                <ul>
+                                    <li *ngFor="let order of orderby; let i = index;" [ngClass]="{active:filter.orderby === order.value}" (click)="orderByChanged(order)" title="{{order.title}}" [innerHtml]="order.label"></li>
+                                </ul>
+                            </div>
+                            <div class="optionlist" id="showoptionlistExternal" *ngIf="showoptionlist && externalInternalAetMode === 'external'" >
+                                <ul>
+                                    <li *ngFor="let order of orderbyExternal; let i = index;" [ngClass]="{active:(filter.orderby === order.value && filterMode === order.mode)}" (click)="orderByChanged(order)" title="{{order.title}}" [innerHtml]="order.label"></li>
+                                </ul>
+                            </div>
+                            <button type="button" class="btn btn-info btn-default executebutton" *ngIf="filterMode==='patient'" id="querypatients" (click)="queryPatients(0);patientmode=true" title="Query Patients">
+                                <span class="glyphicon glyphicon-refresh"></span>
+                            </button>
+                            <button type="button" class="btn btn-default executebutton"
+                                    *ngIf="filterMode==='study'" id="querystudies" (click)="queryStudies(0);patientmode=false" title="Query Studies">
+                                <span class="glyphicon glyphicon-refresh"></span>
+                            </button>
+                            <button *ngIf="filterMode==='mwl'" type="button" class="btn btn-default executebutton btn-info"  id="querymwl" (click)="queryMWL(0);patientmode=false" title="Query MWL">
+                                <span class="glyphicon glyphicon-refresh"></span>
+                            </button>
+                            <button *ngIf="filterMode==='diff'" type="button" class="btn btn-default executebutton btn-info"  id="querydiffs" (click)="queryDiffs(0);patientmode=false" title="Query Diff">
+                                <span class="glyphicon glyphicon-refresh"></span>
+                            </button>
+                        </div>
+                    </div>
+                </ng-container>
+                <ng-container *ngIf="filterMode === 'diff' && diffModeShow">
+                    <div class="col-md-12 diff_mode_result_input" >
+                        <input type="text" [(ngModel)]="taskPK" placeholder="Pk of task" title="Pk of task" class="col-md-12 clearable" (focus)="batchID = ''" />
+                    </div>
+                    <div class="col-md-12 diff_mode_result_input">
+                        <input type="text" [(ngModel)]="batchID" placeholder="Bash ID" title="Bash ID" class="col-md-12 clearable" (focus)="taskPK = ''" />
+                    </div>
+                    <div class="col-md-12 diff_result_button">
+                        <button type="button" class="col-md-12  btn btn-default btn-info"  (click)="getDiffTaskResults(0);" title="Query Diff Results">
+                            <span class="glyphicon glyphicon-refresh"></span> Submit
                         </button>
                     </div>
+                </ng-container>
+                <div class="diff_mode_switch" *ngIf="filterMode==='diff'">
+                    <ul>
+                        <li (click)="diffModeShow = false" class="trigger" title="Trigger a new diff" [ngClass]="{active:!diffModeShow}">Trigger</li>
+                        <li (click)="diffModeShow = true" class="show" title="Show diff results" [ngClass]="{active:diffModeShow}">Show</li>
+                    </ul>
                 </div>
             </div>
         </div>
@@ -328,17 +347,17 @@
                         <input id="InstitutionName" type="text" [(ngModel)]="filter.InstitutionName" placeholder="Institution Name" title="Institution Name" class="col-md-12" />
                     </div>
                     <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
-                        <input id="SendingApplicationEntityTitleOfSeries" type="text" [(ngModel)]="filter.SendingApplicationEntityTitleOfSeries" placeholder="Sending Application Entity Title of Series" title="Sending Application Entity Title of Series" class="col-md-12 clearable" />
+                        <!--<input id="SendingApplicationEntityTitleOfSeries" type="text" [(ngModel)]="filter.SendingApplicationEntityTitleOfSeries" placeholder="Sending Application Entity Title of Series" title="Sending Application Entity Title of Series" class="col-md-12 clearable" />-->
                     </div>
                     <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
-                        <input id="InstitutionalDepartmentName" type="text" [(ngModel)]="filter.InstitutionalDepartmentName" placeholder="Institutional Department Name" title="Institutional Department Name" class="col-md-12 clearable" />
+                        <!--<input id="InstitutionalDepartmentName" type="text" [(ngModel)]="filter.InstitutionalDepartmentName" placeholder="Institutional Department Name" title="Institutional Department Name" class="col-md-12 clearable" />-->
                     </div>
                     <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
                         <input id="StationName" type="text" [(ngModel)]="filter.StationName" placeholder="Station Name" title="Station Name" class="col-md-12" />
                     </div>
                     <div class="col-md-6" *ngIf="filterMode === 'patient'">
                         <label title="Only patients with studies">
-                            <input type="checkbox" [(ngModel)]="filter.withoutstudies" ng-true-value="false" ng-false-value="true"> only with studies
+                            <input type="checkbox" [(ngModel)]="withoutstudies" (change)="filter.withoutstudies = !withoutstudies"> only with studies
                         </label>
                     </div>
                     <div class="col-md-6" *ngIf="filterMode === 'patient'">
@@ -363,59 +382,27 @@
                     <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
                         <input id="SeriesDescription" type="text" [(ngModel)]="filter.SeriesDescription" placeholder="Series Description" title="Series Description" class="col-md-12 clearable" />
                     </div>
-                </div>
-
-                <!--         <div class="row">
-                            <div class="col-md-6 col-md-offset-6">
-                                <input id="SeriesDescription" type="text" [(ngModel)]="filter.SeriesDescription" placeholder=" Series Description" class="col-md-12" />
-                            </div>
-                        </div> -->
-                <!--         <div class="row">
-                            <div class="col-md-6 col-md-offset-6">
-                                <input id="BodyPartExamined" type="text" [(ngModel)]="filter.BodyPartExamined" placeholder=" Body Part" class="col-md-12" />
-                            </div>
-                        </div> -->
-
-                <!--         <div class="row">
-                            <div class="col-md-6 col-md-offset-6">
-                                <input id="InstitutionName" type="text" [(ngModel)]="filter.InstitutionName" placeholder=" Institution Name" class="col-md-12" />
-                            </div>
-                        </div> -->
-                <!--         <div class="row">
-                        </div> -->
-                <!--         <div class="row">
-                            <div class="col-md-6 col-md-offset-6">
-                                <input id="SeriesInstanceUID" type="text" [(ngModel)]="filter.SeriesInstanceUID" placeholder=" Series Instance UID" class="col-md-12" />
-                            </div>
-                        </div> -->
-                <!--         <div class="row">
-                            <div class="col-md-6 col-md-offset-6">
-                                <input id="objectUID" type="text" [(ngModel)]="filter.ObjectUID" placeholder=" Object UID" class="col-md-12" />
-                            </div>
-                        </div> -->
-
-            </div>
-            <div class="col-md-3 block-2-1">
-                <!-- <div class="row" *ngIf="isRole('admin')"> -->
-                <!--             <label for="reject" class="block_seid text-right">Reject:</label>
-                            <div class="block_seid"> -->
-                <!--                 <select id="reject" [(ngModel)]="reject" class="col-md-9">
-                                    <option ng-repeat="rjn in rjnotes" tooltip="{{rjn.codeMeaning}}"
-                                            value="{{rjn.codeValue}}^{{rjn.codingSchemeDesignator}}">{{rjn.label}}</option>
-                                </select> -->
-                <!--                 <a (click)="deleteRejectedInstances()" href="" tooltip="Delete Rejected Instances permanently" class="custom_button deleteRejctedI">
-                                    <span class="glyphicon glyphicon-remove"></span>
-                                </a> -->
-                <!-- </div> -->
-                <!-- </div> -->
-                <div class="row">
-
                     <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
-                        <label title="Show only expired studies">
-                            <input type="checkbox" [(ngModel)]="filter.expired"> Only expired studies
+                        <label title="Show only studies failed to be retrieved">
+                            <input type="checkbox" [(ngModel)]="filter.storageVerificationFailed"> Storage Verification Failed
                         </label>
                     </div>
-                    <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
+                    <div class="col-md-6">
+                        <label title="Only Default">
+                            <input type="checkbox" [(ngModel)]="filter.onlyDefault"> Only Default
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 block-2-1">
+                <div class="row">
+
+                    <div class="col-md-6" *ngIf="filterMode === 'study' && externalInternalAetMode === 'internal'">
+                        <label title="Compression Failed"  >
+                            <input type="checkbox" [(ngModel)]="filter.compressionfailed"> Compression Failed
+                        </label>
+                    </div>
+                    <div class="col-md-6" *ngIf="(filterMode === 'study' || filterMode === 'diff') && externalInternalAetMode === 'internal'">
                         <label title="Show only incomplete studies"  >
                             <input type="checkbox" [(ngModel)]="filter.incomplete"> Only incomplete studies
                         </label>
@@ -426,29 +413,16 @@
                     <div class="col-md-6" *ngIf="filterMode === 'mwl'">
                         <input id="ScheduledPerformingPhysicianName" type="text" [(ngModel)]="filter['ScheduledProcedureStepSequence.ScheduledPerformingPhysicianName']" placeholder="Scheduled Performing Physician's Name" title="Scheduled Performing Physician's Name" class="col-md-12" />
                     </div>
-                    <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff' || filterMode === 'mwl'">
-                        <input id="StudyInstanceUID" type="text" [(ngModel)]="filter.StudyInstanceUID" placeholder="Study Instance UID" title="study._VALUE instance UID" class="col-md-12 clearable" />
-                    </div>
+                    <!--<div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff' || filterMode === 'mwl'">-->
+                        <!--<input id="StudyInstanceUID" type="text" [(ngModel)]="filter.StudyInstanceUID" placeholder="Study Instance UID" title="study._VALUE instance UID" class="col-md-12 clearable" />-->
+                    <!--</div>-->
                     <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
                         <input id="StudyDescription" type="text" [(ngModel)]="filter.StudyDescription" placeholder="Study Description" title="study._VALUE description" class="col-md-12" />
                     </div>
                     <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
-                        <input id="BodyPartExamined" type="text" [(ngModel)]="filter.BodyPartExamined" placeholder="Body Part Examined" title="Body Part Examined" class="col-md-12 clearable" />
+                        <!--<input id="BodyPartExamined" type="text" [(ngModel)]="filter.BodyPartExamined" placeholder="Body Part Examined" title="Body Part Examined" class="col-md-12 clearable" />-->
                     </div>
                     <div class="col-md-6" *ngIf="filterMode === 'patient'">
-                        <!--                 <input id="PatientBirthDate" [(ngModel)]="birthDate.filter" type="hiden" [(ngModel)]="filter.PatientBirthDate" />
-                         -->
-                        <!--<input-->
-                        <!--class="col-md-12"-->
-                        <!--placeholder="Patient's Birth Date"-->
-                        <!--(click)="birthDateOpen()"-->
-                        <!--id="birthDate"-->
-                        <!--type="text"-->
-                        <!--uib-datepicker-popup="{{format}}"-->
-                        <!--[(ngModel)]="birthDate.object"-->
-                        <!--is-open="birthDate.opened"-->
-                        <!--datepicker-options="dateOptions"-->
-                        <!--close-text="Close"/>-->
                         <p-calendar dataType="string" [(ngModel)]="filter.PatientBirthDate" dateFormat="yymmdd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Patient's Birth Date"></p-calendar>
 
                     </div>
@@ -456,75 +430,54 @@
             </div>
             <div class="col-md-3 block-2-1" *ngIf="filterMode === 'study' || filterMode === 'diff'">
                 <div class="row">
-<!--                    <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'" ng-init="ExternalRetrieveAETchecked = false">
-                        <label title="Show only studies failed to be retrieved">
-                            <input type="checkbox" [(ngModel)]="ExternalRetrieveAETchecked" (change)="filter.ExternalRetrieveAET = '';filter['ExternalRetrieveAET!'] = ''">Not retrieveable from external retrieve AET
-                        </label>
-                    </div>-->
-                    <div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff'">
+                    <div class="col-md-6" *ngIf="(filterMode === 'study' || filterMode === 'diff') && externalInternalAetMode === 'internal'">
                         <div class="input-group">
                             <span class="checkboxpart">
-                                <!--<input type="checkbox" aria-label="Checkbox for following text input"> No-->
                                 <input type="checkbox" [(ngModel)]="ExternalRetrieveAETchecked" (change)="filter.ExternalRetrieveAET = '';filter['ExternalRetrieveAET!'] = ''"> No
                             </span>
                             <input class="col-md-12 clearable inputpart" id="ExternalRetrieveAET" *ngIf="!ExternalRetrieveAETchecked" type="text" [(ngModel)]="filter.ExternalRetrieveAET" placeholder="External retrieve AET" title="Retrievable from external retrieve AET" />
                             <input class="col-md-12 clearable inputpart" id="ExternalRetrieveAET!" *ngIf="ExternalRetrieveAETchecked" type="text" [(ngModel)]="filter['ExternalRetrieveAET!']" placeholder="External retrieve AET" title="Not retrievable from external retrieve AET"/>
                         </div>
                     </div>
-                    <!--<div class="col-md-6" *ngIf="filterMode === 'study' || filterMode === 'diff' && ExternalRetrieveAETchecked">-->
-                    <!--</div>-->
-                    <div class="col-md-6">
+                    <div class="col-md-6" *ngIf="externalInternalAetMode === 'internal'">
                         <label title="Show only studies failed to be retrieved">
                             <input type="checkbox" [(ngModel)]="filter.retrievefailed"> Only failed to be retrieved
                         </label>
                     </div>
                 </div>
                 <div class="row" *ngIf="filterMode === 'study' || filterMode === 'diff'">
-                    <div class="col-md-12">
-                          <label>
-                            Study created date/time:
-                          </label>
-                    </div>
-                </div>
-                <div class="row" *ngIf="filterMode === 'study' || filterMode === 'diff'">
                     <div class="col-md-6">
-                        <p-calendar (ngModelChange)="studyReceiveDateTimeChanged($event,'from')" [(ngModel)]="StudyReceiveDateTime.from" dateFormat="yy-mm-dd"  showTime="showTime" hourFormat="24" placeholder="from"></p-calendar>
+                        <input id="BodyPartExamined" type="text" [(ngModel)]="filter.BodyPartExamined" placeholder="Body Part Examined" title="Body Part Examined" class="col-md-12 clearable" />
                     </div>
-                    <div class="col-md-6">
-                        <p-calendar (ngModelChange)="studyReceiveDateTimeChanged($event,'to')" [(ngModel)]="StudyReceiveDateTime.to" dateFormat="yy-mm-dd"  showTime="showTime" hourFormat="24" placeholder="to"></p-calendar>
+                    <div class="col-md-6" *ngIf="filterMode === 'diff'">
+                        <input  type="checkbox" [(ngModel)]="filter.ForceQueryByStudyUID"> Force query by Study UID
                     </div>
+                    <div class="col-md-6" *ngIf="externalInternalAetMode === 'internal' && filterMode != 'diff'">
+                        <range-picker *ngIf="externalInternalAetMode === 'internal' && filterMode != 'diff'" [model]="filter.ExpirationDate" (modelChange)="filter.ExpirationDate = $event" mode="range" placeholder="Expiration Date" dateFormat="yymmdd" onlyDate="true" title="Expiration Date"></range-picker>
+                    </div>
+
                 </div>
             </div>
         </div>
         <div class="morefunctionblock">
             <a href="" (click)="extendedFilter(true, $event)" *ngIf="!advancedConfig" class="more">More filters<i class="glyphicon glyphicon-triangle-bottom"></i></a>
             <a href="" (click)="extendedFilter(false, $event)" *ngIf="advancedConfig" class="more [hidden]">Close more filters<i class="glyphicon glyphicon-triangle-top"></i></a>
-            <div class="more functions" *ngIf="isRole('admin')">
-                <div class="mainbutton" (click)="moreFunctionsButtons = !moreFunctionsButtons">
-                   <span *ngIf="!moreFunctionsButtons" >More functions<i class="glyphicon glyphicon-triangle-bottom"></i></span>
-                    <span *ngIf="moreFunctionsButtons">Close more functions<i class="glyphicon glyphicon-triangle-top"></i></span>
+            <div class="more functions" [permission]="{id:'action-studies-more_function',param:'visible'}" (clickOutside)="moreFunctionsButtons = false" [clickOutsideExceptionClass]="['mainbutton','mainbutton_more_icon','glyphicon']">
+                <div class="mainbutton" (click)="moreFunctionsButtons = !moreFunctionsButtons" >
+                   <span class="mainbutton_more_icon" *ngIf="!moreFunctionsButtons" >More functions<i class="glyphicon glyphicon-triangle-bottom"></i></span>
+                    <span class="mainbutton_more_icon" *ngIf="moreFunctionsButtons">Close more functions<i class="glyphicon glyphicon-triangle-top"></i></span>
                 </div>
                 <ul *ngIf="moreFunctionsButtons">
                     <li (click)="moreFunctionsButtons = false;createPatient()" title="Create new patient">Create patient</li>
                     <li (click)="moreFunctionsButtons = false;uploadDicom()" *ngIf="externalInternalAetMode === 'internal'" title="Upload a DICOM Object">Upload DICOM Object</li>
                     <li (click)="moreFunctionsButtons = false;deleteRejectedInstances()" *ngIf="externalInternalAetMode === 'internal'" title="Delete Rejected Instances permanently">Permanent delete</li>
                     <li (click)="moreFunctionsButtons = false;retrieveMultipleStudies()" *ngIf="externalInternalAetMode === 'external'" title="Retrieve multiple studies">Retrieve multiple studies</li>
+                    <li (click)="moreFunctionsButtons = false;exportMultipleStudies()" *ngIf="externalInternalAetMode === 'internal'" title="Retrieve multiple studies">Export multiple studies</li>
+                    <li (click)="moreFunctionsButtons = false;storageVerification()"  title="Schedule Storage Verification of Studies">Storage Verification</li>
+                    <li (click)="moreFunctionsButtons = false;downloadCSV()"  title="Download Studies as CSV">Download Studies as CSV</li>
                 </ul>
             </div>
         </div>
-<!--        <div class="morefunctionblock">
-            <div class="row">
-                <div class="col-md-6">
-                    <button class="col-md-12 checkbox_button" [ngClass]="{active: externalInternalAetMode}" (click)="externalInternalAetMode = !externalInternalAetMode"><span class="glyphicon glyphicon-share"></span> External AET Mode</button>
-                </div>
-            </div>
-        </div>-->
-
-
-
-        <!--<pre>-->
-            <!--visibleHeaderIndex:{{visibleHeaderIndex}};-->
-        <!--</pre>-->
         <div class="header_block" *ngIf="patients && patients.length != 0">
             <div class="thead header1" [ngClass]="{'hover':visibleHeaderIndex === 0}">
                 <div class="tr_row">
@@ -635,7 +588,7 @@
                     <div style="width:6%" class="th" title="Scheduled Station AE Title">SS AE Title</div>
                 </div>
             </div>
-            <div class="headerbuttons" *ngIf="filterMode != 'diff' && isRole('admin')">
+            <div class="headerbuttons" *ngIf="filterMode != 'diff'" [permission]="{id:'action-studies-copy_merge_move',param:'visible'}">
                 <button title="Toggle checkboxes for selection" class="activate_checkboxes" (click)="showCheckBoxes()"><i class="material-icons">playlist_add_check</i></button>
                 <div class="movegroup">
                     <button *ngIf="externalInternalAetMode === 'internal'" [ngClass]="{'disabled':selected.hasPatient===true}" title="Copy selected studies/series/instances to clipboard" class="copyselected" (click)="ctrlC()"><i class="material-icons">content_copy</i></button>
@@ -646,14 +599,7 @@
             </div>
         </div>
     </div>
-
-    <!-- Table -->
     <div id="tableblock" class="div-table animated" [ngClass]="{extended:(advancedConfig),modality:showModalitySelector}" contextmenu-container="meta.contextmenu">
-<!--<pre>-->
-    <!--<div *ngFor="let m of patients | getKey">-->
-        <!--{{m._KEY}} : {{m._VALUE.attrs |json}}-->
-    <!--</div>-->
-<!--</pre>-->
         <div class="repeat0" contextmenu-item='patient._VALUE' *ngFor="let patient of patients | getKey">
             <div class="more_menu_content" *ngIf="filterMode != 'diff'">
                 <div class="more_menu_study" [ngClass]="{show_checkboxes:showCheckboxes}">
@@ -662,28 +608,37 @@
                     </div>
                       <div class="exeq_buttons">
                           <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event,3)"></div>
-                          <div class="checkbox_content hiddenbuttons">
+                          <div class="checkbox_content hiddenbuttons" [permission]="{id:'action-studies-copy_merge_move',param:'visible'}">
                               <input type="checkbox" [ngModel]="patient._VALUE.selected" name="select" (change)='select(patient._VALUE,"patient",{"patientkey":patient._KEY},"fromcheckbox")'>
                           </div>
-                          <a class="table_btn hiddenbuttons" *ngIf="isRole('admin')" (click)="$event.preventDefault();editPatient(patient._VALUE, patient._KEY);" href="" title="Edit Patient">
+                          <a class="table_btn hiddenbuttons" [permission]="{id:'action-studies-patient',param:'edit'}" (click)="$event.preventDefault();editPatient(patient._VALUE, patient._KEY);" href="" title="Edit Patient">
                               <span class="glyphicon glyphicon-pencil"></span>
                           </a>
-                          <a class="table_btn hiddenbuttons" *ngIf="isRole('admin') && externalInternalAetMode === 'internal'" (click)="$event.preventDefault();patient._VALUE.createButtons = false;createMWL(patient._VALUE)" href="" title="Create MWL">
+                          <a class="table_btn hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-patient',param:'upload'}" (click)="$event.preventDefault();patient._VALUE.createButtons = false;createMWL(patient._VALUE)" href="" title="Create MWL">
                               <span class="glyphicon glyphicon-plus" ></span>
                           </a>
-                          <a class="table_btn hiddenbuttons"  *ngIf="isRole('admin') && externalInternalAetMode === 'internal' && _.hasIn(patient._VALUE,'attrs.00201200.Value[0]') && _.isEqual(patient._VALUE.attrs['00201200'].Value[0], 0)" (click)="$event.preventDefault();deletePatient(patient._VALUE, patients, patient._KEY)" href="" title="Delete Patient">
+                          <a class="table_btn hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-mwl',param:'create'}" (click)="$event.preventDefault();uploadInPatient(patient._VALUE)" href="" title="Upload file">
+                              <i class="material-icons">file_upload</i>
+                          </a>
+                          <a class="table_btn hiddenbuttons"  *ngIf="externalInternalAetMode === 'internal' && ((_.hasIn(patient._VALUE,'attrs.00201200.Value[0]') && _.isEqual(patient._VALUE.attrs['00201200'].Value[0], 0) && aetmodel.dcmAllowDeletePatient != 'NEVER') || aetmodel.dcmAllowDeletePatient === 'ALWAYS')" (click)="$event.preventDefault();deletePatient(patient._VALUE, patients, patient._KEY)" href="" title="Delete Patient" [permission]="{id:'action-studies-patient',param:'delete'}">
                               <span class="glyphicon glyphicon-remove"></span>
                           </a>
-                          <a class="table_btn hiddenbuttons"  *ngIf="isRole('admin') && externalInternalAetMode === 'internal' && aetmodel.dcmInvokeImageDisplayPatientURL"  (click)="$event.preventDefault();openViewer(patient._VALUE.attrs,'patient')" href="" title="Open patient in the viewer">
+                          <a class="table_btn hiddenbuttons"  *ngIf="externalInternalAetMode === 'internal' && aetmodel.dcmInvokeImageDisplayPatientURL"  (click)="$event.preventDefault();openViewer(patient._VALUE.attrs,'patient')" href="" title="Open patient in the viewer" [permission]="{id:'action-studies-viewer',param:'visible'}">
                               <span class="glyphicon glyphicon-eye-open"></span>
+                          </a>
+                          <a class="hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" (click)="$event.preventDefault();downloadCSV(patient._VALUE.attrs,'study')" href="" title="Download all patients studies as CSV">
+                              <span class="custom_icon csv_icon_black"></span>
                           </a>
                       </div>
                   </div>
               </div>
               <div class="thead" [ngClass]="{hide:patient._VALUE.hide}" (click)='select(patient._VALUE,"patient",{"patientkey":patient._KEY},"click")'>
                   <div class="tr_row" [ngClass]="{selected: patient._VALUE.selected}">
-                      <div class="th" style="width:10%">
+                      <div class="th" style="width:10%" [ngClass]="{'xroad':(mainservice['xRoad'] || (mainservice.global['PDQs'] && mainservice.global['PDQs'].length > 0))}">
                           <!--<div *ngIf="patientmode" class="table_btn" [innerHtml]="patient._VALUE.offset+1+'.'"> </div>-->
+                          <a class="table_btn hiddenbuttons"  *ngIf="mainservice['xRoad'] || (mainservice.global['PDQs'] && mainservice.global['PDQs'].length > 0)"  (click)="$event.preventDefault();queryNationalPationtRegister(patient._VALUE)" href="" title="Query National Patient Registry">
+                              <span class="xroad_icon"></span>
+                          </a>
                           <a class="table_btn" (click)="$event.preventDefault();patient._VALUE.showAttributes = !patient._VALUE.showAttributes" href="" title="Show Attributes">
                               <span class="glyphicon glyphicon-th-list"></span>
                           </a>
@@ -710,6 +665,11 @@
                     <attribute-list *ngIf="patient._VALUE.attrs" [attrs]="patient._VALUE.attrs"></attribute-list>
                 </div>
             </div>
+            <div class="tr_row"  *ngIf="patient._VALUE.xroad">
+                <div class="td_cell attribute_list">
+                    <attribute-list [attrs]="patient._VALUE.xroad"></attribute-list>
+                </div>
+            </div>
             <ng-container *ngIf="patients[patient._KEY].showStudies || filterMode != 'diff'">
                 <div class="repeat1" *ngFor="let study of patients[patient._KEY].studies | getKey" contextmenu-item="study">
                 <div class="tbody">
@@ -719,35 +679,44 @@
                                 <div class="colcell" [innerHtml]="study._VALUE.offset+1+'.'"> </div>
                                 <div class="exeq_buttons">
                                     <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event, 5)"></div>
-                                    <div *ngIf="externalInternalAetMode === 'internal'" class="checkbox_content hiddenbuttons">
+                                    <div *ngIf="externalInternalAetMode === 'internal'" class="checkbox_content hiddenbuttons" [permission]="{id:'action-studies-copy_merge_move',param:'visible'}">
                                         <input type="checkbox" [ngModel]="study._VALUE.selected" (change)='select(study._VALUE,"study", {"patientkey":patient._KEY,"studykey":study._KEY},"fromcheckbox")'>
                                     </div>
-                                    <a  class="hiddenbuttons" *ngIf="isRole('admin') && externalInternalAetMode === 'internal'" (click)="$event.preventDefault();editStudy(patients[patient._KEY], patient._KEY, study._KEY, study._VALUE)" href="" title="Edit study">
+                                    <a  class="hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" (click)="$event.preventDefault();editStudy(patients[patient._KEY], patient._KEY, study._KEY, study._VALUE)" href="" title="Edit study" [permission]="{id:'action-studies-study',param:'edit'}">
                                         <span class="glyphicon glyphicon-pencil"></span>
                                     </a>
-                                    <a class="hiddenbuttons" (click)="$event.preventDefault();exportStudy(study._VALUE)" *ngIf="isRole('admin')" href="" title="Export study">
+                                    <a class="hiddenbuttons" (click)="$event.preventDefault();exportStudy(study._VALUE)" [permission]="{id:'action-studies-study',param:'export'}" href="" title="Export study">
                                         <span class="glyphicon glyphicon-export"></span>
                                     </a>
-                                    <a class="hiddenbuttons" (click)="$event.preventDefault();setExpiredDate(study._VALUE)" *ngIf="isRole('admin') && externalInternalAetMode === 'internal'" href="" title="Set/Change expired date">
+                                    <a class="hiddenbuttons" (click)="$event.preventDefault();setExpiredDate(study._VALUE)" [permission]="{id:'action-studies-study',param:'edit'}" *ngIf="externalInternalAetMode === 'internal'" href="" title="Set/Change expired date">
                                         <i class="material-icons">history</i>
                                     </a>
-                                    <a class="hiddenbuttons" (click)="$event.preventDefault();upload(study._VALUE,'study')" *ngIf="isRole('admin') && externalInternalAetMode === 'internal'" href="" title="Upload file">
+                                    <a class="hiddenbuttons" (click)="$event.preventDefault();upload(study._VALUE,'study')" [permission]="{id:'action-studies-study',param:'upload'}" href="" title="Upload file">
                                         <i class="material-icons">file_upload</i>
                                     </a>
-                                    <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('study', study._VALUE)" *ngIf="isRole('admin') && externalInternalAetMode === 'internal'" href="" title="Verify storage commitment">
+                                    <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('study', study._VALUE)" *ngIf="externalInternalAetMode === 'internal'"  [permission]="{id:'action-studies-verify_storage_commitment',param:'visible'}" href="" title="Verify storage commitment">
                                         <span class="glyphicon glyphicon-ok"></span>
                                     </a>
-                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && isRole('admin') && _.hasIn(study._VALUE,'attrs.00201206.Value[0]') && !_.isEqual(study._VALUE.attrs['00201206'].Value[0], 0))" (click)="$event.preventDefault();rejectStudy(study._VALUE)" href="" title="Reject study">
+                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && _.hasIn(study._VALUE,'attrs.00201206.Value[0]') && !_.isEqual(study._VALUE.attrs['00201206'].Value[0], 0))" [permission]="{id:'action-studies-study',param:'reject'}" (click)="$event.preventDefault();rejectStudy(study._VALUE)" href="" title="Reject study">
                                         <span class="glyphicon glyphicon-trash"></span>
                                     </a>
-                                    <a class="hiddenbuttons" *ngIf="trashaktive && isRole('admin') && externalInternalAetMode === 'internal'" (click)="$event.preventDefault();deleteStudy(study._VALUE)" href="" title="Delete study permanently">
+                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && _.hasIn(study._VALUE,'attrs.00201206.Value[0]') && !_.isEqual(study._VALUE.attrs['00201206'].Value[0], 0)) && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-download',param:'visible'}" (click)="$event.preventDefault();downloadZip(study._VALUE, 'study','uncompressed')" href="" title="Retrieve Study uncompressed">
+                                        <span class="glyphicon glyphicon-save"></span>
+                                    </a>
+                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && _.hasIn(study._VALUE,'attrs.00201206.Value[0]') && !_.isEqual(study._VALUE.attrs['00201206'].Value[0], 0)) && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-download',param:'visible'}" (click)="$event.preventDefault();;downloadZip(study._VALUE, 'study','compressed')" href="" title="Retrieve Study as stored at the archive">
+                                        <span class="glyphicon glyphicon-download-alt"></span>
+                                    </a>
+                                    <a class="hiddenbuttons" *ngIf="(trashaktive || aetmodel.dcmAllowDeleteStudyPermanently === 'ALWAYS') && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-study',param:'delete'}" (click)="$event.preventDefault();deleteStudy(study._VALUE)" href="" title="Delete study permanently">
                                         <span class="glyphicon glyphicon-remove"></span>
                                     </a>
-                                    <a class="hiddenbuttons"  *ngIf="trashaktive && isRole('admin') && externalInternalAetMode === 'internal'" (click)="$event.preventDefault();rejectStudy(study._VALUE)" href="" title="Restore study">
+                                    <a class="hiddenbuttons"  *ngIf="trashaktive && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-study',param:'restore'}" (click)="$event.preventDefault();rejectStudy(study._VALUE)" href="" title="Restore study">
                                         <span class="glyphicon glyphicon-repeat"></span>
                                     </a>
-                                    <a class="hiddenbuttons" *ngIf="isRole('admin') && aetmodel.dcmInvokeImageDisplayStudyURL && externalInternalAetMode === 'internal'"  (click)="$event.preventDefault();openViewer(study._VALUE.attrs,'study')" href="" title="Open study in the viewer">
+                                    <a class="hiddenbuttons" *ngIf="aetmodel.dcmInvokeImageDisplayStudyURL && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-viewer',param:'visible'}" (click)="$event.preventDefault();openViewer(study._VALUE.attrs,'study')" href="" title="Open study in the viewer">
                                         <span class="glyphicon glyphicon-eye-open"></span>
+                                    </a>
+                                    <a class="hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" (click)="$event.preventDefault();downloadCSV(study._VALUE.attrs,'series')" href="" title="Download all series of study as CSV">
+                                        <span class="custom_icon csv_icon_black"></span>
                                     </a>
                                 </div>
                             </div>
@@ -759,8 +728,8 @@
                                         <span class="glyphicon glyphicon-th-list"></span>
                                     </a>
                                     <ng-container *ngIf="filterMode != 'diff'">
-                                        <a *ngIf="!(isRole('admin') && study._VALUE.attrs['00201208'] && study._VALUE.attrs['00201208'].Value && study._VALUE.attrs['00201208'].Value[0] && study._VALUE.attrs['00201208'].Value[0] === 0) && !(study._VALUE.series)" (click)="$event.preventDefault();querySeries(study._VALUE,0)" href="" title="Show Series">&#9658;</a>
-                                        <a *ngIf="!(isRole('admin') && study._VALUE.attrs['00201208'] && study._VALUE.attrs['00201208'].Value && study._VALUE.attrs['00201208'].Value[0] && study._VALUE.attrs['00201208'].Value[0] === 0) && study._VALUE.series" (click)="$event.preventDefault();study._VALUE.series = null" href="" title="Hide Series">&#9660;</a>
+                                        <a *ngIf="!(study._VALUE.attrs['00201208'] && study._VALUE.attrs['00201208'].Value && study._VALUE.attrs['00201208'].Value[0] && study._VALUE.attrs['00201208'].Value[0] === 0) && !(study._VALUE.series)" (click)="$event.preventDefault();querySeries(study._VALUE,0)" href="" title="Show Series" [permission]="{id:'action-studies-serie',param:'visible'}">&#9658;</a>
+                                        <a *ngIf="!(study._VALUE.attrs['00201208'] && study._VALUE.attrs['00201208'].Value && study._VALUE.attrs['00201208'].Value[0] && study._VALUE.attrs['00201208'].Value[0] === 0) && study._VALUE.series" (click)="$event.preventDefault();study._VALUE.series = null" href="" title="Hide Series" [permission]="{id:'action-studies-serie',param:'visible'}">&#9660;</a>
                                     </ng-container>
                                 </div>
                                 <ng-container *ngIf="filterMode != 'diff'">
@@ -835,24 +804,30 @@
                                                 <div class="td_cell colcell" [innerHtml]="series._VALUE.offset+1+'.'"> </div>
                                                 <div class="exeq_buttons" >
                                                     <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event,6)"></div>
-                                                    <div *ngIf="externalInternalAetMode === 'internal'" class="checkbox_content hiddenbuttons">
+                                                    <div *ngIf="externalInternalAetMode === 'internal'" class="checkbox_content hiddenbuttons" [permission]="{id:'action-studies-copy_merge_move',param:'visible'}">
                                                         <input type="checkbox" [ngModel]="series._VALUE.selected" (change)='select(series._VALUE,"series", {"patientkey":patient._KEY,"studykey":study._KEY, "serieskey":series._KEY},"fromcheckbox")'>
                                                     </div>
-                                                    <a class="hiddenbuttons" (click)="$event.preventDefault();exportSeries(series._VALUE)" *ngIf="isRole('admin')" href="" title="Export Series">
+                                                    <a class="hiddenbuttons" (click)="$event.preventDefault();exportSeries(series._VALUE)" [permission]="{id:'action-studies-serie',param:'export'}" href="" title="Export Series">
                                                         <span class="glyphicon glyphicon-export"></span>
                                                     </a>
-                                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && isRole('admin') && _.hasIn(series._VALUE,'attrs.00201208.Value[0]') && !_.isEqual(series._VALUE.attrs['00201208'].Value[0], 0))" (click)="$event.preventDefault();rejectSeries(series._VALUE)" href="" title="Reject Series">
+                                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && _.hasIn(series._VALUE,'attrs.00201208.Value[0]') && !_.isEqual(series._VALUE.attrs['00201208'].Value[0], 0))" (click)="$event.preventDefault();rejectSeries(series._VALUE)" href="" title="Reject Series" [permission]="{id:'action-studies-serie',param:'reject'}">
                                                         <span  class="glyphicon glyphicon-trash"></span>
                                                     </a>
-                                                    <a class="hiddenbuttons" *ngIf="trashaktive && isRole('admin') && externalInternalAetMode === 'internal'" (click)="$event.preventDefault();rejectSeries(series._VALUE)" href="" title="Restore Series">
+                                                    <a class="hiddenbuttons" *ngIf="trashaktive && externalInternalAetMode === 'internal'" (click)="$event.preventDefault();rejectSeries(series._VALUE)" href="" title="Restore Series" [permission]="{id:'action-studies-serie',param:'restore'}">
                                                         <span class="glyphicon glyphicon-repeat"></span>
                                                     </a>
-                                                    <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('series', series._VALUE)" *ngIf="isRole('admin') && externalInternalAetMode === 'internal'" href="" title="Verify storage commitment">
+                                                    <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('series', series._VALUE)" *ngIf="externalInternalAetMode === 'internal'" href="" title="Verify storage commitment" [permission]="{id:'action-studies-verify_storage_commitment',param:'visible'}">
                                                         <span class="glyphicon glyphicon-ok"></span>
                                                     </a>
-                                                    <!--<a class="hiddenbuttons" ng-click="storageCommitmen('series', series)" ng-show="user.isRole('admin')" href="" title="Verify storage commitmen">-->
-                                                        <!--<span class="glyphicon glyphicon-ok"></span>-->
-                                                    <!--</a>-->
+                                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && _.hasIn(study._VALUE,'attrs.00201206.Value[0]') && !_.isEqual(study._VALUE.attrs['00201206'].Value[0], 0)) && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-download',param:'visible'}" (click)="$event.preventDefault();downloadZip(series._VALUE, 'serie','uncompressed')" href="" title="Retrieve Serie uncompressed">
+                                                        <span class="glyphicon glyphicon-save"></span>
+                                                    </a>
+                                                    <a class="hiddenbuttons" *ngIf="(!trashaktive && _.hasIn(study._VALUE,'attrs.00201206.Value[0]') && !_.isEqual(study._VALUE.attrs['00201206'].Value[0], 0)) && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-download',param:'visible'}" (click)="$event.preventDefault();;downloadZip(series._VALUE, 'serie','compressed')" href="" title="Retrieve Serie as stored at the archive">
+                                                        <span class="glyphicon glyphicon-download-alt"></span>
+                                                    </a>
+                                                    <a class="hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" (click)="$event.preventDefault();downloadCSV(series._VALUE.attrs,'instance')" href="" title="Download all instances of series as CSV">
+                                                        <span class="custom_icon csv_icon_black"></span>
+                                                    </a>
                                                 </div>
                                             </div>
                                         </div>
@@ -885,28 +860,28 @@
                                                     <div class="td_cell colcell" [innerHtml]="instance._VALUE.offset+1+'.'"> </div>
                                                     <div class="exeq_buttons">
                                                         <div class="morefunction" title="Show more functions" (click)="showMoreFunction($event,7)"></div>
-                                                        <div *ngIf="externalInternalAetMode === 'internal'" class="checkbox_content hiddenbuttons">
+                                                        <div *ngIf="externalInternalAetMode === 'internal'" class="checkbox_content hiddenbuttons" [permission]="{id:'action-studies-copy_merge_move',param:'visible'}">
                                                             <input type="checkbox" [ngModel]="instance._VALUE.selected" (change)='select(instance._VALUE,"instance", {"patientkey":patient._KEY,"studykey":study._KEY, "serieskey":series._KEY, "instancekey":instance._KEY},"fromcheckbox")'>
                                                         </div>
-                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();exportInstance(instance._VALUE)" *ngIf="isRole('admin')" href="" title="Export instance">
+                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();exportInstance(instance._VALUE)" [permission]="{id:'action-studies-instance',param:'export'}" href="" title="Export instance">
                                                             <span class="glyphicon glyphicon-export"></span>
                                                         </a>
-                                                        <a class="hiddenbuttons" *ngIf="!trashaktive && isRole('admin')" (click)="$event.preventDefault();rejectInstance(instance._VALUE)" href="" title="Reject instance">
+                                                        <a class="hiddenbuttons" *ngIf="!trashaktive" (click)="$event.preventDefault();rejectInstance(instance._VALUE)" [permission]="{id:'action-studies-instance',param:'reject'}" href="" title="Reject instance">
                                                             <span  class="glyphicon glyphicon-trash"></span>
                                                         </a>
-                                                        <a class="hiddenbuttons" *ngIf="trashaktive && isRole('admin')" (click)="$event.preventDefault();rejectInstance(instance._VALUE) && externalInternalAetMode === 'internal'" href="" title="Restore instance">
+                                                        <a class="hiddenbuttons" *ngIf="trashaktive" (click)="$event.preventDefault();rejectInstance(instance._VALUE) && externalInternalAetMode === 'internal'" href="" title="Restore instance" [permission]="{id:'action-studies-instance',param:'restore'}">
                                                             <span class="glyphicon glyphicon-repeat"></span>
                                                         </a>
-                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('instance', instance._VALUE)" *ngIf="isRole('admin') && externalInternalAetMode === 'internal'" href="" title="Verify storage commitment">
+                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();storageCommitmen('instance', instance._VALUE)" *ngIf="externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-verify_storage_commitment',param:'visible'}" href="" title="Verify storage commitment">
                                                             <span class="glyphicon glyphicon-ok"></span>
                                                         </a>
-                                                        <a class="hiddenbuttons" *ngIf="!instance._VALUE.video && externalInternalAetMode === 'internal'" (click)="$event.preventDefault();downloadURL(instance._VALUE)" title="Download Uncompressed DICOM Object">
+                                                        <a class="hiddenbuttons" *ngIf="!instance._VALUE.video && externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-download',param:'visible'}" (click)="$event.preventDefault();downloadURL(instance._VALUE)" title="Download Uncompressed DICOM Object">
                                                             <span class="glyphicon glyphicon-save"></span>
                                                         </a>
-                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();downloadURL(instance._VALUE, '*')" *ngIf="externalInternalAetMode === 'internal'" title="Download DICOM Object">
+                                                        <a class="hiddenbuttons" (click)="$event.preventDefault();downloadURL(instance._VALUE, '*')" *ngIf="externalInternalAetMode === 'internal'" [permission]="{id:'action-studies-download',param:'visible'}" title="Download DICOM Object">
                                                             <span class="glyphicon glyphicon-download-alt"></span>
                                                         </a>
-                                                        <a class="hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" (click)="$event.preventDefault();viewInstance(instance._VALUE)" href="#" title="View DICOM Object">
+                                                        <a class="hiddenbuttons" *ngIf="externalInternalAetMode === 'internal'" (click)="$event.preventDefault();viewInstance(instance._VALUE)" href="#" [permission]="{id:'action-studies-download',param:'visible'}" title="View DICOM Object">
                                                             <span class="glyphicon glyphicon-picture"></span>
                                                         </a>
 <!--                                                        <span class="selecta hiddenbuttons" *ngIf="instance._VALUE.views.length > 1 && externalInternalAetMode === 'internal'" title="View DICOM Object">
@@ -946,7 +921,7 @@
                                                 </div>
                                                 <div class="tr_row"  *ngIf="instance._VALUE.showFileAttributes">
                                                     <div class="td_cell attribute_list file-attribute-list" id="file-attribute-list-{{instance._VALUE.attrs['00080018'].Value[0] | removedots}}">
-                                                         <file-attribute-list  [studyuid]="instance._VALUE.wadoQueryParams.studyUID" [seriesuid]="instance._VALUE.wadoQueryParams.seriesUID" [objectuid]="instance._VALUE.wadoQueryParams.objectUID" [aet]="aet"></file-attribute-list>
+                                                         <attribute-list  [studyuid]="instance._VALUE.wadoQueryParams.studyUID" [seriesuid]="instance._VALUE.wadoQueryParams.seriesUID" [objectuid]="instance._VALUE.wadoQueryParams.objectUID" [aet]="aet"></attribute-list>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1000,19 +975,19 @@
                         <div class="subblock">
                             <div class="td_row thead repeat4_hover" [ngClass]="{selected: mwl._VALUE.selected}" >
                                 <div class="td_cell table_btn" style="width:7%">
-                                    <div class="checkbox_content hiddenbuttons">
+                                    <div class="checkbox_content hiddenbuttons" [permission]="{id:'action-studies-copy_merge_move',param:'visible'}">
                                         <input type="checkbox" [ngModel]="mwl.selected" (change)='select(mwl._VALUE,"mwl", {"patientkey":patient._KEY,"studykey":study._KEY, "serieskey":series._KEY, "instancekey":instance._KEY},"fromcheckbox")'>
                                     </div>
                                     <a (click)="$event.preventDefault();mwl._VALUE.showAttributes = !mwl._VALUE.showAttributes" href="" title="Show Attributes">
                                         <span class="glyphicon glyphicon-th-list"></span>
                                     </a>
-                                    <a *ngIf="isRole('admin')" (click)="$event.preventDefault();editMWL(patients[patient._KEY], patient._KEY, mwl._KEY, mwl._VALUE)" href="" title="Edit mwl">
+                                    <a [permission]="{id:'action-studies-mwl',param:'edit'}" (click)="$event.preventDefault();editMWL(patients[patient._KEY], patient._KEY, mwl._KEY, mwl._VALUE)" href="" title="Edit mwl">
                                         <span class="glyphicon glyphicon-pencil"></span>
                                     </a>
-                                    <a *ngIf="isRole('admin')" (click)="$event.preventDefault();deleteMWL(mwl._VALUE)" href="" title="Delete mwl">
+                                    <a [permission]="{id:'action-studies-mwl',param:'delete'}" (click)="$event.preventDefault();deleteMWL(mwl._VALUE)" href="" title="Delete mwl">
                                         <span class="glyphicon glyphicon-remove"></span>
                                     </a>
-                                    <a (click)="$event.preventDefault();upload(mwl._VALUE,'mwl')" *ngIf="isRole('admin')" href="" title="Upload file">
+                                    <a (click)="$event.preventDefault();upload(mwl._VALUE,'mwl')" [permission]="{id:'action-studies-mwl',param:'upload'}" href="" title="Upload file">
                                         <i class="material-icons">file_upload</i>
                                     </a>
                                 </div>
@@ -1123,13 +1098,13 @@
             <button class="btn btn-link btn-xs"
                     [disabled]="!patients[0] || !patients[0].studies || !patients[0].studies[0] || patients[0].studies[0].offset === 0"
                     (click)="queryDiffs(patients[0].studies[0].offset-limit);addEffect('left')"
-                    title="Previous Studies">
+                    title="Previous Diffs">
                 <span class="glyphicon glyphicon glyphicon-chevron-left"></span>
             </button>
             <button class="btn btn-link btn-xs"
                     [disabled]="!moreStudies"
                     (click)="queryDiffs(patients[0].studies[0].offset+limit);addEffect('right')"
-                    title="Next Studies">
+                    title="Next Diffs">
                 <span class="glyphicon glyphicon glyphicon-chevron-right"></span>
             </button> 
         </div>
@@ -1162,5 +1137,4 @@
             </button> 
         </div>
     </div>
-</div>
 </div>

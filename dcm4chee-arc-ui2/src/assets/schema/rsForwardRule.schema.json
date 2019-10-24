@@ -4,7 +4,9 @@
   "type": "object",
   "required": [
     "cn",
-    "dcmURI"
+    "dcmWebAppName",
+    "dcmTLSAllowAnyHostname",
+    "dcmTLSDisableTrustManager"
   ],
   "properties": {
     "cn": {
@@ -12,9 +14,27 @@
       "description": "Arbitrary/Meaningful name of the RESTful Forward Rule",
       "type": "string"
     },
-    "dcmURI": {
-      "title": "Target Base URL",
-      "description": "Target URL without operation specific part, eg. http://<host>:<port>/dcm4chee-arc/aets/<aet>/rs/",
+    "dcmWebAppName": {
+      "title": "Web Application name",
+      "description": "Name of the Web Application",
+      "type": "string",
+      "format": "dcmWebAppName"
+    },
+    "dcmTLSAllowAnyHostname": {
+      "title": "TLS Allow Any Hostname",
+      "description": "If the other server requires HTTPS and this config option is set to true the other server’s certificate is validated via the truststore, but host name validation is not done.",
+      "type": "boolean",
+      "default": false
+    },
+    "dcmTLSDisableTrustManager": {
+      "title": "TLS Disable Trust Manager",
+      "description": "If the other server requires HTTPS and this config option is set to true you do not have to specify a truststore",
+      "type": "boolean",
+      "default": false
+    },
+    "dcmURIPattern": {
+      "title": "Request URL Pattern",
+      "description": "Only forward requests which match the given Regular Expression. If prefixed with !, only forward requests which does not match the given Regular Expression.",
       "type": "string"
     },
     "dcmRSOperation": {
@@ -32,19 +52,17 @@
           "MergePatients",
           "UpdateStudy",
           "DeleteStudy",
-          "CopyInstances",
-          "MoveInstances",
           "RejectStudy",
           "RejectSeries",
           "RejectInstance",
           "UpdateStudyExpirationDate",
           "UpdateSeriesExpirationDate",
+          "ApplyRetentionPolicy",
           "CreateMWL",
           "UpdateMWL",
           "DeleteMWL",
-          "LinkInstancesWithMWL"
+          "UpdateStudyAccessControlID"
         ]
-
       }
     }
   }

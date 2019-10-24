@@ -2,6 +2,12 @@
 <xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
   <xsl:output method="xml"/>
   <xsl:include href="hl7-common.xsl"/>
+  <xsl:param name="langCodeValue">en</xsl:param>
+  <xsl:param name="langCodingSchemeDesignator">RFC5646</xsl:param>
+  <xsl:param name="langCodeMeaning">English</xsl:param>
+  <xsl:param name="docTitleCodeValue">11528-7</xsl:param>
+  <xsl:param name="docTitleCodingSchemeDesignator">LN</xsl:param>
+  <xsl:param name="docTitleCodeMeaning">Radiology Report</xsl:param>
   <xsl:param name="VerifyingOrganization">Verifying Organization</xsl:param>
   <xsl:template match="/hl7">
     <NativeDicomModel>
@@ -48,9 +54,9 @@
     <!--Concept Name Code Sequence-->
     <xsl:call-template name="codeItem">
       <xsl:with-param name="sqtag">0040A043</xsl:with-param>
-      <xsl:with-param name="code">11528-7</xsl:with-param>
-      <xsl:with-param name="scheme">LN</xsl:with-param>
-      <xsl:with-param name="meaning">Radiology Report</xsl:with-param>
+      <xsl:with-param name="code" select="$docTitleCodeValue"/>
+      <xsl:with-param name="scheme" select="$docTitleCodingSchemeDesignator"/>
+      <xsl:with-param name="meaning" select="$docTitleCodeMeaning"/>
     </xsl:call-template>
     <!--Continuity Of Content-->
     <DicomAttribute tag="0040A050" vr="CS"><Value number="1">SEPARATE</Value></DicomAttribute>
@@ -98,8 +104,12 @@
           <xsl:with-param name="seqTag" select="'00321064'"/>
           <xsl:with-param name="codedEntry" select="field[4]"/>
         </xsl:call-template>
-        <!--Requested Procedure ID-->
-        <DicomAttribute tag="00401001" vr="SH"/>
+        <!-- Requested Procedure ID -->
+        <xsl:call-template name="attr">
+          <xsl:with-param name="tag" select="'00401001'"/>
+          <xsl:with-param name="vr" select="'SH'"/>
+          <xsl:with-param name="val" select="string(field[19]/text())"/>
+        </xsl:call-template>
         <!--Placer Order Number / Imaging Service Request-->
         <DicomAttribute tag="00402016" vr="LO">
           <Value number="1"><xsl:value-of select="field[2]"/></Value>
@@ -179,9 +189,9 @@
       <!--Concept Code Sequence-->
       <xsl:call-template name="codeItem">
         <xsl:with-param name="sqtag">0040A168</xsl:with-param>
-        <xsl:with-param name="code">eng</xsl:with-param>
-        <xsl:with-param name="scheme">ISO639_2</xsl:with-param>
-        <xsl:with-param name="meaning">English</xsl:with-param>
+        <xsl:with-param name="code" select="$langCodeValue"/>
+        <xsl:with-param name="scheme" select="$langCodingSchemeDesignator"/>
+        <xsl:with-param name="meaning" select="$langCodeMeaning"/>
       </xsl:call-template>
     </Item>
   </xsl:template>
@@ -290,7 +300,7 @@
   </xsl:template>
   <xsl:template match="escape" mode="txt">
     <xsl:choose>
-      <xsl:when test="text()='.br'">
+      <xsl:when test="text()='.br' or translate(text(), 'daA0', 'DDD')='XD'">
         <xsl:text>&#13;&#10;</xsl:text>
       </xsl:when>
       <xsl:when test="text()='F'">

@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -41,6 +41,7 @@ package org.dcm4chee.arc.dimse.rs;
 import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.conf.api.ConfigurationNotFoundException;
 import org.dcm4che3.conf.api.DicomConfiguration;
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.data.UID;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.pdu.AAbort;
@@ -51,15 +52,18 @@ import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
+import javax.json.Json;
+import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
+import javax.validation.constraints.Pattern;
 import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -86,23 +90,46 @@ public class EchoRS {
     @Context
     private HttpServletRequest request;
 
+    @QueryParam("host")
+    private String host;
+
+    @QueryParam("port")
+    @Pattern(regexp = "^[1-9]\\d{0,4}+$")
+    private String port;
+
     private ApplicationEntity getApplicationEntity() {
         ApplicationEntity ae = device.getApplicationEntity(aet, true);
         if (ae == null || !ae.isInstalled())
             throw new WebApplicationException(
-                    "No such Application Entity: " + aet,
-                    Response.Status.NOT_FOUND);
+                    errResponse("No such Application Entity: " + aet, Response.Status.NOT_FOUND));
         return ae;
     }
 
-    private ApplicationEntity getRemoteApplicationEntity() throws ConfigurationException {
+    private ApplicationEntity getRemoteApplicationEntity() {
         try {
             return conf.findApplicationEntity(remoteAET);
-        } catch (ConfigurationNotFoundException e) {
+        } catch (ConfigurationException e) {
             throw new WebApplicationException(
-                    "No such Application Entity configured: " + remoteAET,
-                    Response.Status.NOT_FOUND);
+                    errResponse(e.getMessage(), Response.Status.NOT_FOUND));
         }
+    }
+
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 
     private AAssociateRQ createAARQ() {
@@ -113,49 +140,78 @@ public class EchoRS {
 
     @POST
     @Produces("application/json")
-    public StreamingOutput echo() throws Exception {
-        LOG.info("Process POST {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
+    public StreamingOutput echo() {
+        logRequest();
+        int remotePort = parseInt(port);
         ApplicationEntity ae = getApplicationEntity();
-        ApplicationEntity remote = getRemoteApplicationEntity();
-        Association as = null;
-        long t1, t2;
-        Result result = new Result();
+        ApplicationEntity remote = host != null && remotePort > 0 ? createRemoteAE(remotePort) : getRemoteApplicationEntity();
         try {
-            t1 = System.currentTimeMillis();
-            as = ae.connect(remote, createAARQ());
-            t2 = System.currentTimeMillis();
-            result.connectionTime = Long.toString(t2-t1);
+            Association as = null;
+            long t1, t2;
+            Result result = new Result();
             try {
-                DimseRSP rsp = as.cecho();
+                t1 = System.currentTimeMillis();
+                as = ae.connect(remote, createAARQ());
+                t2 = System.currentTimeMillis();
+                result.connectionTime = Long.toString(t2 - t1);
                 try {
-                    rsp.next();
-                    t1 = System.currentTimeMillis();
-                    result.echoTime = Long.toString(t1-t2);
+                    DimseRSP rsp = as.cecho();
+                    try {
+                        rsp.next();
+                        t1 = System.currentTimeMillis();
+                        result.echoTime = Long.toString(t1 - t2);
+                    } catch (IOException e) {
+                        result.error(Result.Code.FailedToSendCEchoRQ, e);
+                    }
                 } catch (IOException e) {
-                    result.error(Result.Code.FailedToSendCEchoRQ, e);
+                    result.error(Result.Code.FailedToReceiveCEchoRSP, e);
                 }
+            } catch (IncompatibleConnectionException e) {
+                result.error(Result.Code.IncompatibleConnection, e);
+            } catch (AAssociateRJ e) {
+                result.error(Result.Code.AssociationRejected, e);
             } catch (IOException e) {
-                result.error(Result.Code.FailedToReceiveCEchoRSP, e);
-            }
-        } catch (IncompatibleConnectionException e) {
-            result.error(Result.Code.IncompatibleConnection, e);
-        } catch (AAssociateRJ e) {
-            result.error(Result.Code.AssociationRejected, e);
-        } catch (IOException e) {
-            result.error(Result.Code.FailedToConnect, e);
-        } finally {
-            if (as != null) {
-                try {
-                    t1 = System.currentTimeMillis();
-                    as.release();
-                    t2 = System.currentTimeMillis();
-                    result.releaseTime = Long.toString(t2-t1);
-                } catch (IOException e) {
-                    result.error(Result.Code.FailedToRelease, e);
+                result.error(Result.Code.FailedToConnect, e);
+            } finally {
+                if (as != null) {
+                    try {
+                        t1 = System.currentTimeMillis();
+                        as.release();
+                        t2 = System.currentTimeMillis();
+                        result.releaseTime = Long.toString(t2 - t1);
+                    } catch (IOException e) {
+                        result.error(Result.Code.FailedToRelease, e);
+                    }
                 }
             }
+            return result;
+        } catch (Exception e) {
+            throw new WebApplicationException(errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR));
         }
-        return result;
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
+    private ApplicationEntity createRemoteAE(int remotePort) {
+        Device device = new Device();
+        device.setDeviceName(remoteAET.toLowerCase());
+        device.setInstalled(true);
+        Connection conn = new Connection();
+        conn.setHostname(host);
+        conn.setPort(remotePort);
+        device.addConnection(conn);
+        ApplicationEntity remoteAE = new ApplicationEntity();
+        remoteAE.setAETitle(remoteAET);
+        remoteAE.addConnection(conn);
+        device.addApplicationEntity(remoteAE);
+        return remoteAE;
     }
 
     private static class Result implements StreamingOutput {
@@ -200,29 +256,22 @@ public class EchoRS {
         }
 
         @Override
-        public void write(OutputStream out) throws IOException {
-            Writer w = new OutputStreamWriter(out, "UTF-8");
-            w.write("{\"result\":");
-            w.write(Integer.toString(code.ordinal()));
-            if (exception != null) {
-                w.write(",\"errorMessage\":\"");
-                w.write(code.errorMessage(exception));
-                w.write('"');
-            }
-            if (connectionTime != null) {
-                w.write(",\"connectionTime\":");
-                w.write(connectionTime);
-            }
-            if (echoTime != null) {
-                w.write(",\"echoTime\":");
-                w.write(echoTime);
-            }
-            if (releaseTime != null) {
-                w.write(",\"releaseTime\":");
-                w.write(releaseTime);
-            }
-            w.write('}');
-            w.flush();
+        public void write(OutputStream out) {
+            JsonGenerator gen = Json.createGenerator(out);
+            JsonWriter writer = new JsonWriter(gen);
+            gen.writeStartObject();
+            writer.writeNotNullOrDef("result", Integer.toString(code.ordinal()), null);
+            if (exception != null)
+                writer.writeNotNullOrDef("errorMessage", code.errorMessage(exception), null);
+            writer.writeNotNullOrDef("connectionTime", connectionTime, null);
+            writer.writeNotNullOrDef("echoTime", echoTime, null);
+            writer.writeNotNullOrDef("releaseTime", releaseTime, null);
+            gen.writeEnd();
+            gen.flush();
         }
+    }
+
+    private static int parseInt(String s) {
+        return s != null ? Integer.parseInt(s) : 0;
     }
 }

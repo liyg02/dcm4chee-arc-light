@@ -49,9 +49,9 @@ import org.dcm4che3.imageio.codec.jpeg.PatchJPEGLSImageInputStream;
 import org.dcm4che3.imageio.stream.EncapsulatedPixelDataImageInputStream;
 import org.dcm4che3.io.DicomInputStream;
 import org.dcm4che3.util.SafeClose;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveService;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -93,10 +93,10 @@ class DecompressSupport implements Closeable {
         if (dis.tag() != Tag.PixelData || dis.length() != -1)
             throw new IOException("No or incorrect encapsulated compressed pixel data in requested object");
 
-        encapsulatedPixelData = new EncapsulatedPixelDataImageInputStream(dis, attrs.getInt(Tag.NumberOfFrames, 1));
+        ImageDescriptor imageDescriptor = new ImageDescriptor(attrs);
         String tsuid = dis.getTransferSyntax();
         TransferSyntaxType tsType = TransferSyntaxType.forUID(tsuid);
-        ImageDescriptor imageDescriptor = new ImageDescriptor(attrs);
+        encapsulatedPixelData = new EncapsulatedPixelDataImageInputStream(dis, imageDescriptor, tsType);
         initDecompressor(tsuid, tsType, imageDescriptor);
         if (tsType == TransferSyntaxType.RLE)
             initBufferedImage(imageDescriptor);

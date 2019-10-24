@@ -48,17 +48,26 @@ import org.dcm4che3.net.pdu.AAssociateRQ;
 import org.dcm4che3.net.pdu.PresentationContext;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.net.service.RetrieveTask;
+import org.dcm4chee.arc.conf.ArchiveAEExtension;
+import org.dcm4chee.arc.conf.RestrictRetrieveAccordingTransferCapabilities;
 import org.dcm4chee.arc.entity.Location;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.RetrieveEnd;
 import org.dcm4chee.arc.retrieve.RetrieveStart;
 import org.dcm4chee.arc.store.scu.CStoreSCU;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Set;
+
+import static org.dcm4che3.net.TransferCapability.Role.SCP;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -66,6 +75,8 @@ import java.util.Set;
  */
 @ApplicationScoped
 public class CStoreSCUImpl implements CStoreSCU {
+
+    static final Logger LOG = LoggerFactory.getLogger(CStoreSCUImpl.class);
 
     @Inject @RetrieveStart
     private Event<RetrieveContext> retrieveStart;
@@ -78,7 +89,37 @@ public class CStoreSCUImpl implements CStoreSCU {
         try {
             try {
                 ApplicationEntity localAE = ctx.getLocalApplicationEntity();
-                return localAE.connect(ctx.getDestinationAE(), createAARQ(ctx));
+                RestrictRetrieveAccordingTransferCapabilities restrictRetrieveAccordingTransferCapabilities
+                        = localAE.getAEExtension(ArchiveAEExtension.class).restrictRetrieveAccordingTransferCapabilities();
+                List<InstanceLocations> noPresentationContextOffered = new ArrayList<>();
+                Association storeas = localAE.connect(ctx.getDestinationAE(),
+                        createAARQ(ctx, noPresentationContextOffered));
+                for (InstanceLocations inst : noPresentationContextOffered) {
+                    if (restrictRetrieveAccordingTransferCapabilities
+                            == RestrictRetrieveAccordingTransferCapabilities.NO) {
+                        ctx.incrementFailed();
+                        ctx.addFailedSOPInstanceUID(inst.getSopInstanceUID());
+                    } else {
+                        ctx.decrementNumberOfMatches();
+                    }
+                    LOG.info("{}: failed to send {} - no Presentation Context offered",
+                            storeas, inst);
+                }
+                for (Iterator<InstanceLocations> iter = ctx.getMatches().iterator(); iter.hasNext();) {
+                    InstanceLocations inst = iter.next();
+                    if (storeas.getTransferSyntaxesFor(inst.getSopClassUID()).isEmpty()) {
+                        iter.remove();
+                        if (restrictRetrieveAccordingTransferCapabilities
+                                != RestrictRetrieveAccordingTransferCapabilities.YES) {
+                            ctx.incrementFailed();
+                            ctx.addFailedSOPInstanceUID(inst.getSopInstanceUID());
+                        } else
+                            ctx.decrementNumberOfMatches();
+                        LOG.info("{}: failed to send {} - no Presentation Context accepted",
+                                storeas, inst);
+                    }
+                }
+                return storeas;
             } catch (Exception e) {
                 throw new DicomServiceException(Status.UnableToPerformSubOperations, e);
             }
@@ -89,25 +130,55 @@ public class CStoreSCUImpl implements CStoreSCU {
         }
     }
 
-    private AAssociateRQ createAARQ(RetrieveContext ctx) {
+    private AAssociateRQ createAARQ(RetrieveContext ctx, List<InstanceLocations> noPresentationContextOffered) {
         AAssociateRQ aarq = new AAssociateRQ();
         ApplicationEntity localAE = ctx.getLocalApplicationEntity();
+        ApplicationEntity destAE = ctx.getDestinationAE();
         if (!localAE.isMasqueradeCallingAETitle(ctx.getDestinationAETitle()))
             aarq.setCallingAET(ctx.getLocalAETitle());
-        for (InstanceLocations inst : ctx.getMatches()) {
+        boolean considerConfiguredTCs = !destAE.getTransferCapabilitiesWithRole(SCP).isEmpty();
+        for (Iterator<InstanceLocations> iter = ctx.getMatches().iterator(); iter.hasNext();) {
+            InstanceLocations inst = iter.next();
             String cuid = inst.getSopClassUID();
-            if (!aarq.containsPresentationContextFor(cuid)) {
-                aarq.addPresentationContextFor(cuid, UID.ImplicitVRLittleEndian);
-                aarq.addPresentationContextFor(cuid, UID.ExplicitVRLittleEndian);
+            TransferCapability configuredTCs = null;
+            if (considerConfiguredTCs && ((configuredTCs = destAE.getTransferCapabilityFor(cuid, SCP)) == null)) {
+                iter.remove();
+                noPresentationContextOffered.add(inst);
+                continue;
+            }
+            if (!aarq.containsPresentationContextFor(cuid) && !isVideo(inst)) {
+                addPresentationContext(aarq, cuid, UID.ImplicitVRLittleEndian, configuredTCs);
+                addPresentationContext(aarq, cuid, UID.ExplicitVRLittleEndian, configuredTCs);
             }
             for (Location location : inst.getLocations()) {
                 String tsuid = location.getTransferSyntaxUID();
                 if (!tsuid.equals(UID.ImplicitVRLittleEndian) &&
                         !tsuid.equals(UID.ExplicitVRLittleEndian))
-                    aarq.addPresentationContextFor(cuid, tsuid);
+                    addPresentationContext(aarq, cuid, tsuid, configuredTCs);
             }
         }
         return aarq;
+    }
+
+    private boolean isVideo(InstanceLocations inst) {
+        switch (inst.getLocations().get(0).getTransferSyntaxUID()) {
+            case UID.MPEG2:
+            case UID.MPEG2MainProfileHighLevel:
+            case UID.MPEG4AVCH264HighProfileLevel41:
+            case UID.MPEG4AVCH264BDCompatibleHighProfileLevel41:
+            case UID.MPEG4AVCH264HighProfileLevel42For2DVideo:
+            case UID.MPEG4AVCH264HighProfileLevel42For3DVideo:
+            case UID.MPEG4AVCH264StereoHighProfileLevel42:
+            case UID.HEVCH265MainProfileLevel51:
+            case UID.HEVCH265Main10ProfileLevel51:
+                return true;
+        }
+        return false;
+    }
+
+    private void addPresentationContext(AAssociateRQ aarq, String cuid, String ts, TransferCapability configuredTCs) {
+        if (configuredTCs == null || configuredTCs.containsTransferSyntax(ts))
+            aarq.addPresentationContextFor(cuid, ts);
     }
 
     @Override

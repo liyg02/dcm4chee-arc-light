@@ -47,7 +47,7 @@ import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.entity.Patient;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -56,6 +56,8 @@ import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
  */
 public interface PatientMgtContext {
     AttributeFilter getAttributeFilter();
+
+    AttributeFilter getStudyAttributeFilter();
 
     FuzzyStr getFuzzyStr();
 
@@ -102,4 +104,12 @@ public interface PatientMgtContext {
     HttpServletRequestInfo getHttpServletRequestInfo();
 
     void setHttpServletRequestInfo(HttpServletRequestInfo httpServletRequestInfo);
+
+    Patient.VerificationStatus getPatientVerificationStatus();
+
+    void setPatientVerificationStatus(Patient.VerificationStatus patientVerificationStatus);
+
+    String getPDQServiceURI();
+
+    void setPDQServiceURI(String pdqServiceURI);
 }

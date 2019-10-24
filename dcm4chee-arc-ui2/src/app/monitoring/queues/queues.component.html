@@ -1,99 +1,84 @@
-<div class="main_content queues monitoring">
+<div class="main_content queues monitoring white_design">
     <monitoring-tabs></monitoring-tabs>
     <div class="tab-content">
-            <div class="row filter" (keyup)="filterKeyUp($event)">
-                <div class="main_filter_block">
-                <div class="col-md-3 block-1-1">
-                    <div class="row">
-                        <label for="queue" class="col-md-6 text-right control-label">Queue:</label>
-                        <div class="col-md-6">
-                            <select id="queue" [(ngModel)]="queueName" class="col-md-12">
-                                <!-- <option ng-repeat="queue in queues" title="{{queue.description}}">{{queue.name}}</option> -->
-                                <option *ngFor="let queue of queues" title="{{queue.name}}" value="{{queue.name}}">{{queue.description}}</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <label for="status" class="col-md-6 text-right control-label">Status:</label>
-                        <div class="col-md-6">
-                            <select id="status" [(ngModel)]="status" class="col-md-12">
-                                <option>*</option>
-                                <option>SCHEDULED</option>
-                                <option>IN PROCESS</option>
-                                <option>COMPLETED</option>
-                                <option>WARNING</option>
-                                <option>FAILED</option>
-                                <option>CANCELED</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <label for="limit" class="col-md-6 text-right control-label">Page Size:</label>
-                        <div class="col-md-6">
-                            <input id="limit" type="number" min="1" [(ngModel)]="limit" class="col-md-12" required/>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3 block-2-1">
-                    <div class="row" *ngIf="isRole('admin')">
-                        <div class="col-md-6">
-                            <button class="btn btn-danger col-md-12" (click)="flushBefore()">Flush before:</button>
-                        </div>
-                        <div class="col-md-6">
-                            <!--<input id="before" type="date" class="col-md-12" [(ngModel)]="before"/>-->
-                            <p-calendar  dataType="string" [(ngModel)]="before" dateFormat="yy-mm-dd" monthNavigator="true" yearNavigator="true" yearRange="1800:2100" placeholder="Flush before this date"></p-calendar>
-                        </div>
-                    </div>
-                    <div class="row"></div>
-                    <div class="row">
-                        <div class="col-md-6">
-
-                        </div>
-                        <div class="col-md-6">
-                            <button class="btn btn-default submit col-md-12" (click)="search(0)" title="Refresh">
-                                <span class="glyphicon glyphicon-refresh"></span>
-                                SUBMIT
+        <h2>Queues</h2>
+        <div class="filter_line">
+            <div class="filter_block">
+                <filter-generator [schema]="filterSchema" filterIdTemplate="monitoring-queues" [model]="filterObject" (submit)="onSubmit($event)" (onChange)="statusChange()"></filter-generator>
+                <div class="filter" (keyup)="filterKeyUp($event)">
+                    <div class="filter_block auto_reloader">
+                        <table>
+                            <tr *ngFor="let status of Object.keys(statusValues)" [ngClass]="{'gray':statusValues[status]?.count == '0','red':statusValues[status]?.count=='!'}">
+                                <td>{{status}}:</td>
+                                <td *ngIf="!statusValues[status]?.loader">{{statusValues[status]?.count}}</td>
+                                <td *ngIf="statusValues[status]?.loader"><i class="fa fa-circle-o-notch fa-spin dashboard_loader"></i></td>
+                            </tr>
+                        </table>
+                        <div class="option_block">
+                            <div class="interval_block">
+                                <label>Interval:</label>
+                                <input type="text" placeholder="Interval" [(ngModel)]="interval">
+                                <span>s</span>
+                            </div>
+                            <button class="btn-default submit" (click)="toggleAutoRefresh()">
+                                <div class="spinnter_container">
+                                    <span *ngIf="!timer.started" class="glyphicon glyphicon-refresh"></span>
+                                    <mat-progress-spinner *ngIf="timer.started" mode="indeterminate" [diameter]="20" ></mat-progress-spinner>
+                                </div>
+                                <span *ngIf="!timer.started">{{timer.startText}}</span>
+                                <span *ngIf="timer.started">{{timer.stopText}}</span>
                             </button>
                         </div>
                     </div>
                 </div>
-                <!--<label for="status">Status:</label>-->
-            <!--</div>-->
-            <!--<div class="form-group">-->
-                <!--<label for="limit">Page Size:</label>-->
-                <!--<input id="limit" type="number" min="1" style="width: 3em" [(ngModel)]="limit" required/>-->
-            <!--</div>-->
-            <!--<div class="form-group" *ngIf="isRole('admin')">-->
-                <!--<button class="btn btn-danger" (click)="flushBefore()">Flush before:</button>-->
-                <!--<input id="before" type="date" [(ngModel)]="before"/>-->
-            <!--</div>-->
-    <!--        <div class="form-group" *ngIf="isRole('admin')">
-                <button class="btn btn-default submit" (click)="search(0)" title="Refresh">
-                    <span class="glyphicon glyphicon-refresh"></span>
-                    Submit
-                </button>
-            </div>-->
             </div>
+        </div>
+        <div class="filter_line">
+            <div class="filter single_block" [permission]="{id:'action-monitoring->queues-all_action',param:'visible'}">
+                <div class="filter_block">
+                    <div class="line">
+                        <mat-select [(ngModel)]="allAction" class="w45percent pull-left" placeholder="All actions" (change)="allActionChanged($event)" floatPlaceholder="never">
+                            <mat-option value="{{actions.value}}" *ngFor="let actions of allActionsOptions">{{actions.label}}</mat-option>
+                        </mat-select>
+                    </div>
+                </div>
             </div>
-        <!--</div>-->
+        </div>
         <table class="table table-bordered table-condensed" *ngIf="_.size(matches) > 0">
             <thead>
             <tr>
-                <th colspan="2">
-                    <button class="btn btn-link btn-xs"
-                            [disabled]="!hasNewer(matches)"
-                            (click)="search(newerOffset(matches))"
-                            title="Newer">
-                        <span class="glyphicon glyphicon-menu-left"></span>
-                    </button>
-                    <button class="btn btn-link btn-xs"
-                            [disabled]="!hasOlder(matches)"
-                            (click)="search(olderOffset(matches))"
-                            title="Older">
-                        <span class="glyphicon glyphicon-menu-right"></span>
-                    </button>
+                <th>
+                    <div class="arrow_block">
+                        <button class="btn btn-link btn-xs"
+                                [disabled]="!hasNewer(matches)"
+                                (click)="search(newerOffset(matches))"
+                                title="Newer">
+                            <span class="glyphicon glyphicon-menu-left"></span>
+                        </button>
+                        <button class="btn btn-link btn-xs"
+                                [disabled]="!hasOlder(matches)"
+                                (click)="search(olderOffset(matches))"
+                                title="Older">
+                            <span class="glyphicon glyphicon-menu-right"></span>
+                        </button>
+                    </div>
+                </th>
+                <th  (mouseenter)="tableMousEnter()" (mouseleave)="tableMousLeave()">
+                    <div class="action_block">
+                        <input type="checkbox" (change)="checkAll($event)">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" class="text-white" (click)="$event.preventDefault();executeAll('cancel')" href="" title="Cancel selected">
+                            <span class="glyphicon glyphicon-ban-circle"></span>
+                        </a>
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" class="text-white" (click)="$event.preventDefault();executeAll('reschedule')" href="" title="Reschedule selected">
+                            <span class="glyphicon glyphicon-repeat"></span>
+                        </a>
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" class="text-white" (click)="$event.preventDefault();executeAll('delete')" href="" title="Delete selected">
+                            <span class="glyphicon glyphicon-remove-circle"></span>
+                        </a>
+                    </div>
                 </th>
                 <th>Queue</th>
+                <th>Study UID</th>
                 <th>Status</th>
                 <th>Failures</th>
                 <th>Created</th>
@@ -107,21 +92,23 @@
             <ng-container *ngFor="let match of matches">
                 <tr>
                     <td [attr.rowspan]="(match.showProperties ? 2 : 1)" [innerHtml]="match.offset+1+'.'"></td>
-                    <td>
+                    <td  (mouseenter)="tableMousEnter()" (mouseleave)="tableMousLeave()">
+                        <input [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" type="checkbox" [(ngModel)]="match.checked">
                         <a (click)="$event.preventDefault();match.showProperties = !match.showProperties" href="" title="Show Properties">
                             <span class="glyphicon glyphicon-list"></span>
                         </a>
-                        <a *ngIf="isRole('admin')" (click)="$event.preventDefault();cancel(match)" href="" title="Cancel">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" *ngIf="((match.properties.status && match.properties.status === 'SCHEDULED') || (match.properties.status && match.properties.status === 'IN PROCESS'))"  (click)="$event.preventDefault();cancel(match)" href="" title="Cancel">
                             <span class="glyphicon glyphicon-ban-circle"></span>
                         </a>
-                        <a *ngIf="isRole('admin')" (click)="$event.preventDefault();reschedule(match)" href="" title="Reschedule">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" (click)="$event.preventDefault();reschedule(match)" href="" title="Reschedule">
                             <span class="glyphicon glyphicon-repeat"></span>
                         </a>
-                        <a *ngIf="isRole('admin')" (click)="$event.preventDefault();delete(match)" href="" title="Delete">
+                        <a [permission]="{id:'action-monitoring->queues-single_action',param:'visible'}" (click)="$event.preventDefault();delete(match)" href="" title="Delete">
                             <span class="glyphicon glyphicon-remove-circle"></span>
                         </a>
                     </td>
                     <td [innerHtml]="match.properties.queue"></td>
+                    <td [innerHtml]="match.properties.StudyInstanceUID"></td>
                     <td [innerHtml]="match.properties.status" title="{{match.properties.outcomeMessage}}"></td>
                     <td [innerHtml]="match.properties.failures" title="{{match.properties.errorMessage}}"></td>
                     <td [innerHtml]="match.properties.createdTime | date:'yyyy-MM-dd HH:mm:ss'"></td>
@@ -131,7 +118,7 @@
                     <td [innerHtml]="match.properties.processingEndTime | date:'yyyy-MM-dd HH:mm:ss'"></td>
                 </tr>
                 <tr *ngIf="match.showProperties">
-                    <td colspan="9">
+                    <td colspan="10">
                         <table class="table table-bordered table-condensed attribute_list">
                             <tr *ngFor="let key of match.properties | getKey">
                                 <th [innerHtml]="key._KEY"></th>

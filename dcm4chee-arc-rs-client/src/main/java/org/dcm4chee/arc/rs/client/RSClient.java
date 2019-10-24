@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,18 +40,40 @@
 
 package org.dcm4chee.arc.rs.client;
 
+import org.dcm4chee.arc.conf.RSOperation;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
 
+import javax.servlet.http.HttpServletRequest;
+import javax.ws.rs.core.Response;
+
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Nov 2016
  */
 public interface RSClient {
     String QUEUE_NAME = "RSClient";
-    String JNDI_NAME = "jms/queue/RSClient";
 
-    void scheduleRequest(String method, String uri, byte[] content) throws QueueSizeLimitExceededException;
+    void scheduleRequest(
+            RSOperation rsOp,
+            String requestURI,
+            String requestQueryStr,
+            String webAppName,
+            String patientID,
+            byte[] content,
+            boolean tlsAllowAnyHostName,
+            boolean tlsDisableTrustManager) throws QueueSizeLimitExceededException;
 
-    Outcome request(String method, String uri, byte[] content) throws Exception;
+    Outcome request(
+            String rsOp,
+            String requestURI,
+            String requestQueryStr,
+            String webAppName,
+            String patientID,
+            boolean tlsAllowAnyHostname,
+            boolean tlsDisableTrustManager,
+            byte[] content) throws Exception;
+
+    Response forward(HttpServletRequest request, String deviceName, String append) throws Exception;
 }

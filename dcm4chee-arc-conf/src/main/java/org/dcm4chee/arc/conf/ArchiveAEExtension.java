@@ -41,14 +41,19 @@
 package org.dcm4chee.arc.conf;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.io.BulkDataDescriptor;
 import org.dcm4che3.net.AEExtension;
+import org.dcm4che3.net.Association;
 import org.dcm4che3.net.Dimse;
 import org.dcm4che3.net.TransferCapability;
 import org.dcm4che3.util.StringUtils;
 
+import javax.servlet.http.HttpServletRequest;
 import java.io.File;
+import java.time.Period;
 import java.util.*;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -57,9 +62,13 @@ import java.util.regex.Pattern;
  */
 public class ArchiveAEExtension extends AEExtension {
     private String defaultCharacterSet;
+    private String upsWorklistLabel;
+    private String[] upsEventSCUs = {};
+    private int upsEventSCUKeepAlive;
     private String[] objectStorageIDs = {};
     private int objectStorageCount = 1;
     private String[] metadataStorageIDs = {};
+    private String bulkDataDescriptorID;
     private Duration seriesMetadataDelay;
     private Duration purgeInstanceRecordsDelay;
     private String storeAccessControlID;
@@ -71,8 +80,11 @@ public class ArchiveAEExtension extends AEExtension {
     private Boolean personNameComponentOrderInsensitiveMatching;
     private Boolean sendPendingCGet;
     private Duration sendPendingCMoveInterval;
+    private String wadoThumbnailViewPort;
+    private String wadoZIPEntryNameFormat;
     private String wadoSR2HtmlTemplateURI;
     private String wadoSR2TextTemplateURI;
+    private String wadoCDA2HtmlTemplateURI;
     private String[] mppsForwardDestinations = {};
     private String[] ianDestinations = {};
     private Duration ianDelay;
@@ -84,6 +96,7 @@ public class ArchiveAEExtension extends AEExtension {
     private Integer fallbackCMoveSCPRetries;
     private String fallbackCMoveSCP;
     private String fallbackCMoveSCPDestination;
+    private String fallbackCMoveSCPCallingAET;
     private String fallbackCMoveSCPLeadingCFindSCP;
     private String fallbackCMoveSCPStudyOlderThan;
     private String externalRetrieveAEDestination;
@@ -92,15 +105,18 @@ public class ArchiveAEExtension extends AEExtension {
     private Integer qidoMaxNumberOfResults;
     private SPSStatus[] hideSPSWithStatusFromMWL = {};
     private String storePermissionServiceURL;
+    private String storePermissionServiceResponse;
     private Pattern storePermissionServiceResponsePattern;
     private Pattern storePermissionServiceExpirationDatePattern;
     private Pattern storePermissionServiceErrorCommentPattern;
     private Pattern storePermissionServiceErrorCodePattern;
     private AllowRejectionForDataRetentionPolicyExpired allowRejectionForDataRetentionPolicyExpired;
     private AcceptMissingPatientID acceptMissingPatientID;
+    private AllowDeletePatient allowDeletePatient;
     private AllowDeleteStudyPermanently allowDeleteStudyPermanently;
     private AcceptConflictingPatientID acceptConflictingPatientID;
     private String[] retrieveAETitles = {};
+    private String[] returnRetrieveAETitles = {};
     private String hl7PSUSendingApplication;
     private String[] hl7PSUReceivingApplications = {};
     private Duration hl7PSUDelay;
@@ -111,9 +127,22 @@ public class ArchiveAEExtension extends AEExtension {
     private Attributes.UpdatePolicy linkMWLEntryUpdatePolicy;
     private String invokeImageDisplayPatientURL;
     private String invokeImageDisplayStudyURL;
+    private StorageVerificationPolicy storageVerificationPolicy;
+    private Boolean storageVerificationUpdateLocationStatus;
+    private String[] storageVerificationStorageIDs = {};
+    private Period storageVerificationInitialDelay;
+    private Boolean updateLocationStatusOnRetrieve;
+    private Boolean storageVerificationOnRetrieve;
+    private Boolean relationalQueryNegotiationLenient;
+    private Boolean relationalRetrieveNegotiationLenient;
+    private Boolean stowRetiredTransferSyntax;
+    private Boolean stowExcludeAPPMarkers;
+    private RestrictRetrieveAccordingTransferCapabilities restrictRetrieveAccordingTransferCapabilities;
+    private int[] rejectConflictingPatientAttribute = {};
     private final LinkedHashSet<String> acceptedMoveDestinations = new LinkedHashSet<>();
     private final LinkedHashSet<String> acceptedUserRoles = new LinkedHashSet<>();
     private final ArrayList<ExportRule> exportRules = new ArrayList<>();
+    private final ArrayList<ExportPriorsRule> exportPriorsRules = new ArrayList<>();
     private final ArrayList<RSForwardRule> rsForwardRules = new ArrayList<>();
     private final ArrayList<ArchiveCompressionRule> compressionRules = new ArrayList<>();
     private final ArrayList<ArchiveAttributeCoercion> attributeCoercions = new ArrayList<>();
@@ -133,6 +162,53 @@ public class ArchiveAEExtension extends AEExtension {
                 ? defaultCharacterSet
                 : getArchiveDeviceExtension().getDefaultCharacterSet();
     }
+
+    public String getUPSWorklistLabel() {
+        return upsWorklistLabel;
+    }
+
+    public void setUPSWorklistLabel(String upsWorklistLabel) {
+        this.upsWorklistLabel = upsWorklistLabel;
+    }
+
+    public String upsWorklistLabel() {
+        return defaultCharacterSet != null
+                ? upsWorklistLabel
+                : StringUtils.maskNull(getArchiveDeviceExtension().getUPSWorklistLabel(), ae.getAETitle());
+    }
+
+    public String[] getUPSEventSCUs() {
+        return upsEventSCUs;
+    }
+
+    public void setUPSEventSCUs(String[] upsEventSCUs) {
+        this.upsEventSCUs = upsEventSCUs;
+    }
+
+    public String[] upsEventSCUs() {
+        return upsEventSCUs.length > 0
+                ? upsEventSCUs
+                : getArchiveDeviceExtension().getUPSEventSCUs();
+    }
+
+    public boolean isUPSEventSCU(String aet) {
+        return Stream.of(upsEventSCUs()).anyMatch(aet::equals);
+    }
+
+    public int getUPSEventSCUKeepAlive() {
+        return upsEventSCUKeepAlive;
+    }
+
+    public void setUPSEventSCUKeepAlive(int upsEventSCUKeepAlive) {
+        this.upsEventSCUKeepAlive = upsEventSCUKeepAlive;
+    }
+
+    public int upsEventSCUKeepAlive() {
+        return upsEventSCUKeepAlive > 0
+                ? upsEventSCUKeepAlive
+                : getArchiveDeviceExtension().getUPSEventSCUKeepAlive();
+    }
+
 
     public String[] getObjectStorageIDs() {
         return objectStorageIDs;
@@ -158,6 +234,21 @@ public class ArchiveAEExtension extends AEExtension {
         Arrays.sort(this.metadataStorageIDs = metadataStorageIDs);
     }
 
+    public String getBulkDataDescriptorID() {
+        return bulkDataDescriptorID;
+    }
+
+    public void setBulkDataDescriptorID(String bulkDataDescriptorID) {
+        this.bulkDataDescriptorID = bulkDataDescriptorID;
+    }
+
+    public BulkDataDescriptor getBulkDataDescriptor() {
+        ArchiveDeviceExtension arcdev = getArchiveDeviceExtension();
+        return arcdev.getBulkDataDescriptor(bulkDataDescriptorID != null
+                ? bulkDataDescriptorID
+                : arcdev.getBulkDataDescriptorID());
+    }
+
     public Duration getSeriesMetadataDelay() {
         return seriesMetadataDelay;
     }
@@ -181,9 +272,12 @@ public class ArchiveAEExtension extends AEExtension {
     }
 
     public Duration purgeInstanceRecordsDelay() {
-        return purgeInstanceRecordsDelay != null
+        ArchiveDeviceExtension arcdev = getArchiveDeviceExtension();
+        return arcdev.isPurgeInstanceRecords()
+            ? purgeInstanceRecordsDelay != null
                 ? purgeInstanceRecordsDelay
-                : getArchiveDeviceExtension().getPurgeInstanceRecordsDelay();
+                : arcdev.getPurgeInstanceRecordsDelay()
+            : null;
     }
 
     public String getStoreAccessControlID() {
@@ -227,7 +321,7 @@ public class ArchiveAEExtension extends AEExtension {
     public AcceptMissingPatientID acceptMissingPatientID() {
         return acceptMissingPatientID != null
                 ? acceptMissingPatientID
-                : StringUtils.maskNull(getArchiveDeviceExtension().getAcceptMissingPatientID(), AcceptMissingPatientID.CREATE);
+                : getArchiveDeviceExtension().getAcceptMissingPatientID();
     }
 
     public String getBulkDataSpoolDirectory() {
@@ -254,12 +348,6 @@ public class ArchiveAEExtension extends AEExtension {
 
     public void setQueryRetrieveViewID(String queryRetrieveViewID) {
         this.queryRetrieveViewID = queryRetrieveViewID;
-    }
-
-    public String queryRetrieveViewID() {
-        return queryRetrieveViewID != null
-                ? queryRetrieveViewID
-                : getArchiveDeviceExtension().getQueryRetrieveViewID();
     }
 
     public Boolean getValidateCallingAEHostname() {
@@ -318,6 +406,34 @@ public class ArchiveAEExtension extends AEExtension {
                 : getArchiveDeviceExtension().getSendPendingCMoveInterval();
     }
 
+    public String getWadoThumbnailViewPort() {
+        return wadoThumbnailViewPort;
+    }
+
+    public void setWadoThumbnailViewPort(String wadoThumbnailViewPort) {
+        this.wadoThumbnailViewPort = wadoThumbnailViewPort;
+    }
+
+    public String wadoThumbnailViewPort() {
+        return wadoThumbnailViewPort != null
+                ? wadoThumbnailViewPort
+                : getArchiveDeviceExtension().getWadoThumbnailViewPort();
+    }
+
+    public String getWadoZIPEntryNameFormat() {
+        return wadoZIPEntryNameFormat;
+    }
+
+    public void setWadoZIPEntryNameFormat(String wadoZIPEntryNameFormat) {
+        this.wadoZIPEntryNameFormat = wadoZIPEntryNameFormat;
+    }
+
+    public String wadoZIPEntryNameFormat() {
+        return wadoZIPEntryNameFormat != null
+                ? wadoZIPEntryNameFormat
+                : getArchiveDeviceExtension().getWadoZIPEntryNameFormat();
+    }
+
     public String getWadoSR2HtmlTemplateURI() {
         return wadoSR2HtmlTemplateURI;
     }
@@ -326,12 +442,12 @@ public class ArchiveAEExtension extends AEExtension {
         this.wadoSR2HtmlTemplateURI = wadoSR2HtmlTemplateURI;
     }
 
-
     public String wadoSR2HtmlTemplateURI() {
         return wadoSR2HtmlTemplateURI != null
                 ? wadoSR2HtmlTemplateURI
                 : getArchiveDeviceExtension().getWadoSR2HtmlTemplateURI();
     }
+
     public String getWadoSR2TextTemplateURI() {
         return wadoSR2TextTemplateURI;
     }
@@ -344,6 +460,20 @@ public class ArchiveAEExtension extends AEExtension {
         return wadoSR2TextTemplateURI != null
                 ? wadoSR2TextTemplateURI
                 : getArchiveDeviceExtension().getWadoSR2TextTemplateURI();
+    }
+
+    public String getWadoCDA2HtmlTemplateURI() {
+        return wadoCDA2HtmlTemplateURI;
+    }
+
+    public void setWadoCDA2HtmlTemplateURI(String wadoCDA2HtmlTemplateURI) {
+        this.wadoCDA2HtmlTemplateURI = wadoCDA2HtmlTemplateURI;
+    }
+
+    public String wadoCDA2HtmlTemplateURI() {
+        return wadoCDA2HtmlTemplateURI != null
+                ? wadoCDA2HtmlTemplateURI
+                : getArchiveDeviceExtension().getWadoCDA2HtmlTemplateURI();
     }
 
     public String[] getMppsForwardDestinations() {
@@ -486,6 +616,21 @@ public class ArchiveAEExtension extends AEExtension {
                 : getArchiveDeviceExtension().getFallbackCMoveSCPDestination();
     }
 
+    public String getFallbackCMoveSCPCallingAET() {
+        return fallbackCMoveSCPCallingAET;
+    }
+
+    public void setFallbackCMoveSCPCallingAET(String fallbackCMoveSCPCallingAET) {
+        this.fallbackCMoveSCPCallingAET = fallbackCMoveSCPCallingAET;
+    }
+
+    public String fallbackCMoveSCPCallingAET(Association as) {
+        String aet = fallbackCMoveSCPCallingAET != null
+                ? fallbackCMoveSCPCallingAET
+                : getArchiveDeviceExtension().getFallbackCMoveSCPCallingAET();
+        return aet != null ? aet : as.getCallingAET();
+    }
+
     public String getFallbackCMoveSCPLeadingCFindSCP() {
         return fallbackCMoveSCPLeadingCFindSCP;
     }
@@ -626,6 +771,20 @@ public class ArchiveAEExtension extends AEExtension {
                 : getArchiveDeviceExtension().getStorePermissionServiceResponsePattern();
     }
 
+    public String getStorePermissionServiceResponse() {
+        return storePermissionServiceResponse;
+    }
+
+    public void setStorePermissionServiceResponse(String storePermissionServiceResponse) {
+        this.storePermissionServiceResponse = storePermissionServiceResponse;
+    }
+
+    public String storePermissionServiceResponse() {
+        return storePermissionServiceResponse != null
+                ? storePermissionServiceResponse
+                : getArchiveDeviceExtension().getStorePermissionServiceResponse();
+    }
+
     public Pattern getStorePermissionServiceExpirationDatePattern() {
         return storePermissionServiceExpirationDatePattern;
     }
@@ -669,7 +828,7 @@ public class ArchiveAEExtension extends AEExtension {
     }
 
     public QueryRetrieveView getQueryRetrieveView() {
-        return getArchiveDeviceExtension().getQueryRetrieveViewNotNull(queryRetrieveViewID());
+        return getArchiveDeviceExtension().getQueryRetrieveViewNotNull(getQueryRetrieveViewID());
     }
 
     public AllowRejectionForDataRetentionPolicyExpired getAllowRejectionForDataRetentionPolicyExpired() {
@@ -738,6 +897,22 @@ public class ArchiveAEExtension extends AEExtension {
         return exportRules;
     }
 
+    public void removePrefetchRule(ExportPriorsRule rule) {
+        exportPriorsRules.remove(rule);
+    }
+
+    public void clearPrefetchRules() {
+        exportPriorsRules.clear();
+    }
+
+    public void addPrefetchRule(ExportPriorsRule rule) {
+        exportPriorsRules.add(rule);
+    }
+
+    public Collection<ExportPriorsRule> getExportPriorsRules() {
+        return exportPriorsRules;
+    }
+
     public void removeRSForwardRule(RSForwardRule rule) {
         rsForwardRules.remove(rule);
     }
@@ -794,7 +969,7 @@ public class ArchiveAEExtension extends AEExtension {
         attributeCoercions.clear();
     }
 
-    public void addCompressionRule(ArchiveAttributeCoercion coercion) {
+    public void addAttributeCoercion(ArchiveAttributeCoercion coercion) {
         attributeCoercions.add(coercion);
     }
 
@@ -829,8 +1004,21 @@ public class ArchiveAEExtension extends AEExtension {
     public AllowDeleteStudyPermanently allowDeleteStudy() {
         return allowDeleteStudyPermanently != null
                 ? allowDeleteStudyPermanently
-                : StringUtils.maskNull(getArchiveDeviceExtension().getAllowDeleteStudyPermanently(),
-                AllowDeleteStudyPermanently.REJECTED);
+                : getArchiveDeviceExtension().getAllowDeleteStudyPermanently();
+    }
+
+    public AllowDeletePatient getAllowDeletePatient() {
+        return allowDeletePatient;
+    }
+
+    public void setAllowDeletePatient(AllowDeletePatient allowDeletePatient) {
+        this.allowDeletePatient = allowDeletePatient;
+    }
+
+    public AllowDeletePatient allowDeletePatient() {
+        return allowDeletePatient != null
+                ? allowDeletePatient
+                : getArchiveDeviceExtension().getAllowDeletePatient();
     }
 
     public String[] getRetrieveAETitles() {
@@ -845,88 +1033,102 @@ public class ArchiveAEExtension extends AEExtension {
         return retrieveAETitles.length > 0 ? retrieveAETitles : getArchiveDeviceExtension().getRetrieveAETitles();
     }
 
-    public String getHl7PSUSendingApplication() {
+    public String[] getReturnRetrieveAETitles() {
+        return returnRetrieveAETitles;
+    }
+
+    public void setReturnRetrieveAETitles(String[] returnRetrieveAETitles) {
+        this.returnRetrieveAETitles = returnRetrieveAETitles;
+    }
+
+    public String[] returnRetrieveAETitles() {
+        return returnRetrieveAETitles.length > 0
+                ? returnRetrieveAETitles
+                : getArchiveDeviceExtension().getReturnRetrieveAETitles();
+    }
+
+    public String getHL7PSUSendingApplication() {
         return hl7PSUSendingApplication;
     }
 
-    public void setHl7PSUSendingApplication(String hl7PSUSendingApplication) {
+    public void setHL7PSUSendingApplication(String hl7PSUSendingApplication) {
         this.hl7PSUSendingApplication = hl7PSUSendingApplication;
     }
 
     public String hl7PSUSendingApplication() {
         return hl7PSUSendingApplication != null
                 ? hl7PSUSendingApplication
-                : getArchiveDeviceExtension().getHl7PSUSendingApplication();
+                : getArchiveDeviceExtension().getHL7PSUSendingApplication();
     }
 
-    public String[] getHl7PSUReceivingApplications() {
+    public String[] getHL7PSUReceivingApplications() {
         return hl7PSUReceivingApplications;
     }
 
-    public void setHl7PSUReceivingApplications(String[] hl7PSUReceivingApplications) {
+    public void setHL7PSUReceivingApplications(String[] hl7PSUReceivingApplications) {
         this.hl7PSUReceivingApplications = hl7PSUReceivingApplications;
     }
 
     public String[] hl7PSUReceivingApplications() {
         return hl7PSUReceivingApplications.length > 0
                 ? hl7PSUReceivingApplications
-                : getArchiveDeviceExtension().getHl7PSUReceivingApplications();
+                : getArchiveDeviceExtension().getHL7PSUReceivingApplications();
     }
 
-    public Duration getHl7PSUDelay() {
+    public Duration getHL7PSUDelay() {
         return hl7PSUDelay;
     }
 
-    public void setHl7PSUDelay(Duration hl7PSUDelay) {
+    public void setHL7PSUDelay(Duration hl7PSUDelay) {
         this.hl7PSUDelay = hl7PSUDelay;
     }
 
     public Duration hl7PSUDelay() {
         return hl7PSUDelay != null
                 ? hl7PSUDelay
-                : getArchiveDeviceExtension().getHl7PSUDelay();
+                : getArchiveDeviceExtension().getHL7PSUDelay();
     }
 
-    public Duration getHl7PSUTimeout() {
+    public Duration getHL7PSUTimeout() {
         return hl7PSUTimeout;
     }
 
-    public void setHl7PSUTimeout(Duration hl7PSUTimeout) {
+    public void setHL7PSUTimeout(Duration hl7PSUTimeout) {
         this.hl7PSUTimeout = hl7PSUTimeout;
     }
 
     public Duration hl7PSUTimeout() {
         return hl7PSUTimeout != null
                 ? hl7PSUTimeout
-                : getArchiveDeviceExtension().getHl7PSUTimeout();
+                : getArchiveDeviceExtension().getHL7PSUTimeout();
     }
 
-    public Boolean getHl7PSUOnTimeout() {
+    public Boolean getHL7PSUOnTimeout() {
         return hl7PSUOnTimeout;
     }
 
-    public void setHl7PSUOnTimeout(Boolean hl7PSUOnTimeout) {
+    public void setHL7PSUOnTimeout(Boolean hl7PSUOnTimeout) {
         this.hl7PSUOnTimeout = hl7PSUOnTimeout;
     }
 
     public boolean hl7PSUOnTimeout() {
         return hl7PSUOnTimeout != null
                 ? hl7PSUOnTimeout
-                : getArchiveDeviceExtension().isHl7PSUOnTimeout();
+                : getArchiveDeviceExtension().isHL7PSUOnTimeout();
     }
 
-    public Boolean getHl7PSUMWL() {
+    public Boolean getHL7PSUMWL() {
         return hl7PSUMWL;
     }
 
-    public void setHl7PSUMWL(Boolean hl7PSUMWL) {
+    public void setHL7PSUMWL(Boolean hl7PSUMWL) {
         this.hl7PSUMWL = hl7PSUMWL;
     }
 
     public boolean hl7PSUMWL() {
         return hl7PSUMWL != null
                 ? hl7PSUMWL
-                : getArchiveDeviceExtension().isHl7PSUMWL();
+                : getArchiveDeviceExtension().isHL7PSUMWL();
     }
 
     public boolean hl7PSUOnStudy() {
@@ -949,8 +1151,7 @@ public class ArchiveAEExtension extends AEExtension {
     public AcceptConflictingPatientID acceptConflictingPatientID() {
         return acceptConflictingPatientID != null
                 ? acceptConflictingPatientID
-                : StringUtils.maskNull(getArchiveDeviceExtension().getAcceptConflictingPatientID(),
-                AcceptConflictingPatientID.MERGED);
+                : getArchiveDeviceExtension().getAcceptConflictingPatientID();
     }
 
     public Attributes.UpdatePolicy getCopyMoveUpdatePolicy() {
@@ -1009,12 +1210,187 @@ public class ArchiveAEExtension extends AEExtension {
                 : getArchiveDeviceExtension().getInvokeImageDisplayStudyURL();
     }
 
+    public StorageVerificationPolicy getStorageVerificationPolicy() {
+        return storageVerificationPolicy;
+    }
+
+    public void setStorageVerificationPolicy(StorageVerificationPolicy storageVerificationPolicy) {
+        this.storageVerificationPolicy = storageVerificationPolicy;
+    }
+
+    public StorageVerificationPolicy storageVerificationPolicy() {
+        return storageVerificationPolicy != null
+                ? storageVerificationPolicy
+                : getArchiveDeviceExtension().getStorageVerificationPolicy();
+    }
+
+    public Boolean getStorageVerificationUpdateLocationStatus() {
+        return storageVerificationUpdateLocationStatus;
+    }
+
+    public void setStorageVerificationUpdateLocationStatus(Boolean storageVerificationUpdateLocationStatus) {
+        this.storageVerificationUpdateLocationStatus = storageVerificationUpdateLocationStatus;
+    }
+
+    public boolean storageVerificationUpdateLocationStatus() {
+        return storageVerificationUpdateLocationStatus != null
+                ? storageVerificationUpdateLocationStatus
+                : getArchiveDeviceExtension().isStorageVerificationUpdateLocationStatus();
+    }
+
+    public String[] getStorageVerificationStorageIDs() {
+        return storageVerificationStorageIDs;
+    }
+
+    public void setStorageVerificationStorageIDs(String... storageVerificationStorageIDs) {
+        this.storageVerificationStorageIDs = storageVerificationStorageIDs;
+    }
+
+    public String[] storageVerificationStorageIDs() {
+        return storageVerificationStorageIDs.length > 0
+                ? storageVerificationStorageIDs
+                : getArchiveDeviceExtension().getStorageVerificationStorageIDs();
+    }
+
+    public Period getStorageVerificationInitialDelay() {
+        return storageVerificationInitialDelay;
+    }
+
+    public void setStorageVerificationInitialDelay(Period storageVerificationInitialDelay) {
+        this.storageVerificationInitialDelay = storageVerificationInitialDelay;
+    }
+
+    public Period storageVerificationInitialDelay() {
+        ArchiveDeviceExtension arcdev = getArchiveDeviceExtension();
+        return storageVerificationInitialDelay != null
+                ? storageVerificationInitialDelay
+                : arcdev.getStorageVerificationInitialDelay();
+    }
+
+    public Boolean getUpdateLocationStatusOnRetrieve() {
+        return updateLocationStatusOnRetrieve;
+    }
+
+    public void setUpdateLocationStatusOnRetrieve(Boolean updateLocationStatusOnRetrieve) {
+        this.updateLocationStatusOnRetrieve = updateLocationStatusOnRetrieve;
+    }
+
+    public boolean updateLocationStatusOnRetrieve() {
+        return updateLocationStatusOnRetrieve != null
+                ? updateLocationStatusOnRetrieve
+                : getArchiveDeviceExtension().isUpdateLocationStatusOnRetrieve();
+    }
+
+    public Boolean getStorageVerificationOnRetrieve() {
+        return storageVerificationOnRetrieve;
+    }
+
+    public void setStorageVerificationOnRetrieve(Boolean storageVerificationOnRetrieve) {
+        this.storageVerificationOnRetrieve = storageVerificationOnRetrieve;
+    }
+
+    public boolean storageVerificationOnRetrieve() {
+        return storageVerificationOnRetrieve != null
+                ? storageVerificationOnRetrieve
+                : getArchiveDeviceExtension().isStorageVerificationOnRetrieve();
+    }
+
+    public Boolean getRelationalQueryNegotiationLenient() {
+        return relationalQueryNegotiationLenient;
+    }
+
+    public void setRelationalQueryNegotiationLenient(Boolean relationalQueryNegotiationLenient) {
+        this.relationalQueryNegotiationLenient = relationalQueryNegotiationLenient;
+    }
+
+    public boolean relationalQueryNegotiationLenient() {
+        return relationalQueryNegotiationLenient != null
+                ? relationalQueryNegotiationLenient
+                : getArchiveDeviceExtension().isRelationalQueryNegotiationLenient();
+    }
+
+    public Boolean getRelationalRetrieveNegotiationLenient() {
+        return relationalRetrieveNegotiationLenient;
+    }
+
+    public void setRelationalRetrieveNegotiationLenient(Boolean relationalRetrieveNegotiationLenient) {
+        this.relationalRetrieveNegotiationLenient = relationalRetrieveNegotiationLenient;
+    }
+
+    public boolean relationalRetrieveNegotiationLenient() {
+        return relationalRetrieveNegotiationLenient != null
+                ? relationalRetrieveNegotiationLenient
+                : getArchiveDeviceExtension().isRelationalRetrieveNegotiationLenient();
+    }
+
+    public int[] getRejectConflictingPatientAttribute() {
+        return rejectConflictingPatientAttribute;
+    }
+
+    public void setRejectConflictingPatientAttribute(int[] rejectConflictingPatientAttribute) {
+        Arrays.sort(this.rejectConflictingPatientAttribute = rejectConflictingPatientAttribute);
+    }
+
+    public int[] rejectConflictingPatientAttribute() {
+        return rejectConflictingPatientAttribute.length > 0
+                ? rejectConflictingPatientAttribute
+                : getArchiveDeviceExtension().getRejectConflictingPatientAttribute();
+    }
+
+    public Boolean getStowRetiredTransferSyntax() {
+        return stowRetiredTransferSyntax;
+    }
+
+    public void setStowRetiredTransferSyntax(Boolean stowRetiredTransferSyntax) {
+        this.stowRetiredTransferSyntax = stowRetiredTransferSyntax;
+    }
+
+    public boolean stowRetiredTransferSyntax() {
+        return stowRetiredTransferSyntax != null
+                ? stowRetiredTransferSyntax
+                : getArchiveDeviceExtension().isStowRetiredTransferSyntax();
+    }
+
+    public Boolean getStowExcludeAPPMarkers() {
+        return stowExcludeAPPMarkers;
+    }
+
+    public void setStowExcludeAPPMarkers(Boolean stowExcludeAPPMarkers) {
+        this.stowExcludeAPPMarkers = stowExcludeAPPMarkers;
+    }
+
+    public boolean stowExcludeAPPMarkers() {
+        return stowExcludeAPPMarkers != null
+                ? stowExcludeAPPMarkers
+                : getArchiveDeviceExtension().isStowExcludeAPPMarkers();
+    }
+
+    public RestrictRetrieveAccordingTransferCapabilities getRestrictRetrieveAccordingTransferCapabilities() {
+        return restrictRetrieveAccordingTransferCapabilities;
+    }
+
+    public void setRestrictRetrieveAccordingTransferCapabilities(
+            RestrictRetrieveAccordingTransferCapabilities restrictRetrieveAccordingTransferCapabilities) {
+        this.restrictRetrieveAccordingTransferCapabilities = restrictRetrieveAccordingTransferCapabilities;
+    }
+
+    public RestrictRetrieveAccordingTransferCapabilities restrictRetrieveAccordingTransferCapabilities() {
+        return restrictRetrieveAccordingTransferCapabilities != null
+                ? restrictRetrieveAccordingTransferCapabilities
+                : getArchiveDeviceExtension().getRestrictRetrieveAccordingTransferCapabilities();
+    }
+
     @Override
     public void reconfigure(AEExtension from) {
         ArchiveAEExtension aeExt = (ArchiveAEExtension) from;
         defaultCharacterSet = aeExt.defaultCharacterSet;
+        upsWorklistLabel = aeExt.upsWorklistLabel;
+        upsEventSCUs = aeExt.upsEventSCUs;
+        upsEventSCUKeepAlive = aeExt.upsEventSCUKeepAlive;
         objectStorageIDs = aeExt.objectStorageIDs;
+        objectStorageCount = aeExt.objectStorageCount;
         metadataStorageIDs = aeExt.metadataStorageIDs;
+        bulkDataDescriptorID = aeExt.bulkDataDescriptorID;
         seriesMetadataDelay = aeExt.seriesMetadataDelay;
         purgeInstanceRecordsDelay = aeExt.purgeInstanceRecordsDelay;
         storeAccessControlID = aeExt.storeAccessControlID;
@@ -1026,8 +1402,11 @@ public class ArchiveAEExtension extends AEExtension {
         personNameComponentOrderInsensitiveMatching = aeExt.personNameComponentOrderInsensitiveMatching;
         sendPendingCGet = aeExt.sendPendingCGet;
         sendPendingCMoveInterval = aeExt.sendPendingCMoveInterval;
+        wadoThumbnailViewPort = aeExt.wadoThumbnailViewPort;
+        wadoZIPEntryNameFormat = aeExt.wadoZIPEntryNameFormat;
         wadoSR2HtmlTemplateURI = aeExt.wadoSR2HtmlTemplateURI;
         wadoSR2TextTemplateURI = aeExt.wadoSR2TextTemplateURI;
+        wadoCDA2HtmlTemplateURI = aeExt.wadoCDA2HtmlTemplateURI;
         mppsForwardDestinations = aeExt.mppsForwardDestinations;
         ianDestinations = aeExt.ianDestinations;
         ianDelay = aeExt.ianDelay;
@@ -1038,6 +1417,7 @@ public class ArchiveAEExtension extends AEExtension {
         spanningCFindSCPPolicy = aeExt.spanningCFindSCPPolicy;
         fallbackCMoveSCP = aeExt.fallbackCMoveSCP;
         fallbackCMoveSCPDestination = aeExt.fallbackCMoveSCPDestination;
+        fallbackCMoveSCPCallingAET = aeExt.fallbackCMoveSCPCallingAET;
         fallbackCMoveSCPLeadingCFindSCP = aeExt.fallbackCMoveSCPLeadingCFindSCP;
         fallbackCMoveSCPRetries = aeExt.fallbackCMoveSCPRetries;
         externalRetrieveAEDestination = aeExt.externalRetrieveAEDestination;
@@ -1047,6 +1427,7 @@ public class ArchiveAEExtension extends AEExtension {
         hideSPSWithStatusFromMWL = aeExt.hideSPSWithStatusFromMWL;
         fallbackCMoveSCPStudyOlderThan = aeExt.fallbackCMoveSCPStudyOlderThan;
         storePermissionServiceURL = aeExt.storePermissionServiceURL;
+        storePermissionServiceResponse = aeExt.storePermissionServiceResponse;
         storePermissionServiceResponsePattern = aeExt.storePermissionServiceResponsePattern;
         storePermissionServiceExpirationDatePattern = aeExt.storePermissionServiceExpirationDatePattern;
         storePermissionServiceErrorCommentPattern = aeExt.storePermissionServiceErrorCommentPattern;
@@ -1054,10 +1435,12 @@ public class ArchiveAEExtension extends AEExtension {
         allowRejectionForDataRetentionPolicyExpired = aeExt.allowRejectionForDataRetentionPolicyExpired;
         acceptMissingPatientID = aeExt.acceptMissingPatientID;
         allowDeleteStudyPermanently = aeExt.allowDeleteStudyPermanently;
+        allowDeletePatient = aeExt.allowDeletePatient;
         acceptConflictingPatientID = aeExt.acceptConflictingPatientID;
         copyMoveUpdatePolicy = aeExt.copyMoveUpdatePolicy;
         linkMWLEntryUpdatePolicy = aeExt.linkMWLEntryUpdatePolicy;
         retrieveAETitles = aeExt.retrieveAETitles;
+        returnRetrieveAETitles = aeExt.returnRetrieveAETitles;
         hl7PSUSendingApplication = aeExt.hl7PSUSendingApplication;
         hl7PSUReceivingApplications = aeExt.hl7PSUReceivingApplications;
         hl7PSUDelay = aeExt.hl7PSUDelay;
@@ -1065,12 +1448,26 @@ public class ArchiveAEExtension extends AEExtension {
         hl7PSUOnTimeout = aeExt.hl7PSUOnTimeout;
         invokeImageDisplayPatientURL = aeExt.invokeImageDisplayPatientURL;
         invokeImageDisplayStudyURL = aeExt.invokeImageDisplayStudyURL;
+        storageVerificationPolicy = aeExt.storageVerificationPolicy;
+        storageVerificationUpdateLocationStatus = aeExt.storageVerificationUpdateLocationStatus;
+        storageVerificationStorageIDs = aeExt.storageVerificationStorageIDs;
+        storageVerificationInitialDelay = aeExt.storageVerificationInitialDelay;
+        updateLocationStatusOnRetrieve = aeExt.updateLocationStatusOnRetrieve;
+        storageVerificationOnRetrieve = aeExt.storageVerificationOnRetrieve;
+        relationalQueryNegotiationLenient = aeExt.relationalQueryNegotiationLenient;
+        relationalRetrieveNegotiationLenient = aeExt.relationalRetrieveNegotiationLenient;
+        rejectConflictingPatientAttribute = aeExt.rejectConflictingPatientAttribute;
+        stowRetiredTransferSyntax = aeExt.stowRetiredTransferSyntax;
+        stowExcludeAPPMarkers = aeExt.stowExcludeAPPMarkers;
+        restrictRetrieveAccordingTransferCapabilities = aeExt.restrictRetrieveAccordingTransferCapabilities;
         acceptedMoveDestinations.clear();
         acceptedMoveDestinations.addAll(aeExt.acceptedMoveDestinations);
         acceptedUserRoles.clear();
         acceptedUserRoles.addAll(aeExt.acceptedUserRoles);
         exportRules.clear();
         exportRules.addAll(aeExt.exportRules);
+        exportPriorsRules.clear();
+        exportPriorsRules.addAll(aeExt.exportPriorsRules);
         rsForwardRules.clear();
         rsForwardRules.addAll(aeExt.rsForwardRules);
         compressionRules.clear();
@@ -1102,12 +1499,16 @@ public class ArchiveAEExtension extends AEExtension {
         return result;
     }
 
-    public List<RSForwardRule> findRSForwardRules(RSOperation rsOperation) {
+    public Stream<ExportPriorsRule> prefetchRules() {
+        return Stream.concat(exportPriorsRules.stream(), getArchiveDeviceExtension().getExportPriorsRules().stream());
+    }
+
+    public List<RSForwardRule> findRSForwardRules(RSOperation rsOperation, HttpServletRequest request) {
         ArrayList<RSForwardRule> result = new ArrayList<>();
         for (Collection<RSForwardRule> rules
                 : new Collection[]{rsForwardRules, getArchiveDeviceExtension().getRSForwardRules()})
             for (RSForwardRule rule : rules)
-                if (rule.match(rsOperation))
+                if (rule.match(rsOperation, request))
                     result.add(rule);
         return result;
     }

@@ -47,13 +47,12 @@ import org.dcm4che3.net.hl7.HL7Application;
 import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.entity.Patient;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.patient.*;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
-import javax.servlet.http.HttpServletRequest;
 import java.net.Socket;
 import java.util.List;
 
@@ -82,9 +81,9 @@ public class PatientServiceImpl implements PatientService {
     }
 
     @Override
-    public PatientMgtContext createPatientMgtContextWEB(HttpServletRequest httpRequest) {
+    public PatientMgtContext createPatientMgtContextWEB(HttpServletRequestInfo httpRequest) {
         PatientMgtContextImpl ctx = new PatientMgtContextImpl(device);
-        ctx.setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(httpRequest));
+        ctx.setHttpServletRequestInfo(httpRequest);
         return ctx;
     }
 
@@ -143,7 +142,7 @@ public class PatientServiceImpl implements PatientService {
     public Patient mergePatient(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException, CircularPatientMergeException {
         if (ctx.getPatientID().matches(ctx.getPreviousPatientID()))
-            throw new CircularPatientMergeException();
+            throw new CircularPatientMergeException("PriorPatientID same as target PatientID");
 
         try {
             return ejb.mergePatient(ctx);
@@ -159,13 +158,13 @@ public class PatientServiceImpl implements PatientService {
     @Override
     public Patient changePatientID(PatientMgtContext ctx)
             throws NonUniquePatientException, PatientMergedException, PatientTrackingNotAllowedException {
-        if (ctx.getPatientID().matches(ctx.getPreviousPatientID()))
-            throw new CircularPatientMergeException();
-
-        if (device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).isHl7TrackChangedPatientID()) {
+        if (device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class).isHL7TrackChangedPatientID()) {
             if (isEitherHavingNoIssuer(ctx))
                 throw new PatientTrackingNotAllowedException(
-                        "Either previous or new Patient ID has missing issuer and change patient id tracking is enabled. Disable change patient id tracking feature and retry update");
+                        "Either previous or new Patient ID has missing issuer and change patient id tracking is enabled. "
+                                + "Disable change patient id tracking feature and retry update");
+            if (ctx.getPatientID().equals(ctx.getPreviousPatientID()))
+                throw new CircularPatientMergeException("PriorPatientID same as target PatientID");
             createPatient(ctx);
             return mergePatient(ctx);
         }
@@ -193,15 +192,17 @@ public class PatientServiceImpl implements PatientService {
     }
 
     @Override
-    public void deletePatientFromUI(PatientMgtContext ctx) {
-        ejb.deletePatientFromUI(ctx.getPatient());
+    public void deletePatient(PatientMgtContext ctx) {
+        ejb.deletePatient(ctx.getPatient());
         patientMgtEvent.fire(ctx);
     }
 
     @Override
-    public void deletePatientIfHasNoMergedWith(PatientMgtContext ctx) {
-        boolean patientDeleted = ejb.deletePatientIfHasNoMergedWith(ctx.getPatient());
-        if (patientDeleted)
+    public Patient updatePatientStatus(PatientMgtContext ctx) {
+        try {
+            return ejb.updatePatientStatus(ctx);
+        } finally {
             patientMgtEvent.fire(ctx);
+        }
     }
 }

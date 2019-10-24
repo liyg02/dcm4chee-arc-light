@@ -1,19 +1,22 @@
-import { Component } from '@angular/core';
+///<reference path="../../../../node_modules/@angular/core/src/metadata/lifecycle_hooks.d.ts"/>
+import { Component, OnDestroy } from '@angular/core';
 import {Http} from '@angular/http';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/catch';
 import * as FileSaver from 'file-saver';
-import {SlimLoadingBarService} from 'ng2-slim-loading-bar';
 import {MessagingComponent} from '../../widgets/messaging/messaging.component';
 import {AppService} from '../../app.service';
 import {WindowRefService} from "../../helpers/window-ref.service";
 import {J4careHttpService} from "../../helpers/j4care-http.service";
+import {HttpErrorHandler} from "../../helpers/http-error-handler";
+import {LoadingBarService} from "@ngx-loading-bar/core";
+import {j4care} from "../../helpers/j4care.service";
 
 @Component({
   selector: 'app-associations',
   templateUrl: './associations.component.html'
 })
-export class AssociationsComponent{
+export class AssociationsComponent implements OnDestroy{
     updaterate: any = 3;
     // logoutUrl = myApp.logoutUrl();
     // status:any;
@@ -21,9 +24,9 @@ export class AssociationsComponent{
     message = '';
     others   = false;
     associationStatus;
+    pause = false;
     // myValue = 10;
-    constructor(public $http:J4careHttpService, public appservices: AppService, private cfpLoadingBar: SlimLoadingBarService, public messaging: MessagingComponent) {
-        this.cfpLoadingBar.interval = 200;
+    constructor(public $http:J4careHttpService, public appservices: AppService, private cfpLoadingBar: LoadingBarService, public messaging: MessagingComponent, public httpErrorHandler:HttpErrorHandler) {
     }
 
 
@@ -65,71 +68,32 @@ export class AssociationsComponent{
         });
         return local;
     };
-    timeCalculator(data){
-        data.forEach((m, i) => {
-            let date: any    = new Date(m.connectTime);
-            let today: any   = new Date();
-            let diff: number    = Math.round((today - date) / 1000);
-            let sec: any     = '00';
-            let min: any     = '00';
-            let h: any       = '00';
-            let milsec: any       = Math.round((((today - date) / 1000) - Math.floor((today - date) / 1000)) * 1000);
-
-            if (diff < 60){
-                sec = diff;
-            }else{
-                sec = Math.round(((diff / 60) - Math.floor(diff / 60)) * 60);
-
-                if (Math.floor(diff / 60) < 60){
-                    min = Math.round(Math.floor(diff / 60));
-                    if (min < 10){
-                        min = '0' + min;
-                    }
-                }else{
-                    min = Math.round(((Math.floor(diff / 60) / 60) - Math.floor(Math.floor(diff / 60) / 60)) * 60);
-                    h   = Math.round(Math.floor(Math.floor(diff / 60) / 60));
-                }
-            }
-            if (sec < 10 && sec != '00'){
-                sec = '0' + sec;
-            }
-            if (min < 10 && min != '00'){
-                min = '0' + min;
-            }
-            if (h < 10 && h != '00'){
-                h = '0' + h;
-            }
-            let dYear  = date.getFullYear();
-            let dMonth = date.getMonth() + 1;
-            if (dMonth < 10){
-                dMonth = '0' + dMonth;
-            }
-            let dDate = date.getDate();
-            if (dDate < 10){
-                dDate = '0' + dDate;
-            }
-            let dHours = date.getHours();
-            if (dHours < 10 && dHours != '00'){
-                dHours = '0' + dHours;
-            }
-            let dMinutes = date.getMinutes();
-            if (dMinutes < 10 && dMinutes != '00'){
-                dMinutes = '0' + dMinutes;
-            }
-            let dSeconds = date.getSeconds();
-            if (dSeconds < 10 && dSeconds != '00'){
-                dSeconds = '0' + dSeconds;
-            }
-            data[i]['browserTime'] = dYear + '-' + dMonth + '-' + dDate + '  ' + dHours + ':' + dMinutes + ':' + dSeconds;
-            data[i]['openSince']   = h + ':' + min + ':' + sec + '.' + milsec;
-            data[i]['openSinceOrder']   = (today - date);
-        });
+    timeCalculator(data):any{
+        try{
+            data.forEach((m, i) => {
+                let date: Date    = j4care.newDate(m.connectTime);
+                let today: Date   = this.appservices.serverTime;
+                data[i]['browserTime'] = j4care.formatDate(date,"yyyy-MM-dd HH:mm:ss");
+                data[i]['openSince'] = j4care.diff(date, today);
+                data[i]['openSinceOrder']   = (today.getTime() - date.getTime());
+            });
+        }catch (e) {
+            console.groupCollapsed("associations.component timeCalculator(data)");
+            console.log("this.appservices.serverTime=",this.appservices.serverTime);
+            console.log("data=",data);
+            console.error(e);
+            console.groupEnd();
+        }
         return data;
     }
     abort(serialnr){
         this.cfpLoadingBar.start();
         this.$http.delete('/dcm4chee-arc/monitor/associations/' + serialnr).subscribe(res => {
+            this.cfpLoadingBar.complete();
             this.refresh();
+        },(err)=>{
+            this.cfpLoadingBar.complete();
+            this.httpErrorHandler.handleError(err);
         });
     }
 
@@ -148,7 +112,7 @@ export class AssociationsComponent{
         // this.myValue = 10;
         // this.cfpLoadingBar.progress = this.cfpLoadingBar.progress + 10;
         this.$http.get('/dcm4chee-arc/monitor/associations')
-            .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+            // .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res; }catch (e){ resjson = [];} return resjson;})
             .subscribe(res => {
                 if (res && res[0] && res[0] != ''){
                     res = this.modifyObject(res);
@@ -157,19 +121,24 @@ export class AssociationsComponent{
                 }else{
                     this.associationStatus = null;
                 }
-                this.cfpLoadingBar.progress = this.cfpLoadingBar.progress + 10;
                 this.cfpLoadingBar.complete();
                 // },1000);
             }, (err) => {
+                this.httpErrorHandler.handleError(err);
                 this.cfpLoadingBar.complete();
             });
     }
-
+    mauseEnter(){
+        this.pause = true;
+    }
+    mauseLeave(){
+        this.pause = false;
+    }
     monitor(){
         // cfpLoadingBar.start();
         this.stopLoop = false;
         this.$http.get('/dcm4chee-arc/monitor/associations')
-            .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+            // .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res; }catch (e){ resjson = [];} return resjson;})
             .subscribe(res => {
                 let data = res;
                 if (data && data[0] && data[0] != ''){
@@ -184,32 +153,34 @@ export class AssociationsComponent{
             this.updaterate = this.updaterate.replace(',', '.');
         }
         let $that: any = this;
-        let associationLoop = setInterval(function () {
+        let associationLoop = setInterval(() => {
             if ($that.stopLoop){
                 clearInterval(associationLoop);
             }else{
-
-                $that.$http.get('/dcm4chee-arc/monitor/associations')
-                    .map((res) => res.json())
-                    .subscribe(
-                        (res) => {
-                            let data = res;
-                            if (data && data[0] && data[0] != ''){
-                                data = $that.modifyObject(data);
-                                data = $that.timeCalculator(data);
-                                $that.associationStatus = data;
-                            }else{
-                                $that.associationStatus = null;
+                if(!this.pause){
+                    $that.$http.get('/dcm4chee-arc/monitor/associations')
+                        .map((res) => res.json())
+                        .subscribe(
+                            (res) => {
+                                let data = res;
+                                if (data && data[0] && data[0] != ''){
+                                    data = $that.modifyObject(data);
+                                    data = $that.timeCalculator(data);
+                                    $that.associationStatus = data;
+                                }else{
+                                    $that.associationStatus = null;
+                                }
+                            },
+                            (err) => {
+                                this.httpErrorHandler.handleError(err);
+                                //     // DeviceService.msg($scope, {
+                                //     //     "title": "Error",
+                                //     //     "text": "Connection error!",
+                                //     //     "status": "error"
+                                //     // });
                             }
-                        },
-                        (res) => {
-                            //     // DeviceService.msg($scope, {
-                            //     //     "title": "Error",
-                            //     //     "text": "Connection error!",
-                            //     //     "status": "error"
-                            //     // });
-                        }
-                    );
+                        );
+                }
             }
         }, $that.updaterate * 1000);
     };
@@ -267,5 +238,7 @@ export class AssociationsComponent{
         let file = new File([csv], 'associacions.csv', {type: 'text/csv;charset=utf-8'});
         FileSaver.saveAs(file);
     };
-
+    ngOnDestroy(){
+      this.stopLoop = true;
+    }
 }

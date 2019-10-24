@@ -11,7 +11,10 @@
     "dcmRejectionNoteLabel": {
       "title": "Rejection Note Label",
       "description": "Rejection Note Label",
-      "type": "string"
+      "type": "string",
+      "use": [
+        "$.dcmDevice.dcmArchiveDevice.dcmQueryRetrieveView[*].dcmShowInstancesRejectedByCode[*]"
+      ]
     },
     "dcmRejectionNoteType": {
       "title": "Rejection Note Type",
@@ -48,6 +51,12 @@
       "items": {
         "type": "string"
       }
+    },
+    "dcmAcceptRejectionBeforeStorage": {
+      "title": "Accept Rejection before Storage",
+      "description": "Time interval in ISO-8601 duration format PnDTnHnMn.nS after receive of a Rejection Note, in which received object referenced by this Rejection Note are treated as rejected. Referenced objects received afterwards are treated as subsequent occurrence of an already rejected instance. If not present, Rejection Notes which refers not yet received objects will not be accepted.",
+      "type": "string",
+      "format": "dcmDuration"
     },
     "dcmDeleteRejectedInstanceDelay": {
       "title": "Delete Rejected Instance Delay",

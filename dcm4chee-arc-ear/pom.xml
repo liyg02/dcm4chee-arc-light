@@ -45,7 +45,7 @@
   <parent>
     <artifactId>dcm4chee-arc-parent</artifactId>
     <groupId>org.dcm4che.dcm4chee-arc</groupId>
-    <version>5.11.1</version>
+    <version>5.19.1</version>
   </parent>
   <modelVersion>4.0.0</modelVersion>
 
@@ -66,7 +66,18 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-compress</artifactId>
+      <version>${project.version}</version>
+      <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-conf</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-conf-ui</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -82,6 +93,12 @@
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-delete</artifactId>
+      <version>${project.version}</version>
+      <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-diff</artifactId>
       <version>${project.version}</version>
       <type>ejb</type>
     </dependency>
@@ -103,7 +120,17 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-export-curve2pr</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-export-dicom</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-export-impax-report</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -111,6 +138,27 @@
       <artifactId>dcm4chee-arc-export-mgt</artifactId>
       <version>${project.version}</version>
       <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-export-pr2ko</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-export-query-attrs</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-export-storage</artifactId>
+      <version>${project.version}</version>
+      <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-export-study-size</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
@@ -148,6 +196,11 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-impax-report</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-issuer</artifactId>
       <version>${project.version}</version>
       <type>ejb</type>
@@ -157,6 +210,11 @@
       <artifactId>dcm4chee-arc-metadata</artifactId>
       <version>${project.version}</version>
       <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-metrics</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
@@ -190,6 +248,32 @@
       <artifactId>dcm4chee-arc-patient</artifactId>
       <version>${project.version}</version>
       <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-pdq</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-pdq-dicom</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-pdq-scheduler</artifactId>
+      <version>${project.version}</version>
+      <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-pdq-xroad</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-prefetch</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
@@ -254,6 +338,11 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-rs-util</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-service</artifactId>
       <version>${project.version}</version>
       <type>ejb</type>
@@ -314,12 +403,23 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-ups</artifactId>
+      <version>${project.version}</version>
+      <type>ejb</type>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-ups-scp</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
       <artifactId>dcm4chee-arc-validation</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.dcm4che.dcm4chee-arc</groupId>
-      <artifactId>dcm4chee-arc-xdsi</artifactId>
+      <artifactId>dcm4chee-arc-xroad</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -341,13 +441,19 @@
       <classifier>${dcm4chee-arc-ui-classifier}</classifier>
       <type>war</type>
     </dependency>
+    <dependency>
+      <groupId>org.dcm4che.dcm4chee-arc</groupId>
+      <artifactId>dcm4chee-arc-xsl-cda</artifactId>
+      <version>${project.version}</version>
+      <type>war</type>
+    </dependency>
   </dependencies>
 
   <build>
     <plugins>
       <plugin>
         <artifactId>maven-ear-plugin</artifactId>
-        <version>2.10.1</version>
+        <version>3.0.1</version>
         <configuration>
           <classifier>${classifier}</classifier>
           <version>7</version>
@@ -356,6 +462,8 @@
           <displayName>dcm4chee-arc</displayName>
           <earSourceDirectory>${earSourceDirectory}</earSourceDirectory>
           <workDirectory>${project.build.directory}/${project.build.finalName}-${classifier}</workDirectory>
+          <outputFileNameMapping>@{artifactId}@-@{version}@@{dashClassifier?}@.@{extension}@</outputFileNameMapping>
+          <filtering>true</filtering>
           <modules>
             <webModule>
               <groupId>org.dcm4che.dcm4chee-arc</groupId>
@@ -371,6 +479,11 @@
               <groupId>org.dcm4che.dcm4chee-arc</groupId>
               <artifactId>dcm4chee-arc-ui2</artifactId>
               <contextRoot>dcm4chee-arc/ui2</contextRoot>
+            </webModule>
+            <webModule>
+              <groupId>org.dcm4che.dcm4chee-arc</groupId>
+              <artifactId>dcm4chee-arc-xsl-cda</artifactId>
+              <contextRoot>dcm4chee-arc/xsl</contextRoot>
             </webModule>
           </modules>
         </configuration>

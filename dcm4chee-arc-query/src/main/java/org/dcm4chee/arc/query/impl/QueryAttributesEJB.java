@@ -38,99 +38,101 @@
 
 package org.dcm4chee.arc.query.impl;
 
-import com.mysema.commons.lang.CloseableIterator;
-import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.Tuple;
-import com.querydsl.core.types.Expression;
-import com.querydsl.jpa.hibernate.HibernateQuery;
+import org.dcm4che3.net.Device;
 import org.dcm4che3.util.StringUtils;
+import org.dcm4chee.arc.code.CodeCache;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.query.util.QueryBuilder;
-import org.dcm4chee.arc.query.util.QueryParam;
-import org.hibernate.Session;
 
 import javax.ejb.Stateless;
 import javax.ejb.TransactionAttribute;
 import javax.ejb.TransactionAttributeType;
-import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
+import javax.inject.Inject;
+import javax.persistence.*;
+import javax.persistence.criteria.*;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Stream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Oct 2017
  */
 @Stateless
 @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
 public class QueryAttributesEJB {
 
-    static final Expression<?>[] CALC_STUDY_QUERY_ATTRS = {
-            QSeries.series.pk,
-            QSeries.series.modality,
-            QSeriesQueryAttributes.seriesQueryAttributes.numberOfInstances,
-            QSeriesQueryAttributes.seriesQueryAttributes.sopClassesInSeries,
-            QSeriesQueryAttributes.seriesQueryAttributes.retrieveAETs,
-            QSeriesQueryAttributes.seriesQueryAttributes.availability,
-    };
+    @Inject
+    private CodeCache codeCache;
 
-    static final Expression<?>[] CALC_SERIES_QUERY_ATTRS = {
-            QInstance.instance.sopClassUID,
-            QInstance.instance.retrieveAETs,
-            QInstance.instance.availability
-    };
+    @Inject
+    private Device device;
 
     @PersistenceContext(unitName = "dcm4chee-arc")
     EntityManager em;
 
-    public StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryParam queryParam) {
-        StudyQueryAttributesBuilder builder = new StudyQueryAttributesBuilder();
-        for (Tuple tuple : new HibernateQuery<Void>(em.unwrap(Session.class))
-                .select(CALC_STUDY_QUERY_ATTRS)
-                .from(QSeries.series)
-                .leftJoin(QSeries.series.queryAttributes, QSeriesQueryAttributes.seriesQueryAttributes)
-                .on(QSeriesQueryAttributes.seriesQueryAttributes.viewID.eq(queryParam.getViewID()))
-                .where(QSeries.series.study.pk.eq(studyPk))
-                .fetch()) {
-            Integer numberOfInstancesI = tuple.get(QSeriesQueryAttributes.seriesQueryAttributes.numberOfInstances);
-            if (numberOfInstancesI == null) {
-                builder.add(tuple, calculateSeriesQueryAttributes(
-                        tuple.get(QSeries.series.pk),
-                        queryParam.getQueryRetrieveView(),
-                        queryParam.getHideRejectionNotesWithCode(),
-                        queryParam.getShowInstancesRejectedByCode()));
-            } else {
+    public StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryRetrieveView qrView) {
+        CriteriaBuilder cb = em.getCriteriaBuilder();
+        CriteriaQuery<Tuple> q = cb.createTupleQuery();
+        Root<Series> series = q.from(Series.class);
+        String viewID = qrView.getViewID();
+        CollectionJoin<Series, SeriesQueryAttributes> seriesQueryAttributes =
+                QueryBuilder.joinSeriesQueryAttributes(cb, series, viewID);
+        TypedQuery<Tuple> query = em.createQuery(q
+                .multiselect(
+                        series.get(Series_.pk),
+                        series.get(Series_.modality),
+                        seriesQueryAttributes.get(SeriesQueryAttributes_.numberOfInstances),
+                        seriesQueryAttributes.get(SeriesQueryAttributes_.sopClassesInSeries),
+                        seriesQueryAttributes.get(SeriesQueryAttributes_.retrieveAETs),
+                        seriesQueryAttributes.get(SeriesQueryAttributes_.availability))
+                .where(cb.equal(series.get(Series_.study).get(Study_.pk), studyPk)));
+        StudyQueryAttributesBuilder builder = new StudyQueryAttributesBuilder(series, seriesQueryAttributes);
+        try (Stream<Tuple> resultStream = query.getResultStream()) {
+            resultStream.forEach(tuple -> {
+            Integer numberOfInstancesI = tuple.get(seriesQueryAttributes.get(SeriesQueryAttributes_.numberOfInstances));
+            if (numberOfInstancesI == null)
+                builder.add(tuple, calculateSeriesQueryAttributes(tuple.get(series.get(Series_.pk)), qrView));
+            else
                 builder.add(tuple);
-            }
+            });
         }
         StudyQueryAttributes queryAttrs = builder.build();
-        queryAttrs.setViewID(queryParam.getViewID());
+        queryAttrs.setViewID(qrView.getViewID());
         queryAttrs.setStudy(em.getReference(Study.class, studyPk));
         em.persist(queryAttrs);
         return queryAttrs;
     }
 
-    public SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryRetrieveView qrView,
-                                                                CodeEntity[] hideRejectionNotesWithCode,
-                                                                CodeEntity[] showInstancesRejectedByCode) {
-        SeriesQueryAttributesBuilder builder = new SeriesQueryAttributesBuilder();
-        BooleanBuilder predicate = new BooleanBuilder(QInstance.instance.series.pk.eq(seriesPk));
-        predicate.and(QueryBuilder.hideRejectedInstance(
-                showInstancesRejectedByCode,
-                qrView.isHideNotRejectedInstances()));
-        predicate.and(QueryBuilder.hideRejectionNote(hideRejectionNotesWithCode));
-        try (
-                CloseableIterator<Tuple> results = new HibernateQuery<Void>(em.unwrap(Session.class))
-                        .select(CALC_SERIES_QUERY_ATTRS)
-                        .from(QInstance.instance)
-                        .where(predicate)
-                        .iterate()) {
-
-            while (results.hasNext()) {
-                builder.addInstance(results.next());
-            }
+    public SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryRetrieveView qrView) {
+        CriteriaBuilder cb = em.getCriteriaBuilder();
+        CriteriaQuery<Tuple> q = cb.createTupleQuery();
+        Root<Instance> instance = q.from(Instance.class);
+        Join<Instance, Series> series = instance.join(Instance_.series);
+        Join<Series, Study> study = series.join(Series_.study);
+        QueryBuilder queryBuilder = new QueryBuilder(cb);
+        List<Predicate> x = new ArrayList<>();
+        x.add(cb.equal(series.get(Series_.pk), seriesPk));
+        queryBuilder.hideRejectedInstance(x, q, study, series, instance,
+                codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()),
+                qrView.isHideNotRejectedInstances());
+        queryBuilder.hideRejectionNote(x, instance,
+                codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes()));
+        TypedQuery<Tuple> query = em.createQuery(q
+                .multiselect(
+                        instance.get(Instance_.sopClassUID),
+                        instance.get(Instance_.retrieveAETs),
+                        instance.get(Instance_.availability))
+                .where(x.toArray(new Predicate[0])));
+        SeriesQueryAttributesBuilder builder = new SeriesQueryAttributesBuilder(instance);
+        try (Stream<Tuple> resultStream = query.getResultStream()) {
+            resultStream.forEach(builder::addInstance);
         }
         SeriesQueryAttributes queryAttrs = builder.build();
         queryAttrs.setViewID(qrView.getViewID());
@@ -139,15 +141,41 @@ public class QueryAttributesEJB {
         return queryAttrs;
     }
 
+    public boolean calculateStudyQueryAttributes(String studyUID) {
+        Long studyPk;
+        try {
+            studyPk = em.createNamedQuery(Study.FIND_PK_BY_STUDY_UID, Long.class)
+                    .setParameter(1, studyUID)
+                    .getSingleResult();
+        } catch (NoResultException e) {
+            return false;
+        }
+        ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+        Set<String> viewIDs = new HashSet<>(arcDev.getQueryRetrieveViewIDs());
+        viewIDs.removeAll(em.createNamedQuery(StudyQueryAttributes.VIEW_IDS_FOR_STUDY_PK, String.class)
+                .setParameter(1, studyPk)
+                .getResultList());
+
+        for (String viewID : viewIDs) {
+            calculateStudyQueryAttributes(studyPk, arcDev.getQueryRetrieveView(viewID));
+        }
+        return true;
+    }
+
     private static class SeriesQueryAttributesBuilder {
+        private final Path<Instance> instance;
         private int numberOfInstances;
         private String[] retrieveAETs;
         private Availability availability;
         private Set<String> cuids = new HashSet<>();
 
+        public SeriesQueryAttributesBuilder(Path<Instance> instance) {
+            this.instance = instance;
+        }
+
         public void addInstance(Tuple result) {
-            String[] retrieveAETs1 = StringUtils.split(result.get(QInstance.instance.retrieveAETs), '\\');
-            Availability availability1 = result.get(QInstance.instance.availability);
+            String[] retrieveAETs1 = StringUtils.split(result.get(instance.get(Instance_.retrieveAETs)), '\\');
+            Availability availability1 = result.get(instance.get(Instance_.availability));
             if (numberOfInstances++ == 0) {
                 retrieveAETs = retrieveAETs1;
                 availability = availability1;
@@ -156,7 +184,7 @@ public class QueryAttributesEJB {
                 if (availability.compareTo(availability1) < 0)
                     availability = availability1;
             }
-            cuids.add(result.get(QInstance.instance.sopClassUID));
+            cuids.add(result.get(instance.get(Instance_.sopClassUID)));
         }
 
         public SeriesQueryAttributes build() {
@@ -173,6 +201,8 @@ public class QueryAttributesEJB {
 
     private static class StudyQueryAttributesBuilder {
 
+        private final Path<Series> series;
+        private final Path<SeriesQueryAttributes> seriesQueryAttributesPath;
         private int numberOfSeries;
         private int numberOfInstances;
         private String[] retrieveAETs;
@@ -180,20 +210,25 @@ public class QueryAttributesEJB {
         private Set<String> mods = new HashSet<>();
         private Set<String> cuids = new HashSet<>();
 
-        public void add(Tuple tuple) {
-            add(tuple.get(QSeriesQueryAttributes.seriesQueryAttributes.numberOfInstances),
-                    tuple.get(QSeries.series.modality),
-                    tuple.get(QSeriesQueryAttributes.seriesQueryAttributes.sopClassesInSeries),
-                    tuple.get(QSeriesQueryAttributes.seriesQueryAttributes.retrieveAETs),
-                    tuple.get(QSeriesQueryAttributes.seriesQueryAttributes.availability));
+        public StudyQueryAttributesBuilder(Path<Series> series, Path<SeriesQueryAttributes> seriesQueryAttributesPath) {
+            this.series = series;
+            this.seriesQueryAttributesPath = seriesQueryAttributesPath;
         }
 
-        public void add(Tuple tuple, SeriesQueryAttributes series) {
-            add(series.getNumberOfInstances(),
-                    tuple.get(QSeries.series.modality),
-                    series.getSOPClassesInSeries(),
-                    series.getRetrieveAETs(),
-                    series.getAvailability());
+        public void add(Tuple tuple) {
+            add(tuple.get(seriesQueryAttributesPath.get(SeriesQueryAttributes_.numberOfInstances)),
+                    tuple.get(series.get(Series_.modality)),
+                    tuple.get(seriesQueryAttributesPath.get(SeriesQueryAttributes_.sopClassesInSeries)),
+                    tuple.get(seriesQueryAttributesPath.get(SeriesQueryAttributes_.retrieveAETs)),
+                    tuple.get(seriesQueryAttributesPath.get(SeriesQueryAttributes_.availability)));
+        }
+
+        public void add(Tuple tuple, SeriesQueryAttributes seriesQueryAttributes) {
+            add(seriesQueryAttributes.getNumberOfInstances(),
+                    tuple.get(series.get(Series_.modality)),
+                    seriesQueryAttributes.getSOPClassesInSeries(),
+                    seriesQueryAttributes.getRetrieveAETs(),
+                    seriesQueryAttributes.getAvailability());
         }
 
         private void add(int numInstances, String modality, String sopClassesInSeries, String retrieveAETs,

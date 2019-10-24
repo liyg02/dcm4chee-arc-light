@@ -6,6 +6,13 @@ import {Observable} from 'rxjs';
 import {WindowRefService} from "../helpers/window-ref.service";
 import {AppService} from "../app.service";
 import {J4careHttpService} from "../helpers/j4care-http.service";
+import {j4care} from "../helpers/j4care.service";
+import {ScalarObservable} from "rxjs/observable/ScalarObservable";
+import 'rxjs/add/operator/switchMap';
+import {Globalvar} from "../constants/globalvar";
+import {HttpErrorResponse, HttpHeaders} from "@angular/common/http";
+import {SelectDropdown} from "../interfaces";
+import {StorageSystemsService} from "../monitoring/storage-systems/storage-systems.service";
 declare var DCM4CHE: any;
 declare var window: any;
 
@@ -15,11 +22,13 @@ export class StudiesService {
     private _mwlIod: any;
     private _studyIod;
     integerVr = ['DS', 'FL', 'FD', 'IS', 'SL', 'SS', 'UL', 'US'];
+    storageSystemList;
 
     constructor(
         public $http: J4careHttpService,
         public datePipe: DatePipe,
         public mainservice:AppService,
+        private storageSystems:StorageSystemsService
     ) { }
 
     get studyIod() {
@@ -53,7 +62,6 @@ export class StudiesService {
         return window;
     }
     getAes(user, aes){
-        console.log('in get aes service');
         if (!user || !user.user || user.roles.length === 0){
             return aes;
         }else{
@@ -79,15 +87,21 @@ export class StudiesService {
                     this.mainservice.setMessage({
                         'title': "Error",
                         'text': "Accepted User Roles in the AETs are missing, add at least one role per AET (ArchiveDevice -> AET -> Archive Network AE -> Accepted User Role)",
-                        'status': "Error"
+                        'status': "error"
                     });
+                    console.log("getAes(user,aes); studies.service.ts):");
+                    console.group();
+                    console.log("user",user);
+                    console.log("aes",aes);
+                    console.log("enAes",endAes);
+                    console.groupEnd();
                 }
                 return endAes;
             }else{
                 this.mainservice.setMessage({
                     'title': "Error",
                     'text': "No AETs found, please use the device-configurator or the LDAP-Browser to configure one!",
-                    'status': "Error"
+                    'status': "error"
                 });
             }
         }
@@ -108,6 +122,9 @@ export class StudiesService {
             }
             if(_.hasIn(msg,"errorMessage")){
                 endMsg = endMsg + `${msg.errorMessage}<br>`;
+            }
+            if(_.hasIn(msg,"error")){
+                endMsg = endMsg + `${msg.error}<br>`;
             }
             if(endMsg === ""){
                 endMsg = defaultMsg;
@@ -153,7 +170,6 @@ export class StudiesService {
         _.forEach(object, function(m, k){
             console.log('m', m);
             if (m && m.vr && m.vr === 'PN' && m.vr != 'SQ' && (!m.Value || m.Value[0] === null)){
-                console.log('in pnvalue=', m);
                 object[k]['Value'] = [{
                     Alphabetic: ''
                 }];
@@ -162,139 +178,187 @@ export class StudiesService {
                 object[k]['Value'] = [''];
             }
             if (m && (_.isArray(m) || (m && _.isObject(m)))) {
-                console.log('beforecall', m);
                 $this.initEmptyValue(m);
             }
         });
         return object;
     };
 
-    setExpiredDate(aet,studyUID, expiredDate){
+/*    setExpiredDate(aet,studyUID, expiredDate){
         let url = `../aets/${aet}/rs/studies/${studyUID}/expire/${expiredDate}`
-        return this.$http.put(url,{}).map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
+        return this.$http.put(url,{}).map(res => j4care.redirectOnAuthResponse(res));
+    }*/
+
+    getPrepareParameterForExpiriationDialog(study, exporters, infinit){
+        let expiredDate:Date;
+        let yearRange = "1800:2100";
+        let title = "Set expired date for the study.";
+        let schema:any = [
+            [
+                [
+                    {
+                        tag:"label",
+                        text:"Expired date"
+                    },
+                    {
+                        tag:"p-calendar",
+                        filterKey:"expiredDate",
+                        description:"Expired Date"
+                    }
+                ]
+            ]
+        ];
+        let schemaModel = {};
+        if(infinit){
+            if(_.hasIn(study,"7777102B.Value[0]") && study["7777102B"].Value[0] === "FROZEN"){
+                schemaModel = {
+                    setExpirationDateToNever:false,
+                    FreezeExpirationDate:false
+                };
+                title = "Unfreeze/Unprotect Expiration Date of the Study";
+                schema = [
+                    [
+                        [
+                            {
+                                tag:"label",
+                                text:"Expired Date"
+                            },
+                            {
+                                tag:"p-calendar",
+                                filterKey:"expiredDate",
+                                description:"Expired Date"
+                            }
+                        ]
+                    ]
+                ];
+            }else{
+                title = "Freeze/Protect Expiration Date of the Study";
+                schemaModel = {
+                    setExpirationDateToNever:true,
+                    FreezeExpirationDate:true
+                };
+                schema = [
+                    [
+                        [
+                            {
+                                tag:"label",
+                                text:"Expired date",
+                                showIf:(model)=>{
+                                    return !model.setExpirationDateToNever
+                                }
+                            },
+                            {
+                                tag:"p-calendar",
+                                filterKey:"expiredDate",
+                                description:"Expired Date",
+                                showIf:(model)=>{
+                                    return !model.setExpirationDateToNever
+                                }
+                            }
+                        ],[
+                        {
+                            tag:"dummy"
+                        },
+                        {
+                            tag:"checkbox",
+                            filterKey:"setExpirationDateToNever",
+                            description:"Set Expiration Date to 'never' if you want also to protect the study",
+                            text:"Set Expiration Date to 'never' if you want also to protect the study"
+                        }
+                        ],[
+                            {
+                                tag:"dummy"
+                            },
+                            {
+                                tag:"checkbox",
+                                filterKey:"FreezeExpirationDate",
+                                description:"Freeze Expiration Date",
+                                text:"Freeze Expiration Date"
+                            }
+                        ]
+                    ]
+                ];
             }
-            return resjson;
-        });
+        }else{
+            if(_.hasIn(study,"77771023.Value.0") && study["77771023"].Value[0] != ""){
+                console.log("va",study["77771023"].Value[0]);
+                let expiredDateString = study["77771023"].Value[0];
+                expiredDate = new Date(expiredDateString.substring(0, 4)+ '.' + expiredDateString.substring(4, 6) + '.' + expiredDateString.substring(6, 8));
+            }else{
+                expiredDate = new Date();
+            }
+            schemaModel = {
+                expiredDate:j4care.formatDate(expiredDate,'yyyyMMdd')
+            };
+            title += "<p>Set exporter if you wan't to export on expiration date too.";
+            schema[0].push([
+                {
+                    tag:"label",
+                    text:"Exporter"
+                },
+                {
+                    tag:"select",
+                    filterKey:"exporter",
+                    description:"Exporter",
+                    options:exporters.map(exporter=> new SelectDropdown(exporter.id, exporter.description || exporter.id))
+                }])
+        }
+        return {
+            content: title,
+            form_schema:schema,
+            result: {
+                schema_model: schemaModel
+            },
+            saveButton: 'SAVE'
+        };
+    }
+    setExpiredDate(aet,studyUID, expiredDate, exporter, params?:any){
+        let localParams = "";
+        if(exporter){
+            localParams = `?ExporterID=${exporter}`
+        }
+        if(params && Object.keys(params).length > 0){
+            if(localParams){
+                localParams += j4care.objToUrlParams(params);
+            }else{
+                localParams = `?${j4care.objToUrlParams(params)}`
+            }
+        }
+        return this.$http.put(`../aets/${aet}/rs/studies/${studyUID}/expire/${expiredDate}${localParams}`,{})
     }
 
     queryPatients = function(url, params) {
-        console.log('this._config(aparms', this._config(params));
-
-        // this.headers = new Headers();
-        // this.headers.append('Content-Type', 'application/json');
-        // this.headers.append('Parameter',  + params);
-        //
-        //
-        // let options = new RequestOptions({
-        //     method: RequestMethod.Get,
-        //     url: url,
-        //     headers: this.headers
-        // });
-        // this.http.request(new Request(this.options))
-
         return this.$http.get(
             url + '/patients' + this._config(params),
-            {
-                headers:  new Headers({'Accept': 'application/dicom+json'})
-            }).map(res => {let resjson; try{
-            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-            if(pattern.exec(res.url)){
-                WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-            }
-            resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            new HttpHeaders({'Accept': 'application/dicom+json'})
+        )
     };
     queryDiffs = function(url, params) {
-        params["missing"] = params["missing"] || true;
+        // params["missing"] = params["missing"] || true;
         return this.$http.get(
             url + this._config(params),
-            {
-                headers:  new Headers({'Accept': 'application/dicom+json'})
-            }
-        ).map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
-            }
-            return resjson;
-        });
+            new HttpHeaders({'Accept': 'application/dicom+json'})
+        )
     };
 
     getCount(url,mode,params) {
         return this.$http.get(
             `${url}/${mode}/count${this._config(params)}`,
-            {
-                headers:  new Headers({'Accept': 'application/json'})
-            }
+            new HttpHeaders({'Accept': 'application/json'})
         )
-            .map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
-            }
-            return resjson;
-        });
     };
     getSize(url,params) {
         return this.$http.get(
             `${url}/studies/size${this._config(params)}`,
-            {
-                headers:  new Headers({'Accept': 'application/json'})
-            }
-        ).map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
-            }
-            return resjson;
-        });
+                new HttpHeaders({'Accept': 'application/json'})
+        )
     };
 
     queryStudies = function(url, params) {
         return this.$http.get(
             url + '/studies' + this._config(params),
-            {
-                headers:  new Headers({'Accept': 'application/dicom+json'})
-            }
-        ).map(res => {
-            let resjson;
-            try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json();
-            }catch (e){
-                resjson = {};
-            }
-            return resjson;
-        });
+            new HttpHeaders({'Accept': 'application/dicom+json'})
+        )
     };
     otherAttributesButIDWasChanged(originalAttr,changedAttr){
         let firstObject = _.cloneDeep(originalAttr);
@@ -342,29 +406,15 @@ export class StudiesService {
     queryMwl = function(url, params) {
         return this.$http.get(
             url + '/mwlitems' + this._config(params),
-            {
-                headers:  new Headers({'Accept': 'application/dicom+json'})
-            }
-        ).map(res => {let resjson; try{
-            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-            if(pattern.exec(res.url)){
-                WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-            }
-            resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            new HttpHeaders({'Accept': 'application/dicom+json'})
+        )
     };
 
     querySeries = function(url, studyIUID, params) {
         return this.$http.get(
             url + '/studies/' + studyIUID + '/series' + this._config(params),
-            {
-                headers:  new Headers({'Accept': 'application/dicom+json'})
-            }
-        ).map(res => {let resjson; try{
-            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-            if(pattern.exec(res.url)){
-                WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-            }
-            resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            new HttpHeaders({'Accept': 'application/dicom+json'})
+        )
     };
 
     queryInstances = function(url, studyIUID, seriesIUID, params) {
@@ -373,28 +423,15 @@ export class StudiesService {
             + '/series/' + seriesIUID
             + '/instances' +
             this._config(params),
-            {
-                headers:  new Headers({'Accept': 'application/dicom+json'})
-            }
-        ).map(res => {let resjson; try{
-            let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-            if(pattern.exec(res.url)){
-                WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-            }
-            resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            new HttpHeaders({'Accept': 'application/dicom+json'})
+        )
     };
 
     getPatientIod(){
-        console.log('_patientIod', this._patientIod);
         if (this._patientIod) {
             return Observable.of(this._patientIod);
         } else {
-            return this.$http.get('assets/iod/patient.iod.json').map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            return this.$http.get('assets/iod/patient.iod.json')
         }
     };
     getStudyIod(){
@@ -402,12 +439,7 @@ export class StudiesService {
         if (this._studyIod) {
             return Observable.of(this._studyIod);
         } else {
-            return this.$http.get('assets/iod/study.iod.json').map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            return this.$http.get('assets/iod/study.iod.json')
         }
     };
     getMwlIod(){
@@ -417,12 +449,7 @@ export class StudiesService {
         } else {
             return this.$http.get(
                 'assets/iod/mwl.iod.json'
-            ).map(res => {let resjson; try{
-                let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/");
-                if(pattern.exec(res.url)){
-                    WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";
-                }
-                resjson = res.json(); }catch (e){resjson = {}; } return resjson; });
+            )
         }
     };
 
@@ -430,7 +457,7 @@ export class StudiesService {
         let dropdown = [];
         _.forEach(res, function(m, i){
             if (i === '00400100'){
-                _.forEach(m.items, function(l, j){
+                _.forEach(m.items || m.Value[0], function(l, j){
                     dropdown.push({
                         'code': '00400100:' + j,
                         'codeComma': '>' + j.slice(0, 4) + ',' + j.slice(4),
@@ -601,8 +628,11 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             if (_.hasIn(obj, '["00100020"].Value[0]')){
                 patientId += obj["00100020"].Value[0];
             }
-            if (_.hasIn(obj, '["00100021"].Value[0]')){
+            if (_.hasIn(obj, '["00100021"].Value[0]'))
                 patientId += '^^^' + obj["00100021"].Value[0];
+            else{
+                if(_.hasIn(obj, '["00100024"].Value[0]["00400032"].Value[0]') || _.hasIn(obj, '["00100024"].Value[0]["00400033"].Value[0]'))
+                    patientId += '^^^';
             }
             if (_.hasIn(obj, '["00100024"].Value[0]["00400032"].Value[0]')){
                 patientId += '&' + obj['00100024'].Value[0]['00400032'].Value[0];
@@ -633,7 +663,7 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
     }
     changeExternalPatientID(patient, internalAppName, externalAppName, oldPatientID){
         let url = `../hl7apps/${internalAppName}/hl7/${externalAppName}/patients/${oldPatientID}/changeid`;
-        let headers = new Headers({ 'Content-Type': 'application/dicom+json' });
+        let headers = new HttpHeaders({ 'Content-Type': 'application/dicom+json' });
         let object;
         if(_.hasIn(patient,"attrs")){
             object = patient.attrs;
@@ -644,8 +674,8 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             save:this.$http.post(
                 url,
                 object,
-                {headers: headers}
-            ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+                headers
+            )
             ,
             successMsg:'Patient ID changed successfully!'
         };
@@ -657,7 +687,44 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
             }
         };
     }
-    modifyPatient(patient, iod, oldPatientID, aet,internalAppName, externalAppName,  modifyMode, externalInternalAetMode){
+    changePatientID(oldPatientID, newPatientID, patientData, aet, sendingHl7App, receivingHl7App, accesMode){
+        if(oldPatientID === newPatientID){
+            return Observable.of(null);
+        }else{
+            if(accesMode === 'internal'){
+                return this.$http.post(
+                    `../aets/${aet}/rs/patients/${oldPatientID}/changeid/${newPatientID}`,
+                    patientData,
+                     new HttpHeaders({ 'Content-Type': 'application/dicom+json' })
+                );
+            }else{
+                return this.$http.post(
+                    `../hl7apps/${sendingHl7App}/hl7/${receivingHl7App}/patients/${oldPatientID}/changeid`,
+                    patientData,
+                    new HttpHeaders({ 'Content-Type': 'application/dicom+json' })
+                );
+            }
+        }
+    }
+
+    createPatient(patientData, aet, sendingHl7App, receivingHl7App,accesMode){
+        let url;
+        if(accesMode === 'external'){
+            if(!sendingHl7App || !receivingHl7App){
+                return Observable.throw(new Error('Hl7Applications not found!'));
+            }else{
+                url = `../hl7apps/${sendingHl7App}/hl7/${receivingHl7App}/patients?queue=true`;
+            }
+        }else{
+            url = `../aets/${aet}/rs/patients/`;
+        }
+        return this.$http.post(
+            url,
+            patientData,
+             new HttpHeaders({ 'Content-Type': 'application/dicom+json' })
+        );
+    }
+    modifyPatient(patient, iod, oldPatientID, aet,internalAppName, externalAppName,  modifyMode, externalInternalAetMode, queue?){
         let url;
         if(externalInternalAetMode === 'external'){
             if(!internalAppName || !externalAppName){
@@ -673,31 +740,47 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
         }else{
             url = `../aets/${aet}/rs/patients/`;
         }
-        let headers = new Headers({ 'Content-Type': 'application/dicom+json' });
+        let headers = new HttpHeaders({ 'Content-Type': 'application/dicom+json' });
         this.clearPatientObject(patient.attrs);
         this.convertStringToNumber(patient.attrs);
-        //Check if the patient.attrs object have PatientID
-        if (_.hasIn(patient,'attrs[00100020].Value[0]') && patient.attrs['00100020'].Value[0] != ''){
+        let toSavePatientObject;
+        if(_.hasIn(patient,"attrs")){
+            toSavePatientObject = _.cloneDeep(patient.attrs);
+        }else{
+            toSavePatientObject = _.cloneDeep(patient);
+        }
+        //Check if the toSavePatientObject object have PatientID
+        if (_.hasIn(toSavePatientObject,'[00100020].Value[0]') && toSavePatientObject['00100020'].Value[0] != ''){
             //Delete attrs that don't have values
-            _.forEach(patient.attrs, function(m, i){
+            _.forEach(toSavePatientObject, function(m, i){
                 if (iod && iod[i] && iod[i].vr != 'SQ' && m.Value && m.Value.length === 1 && m.Value[0] === ''){
-                    delete patient.attrs[i];
+                    delete toSavePatientObject[i];
                 }
             });
-            if (modifyMode === 'create' && _.hasIn(patient, 'attrs.00100021') && patient.attrs['00100021'] != undefined) {
-                oldPatientID = this.getPatientId(patient.attrs);
+            if (modifyMode === 'create' && _.hasIn(toSavePatientObject, '00100021') && toSavePatientObject['00100021'] != undefined) {
+                oldPatientID = this.getPatientId(toSavePatientObject);
             }
             if(externalInternalAetMode === 'internal'){
-                url = url + oldPatientID;
+                /*if(modifyMode === 'edit'){
+                    url = url + (oldPatientID || patient.attrs['00100020'].Value[0]);
+                }else{
+                }*/
+                    url = url + encodeURIComponent((oldPatientID || patient.attrs['00100020'].Value[0]));
+                    // url = url + `P-00000001^^^tes%2Fbasd`;
+            }
+            if(queue){
+                url += `?queue=true`
             }
             if((externalInternalAetMode === 'external' && modifyMode === 'edit') || externalInternalAetMode === 'internal'){
                     return {
                         save:this.$http.put(
                                 url,
-                                patient.attrs,
-                                {headers: headers}
-                            ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
-                        ,
+                                toSavePatientObject,
+                                 headers,
+                            true
+                            )
+                            // .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res; }catch (e){ resjson = [];} return resjson;}),
+                            ,
                         successMsg:'Patient saved successfully!'
                     };
             }else{
@@ -705,9 +788,10 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                    return {
                        save:this.$http.post(
                            url,
-                           patient.attrs,
-                           {headers: headers}
-                       ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+                           toSavePatientObject,
+                           headers
+                       )
+                           // .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res; }catch (e){ resjson = [];} return resjson;})
                        ,
                        successMsg:'Patient created successfully!'
                    };
@@ -721,13 +805,17 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                }
             }
         }else{
+            if(queue){
+                url += `?queue=true`
+            }
             if (modifyMode === 'create'){
                 return {
                     save:this.$http.post(
                         url,
-                        patient.attrs,
-                        {headers: headers}
-                    ).map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res.json(); }catch (e){ resjson = [];} return resjson;})
+                        toSavePatientObject,
+                         headers
+                    )
+                        // .map(res => {let resjson; try{ let pattern = new RegExp("[^:]*:\/\/[^\/]*\/auth\/"); if(pattern.exec(res.url)){ WindowRefService.nativeWindow.location = "/dcm4chee-arc/ui2/";} resjson = res; }catch (e){ resjson = [];} return resjson;})
                     ,
                         successMsg:'Patient created successfully!'
                 };
@@ -740,6 +828,9 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
                 return null;
             }
         }
+    }
+    getWebApps(){
+        return this.$http.get('../webapps?dcmWebServiceClass=STOW_RS')
     }
     isTargetInClipboard(target, clipboard){
         let contains = false;
@@ -766,5 +857,43 @@ clipboard.hasPatient = haspatient || (_.size(clipboard.patient) > 0);
         }
         return url;
     }
+    getDiffAttributeSet(){
+        return this.$http.get('../attribute-set/DIFF_RS')
+    }
+    queryNationalPationtRegister(patientID){
+        // return Observable.of([{"00081190":{"vr":"UR","Value":["http://shefki-lifebook:8080/dcm4chee-arc/aets/DCM4CHEE/rs"]},"00100010":{"vr":"PN","Value":[{"Alphabetic":"test12SELAM"}]},"00100020":{"vr":"LO","Value":["pid1"]},"00100040":{"vr":"CS","Value":["F"]},"00201200":{"vr":"IS","Value":[0]},"77770010":{"vr":"LO","Value":["DCM4CHEE Archive 5"]},"77771010":{"vr":"DT","Value":["20180315123826.668"]},"77771011":{"vr":"DT","Value":["20180315125113.826"]}}]);
+        // return Observable.of([{"00080052":{"vr":"CS","Value":["PATIENT"]},"00100010":{"vr":"PN","Value":[{"Alphabetic":"PROBST^KATHY"}]},"00100020":{"vr":"LO","Value":["ALGO00001"]},"00100030":{"vr":"DA","Value":["19000101"]},"00100040":{"vr":"CS","Value":["F"]}}])
+        // return Observable.of([])
+       return this.$http.get(`../xroad/RR441/${patientID}`)
+    }
+    queryPatientDemographics(patientID:string, PDQServiceID:string,url?:string){
+       return this.$http.get(`${url || '..'}/pdq/${PDQServiceID}/patients/${patientID}`)
+    }
 
+    gitDiffTaskResults(params, mode){
+        if(mode === 'pk'){
+            let taskPK = params['pk'];
+            delete params['pk'];
+            return this.$http.get(`../monitor/diff/${taskPK}/studies${this._config(params)}`)
+        }else{
+            let batchID = params['batchID'];
+            delete params['batchID'];
+            return this.$http.get(`../monitor/diff/batch/${batchID}/studies${this._config(params)}`)
+        }
+    }
+
+    scheduleStorageVerification(param, aet){
+        return this.$http.post(`../aets/${aet}/stgver/studies?${this.mainservice.param(param)}`,{})
+    }
+
+    getStorageSystems(){
+        if(this.storageSystemList){
+            return Observable.of(this.storageSystemList);
+        }else{
+            return this.storageSystems.search({},0).map(res=>{
+                this.storageSystemList = res;
+                return res;
+            });
+        }
+    }
 }

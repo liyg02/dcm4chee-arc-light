@@ -3,6 +3,7 @@
   "description": "DICOM Archive Network AE related information",
   "type": "object",
   "required": [
+    "dcmQueryRetrieveViewID",
     "dcmObjectStorageCount"
   ],
   "properties": {
@@ -31,6 +32,12 @@
       },
       "format": "dcmStorageID"
     },
+    "dcmBulkDataDescriptorID": {
+      "title": "Bulk Data Descriptor ID",
+      "description": "ID of Bulk Data Descriptor applied by all services of this Archive Network AE providing Metadata of archived instances. Overwrites value specified on Device level.",
+      "type": "string",
+      "format": "dcmBulkDataDescriptorID"
+    },
     "dcmSeriesMetadataDelay": {
       "title": "Aggregate Series Metadata Delay",
       "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS for storing aggregated Series Metadata on storage of objects received by this AE. Overwrites value specified on Device level.",
@@ -39,7 +46,7 @@
     },
     "dcmPurgeInstanceRecordsDelay": {
       "title": "Purge Instance Records Delay",
-      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS for purging Instance Records from the DB received by this AE. Overwrites value specified on Device level.",
+      "description": "Delay in ISO-8601 duration format PnDTnHnMn.nS for purging Instance Records from the DB received by this AE. Overwrites value specified on Device level. Only effective, if Purge Instance Records on Device Level = true.",
       "type": "string",
       "format": "dcmDuration"
     },
@@ -96,7 +103,7 @@
     },
     "dcmQueryRetrieveViewID": {
       "title": "Query/Retrieve View ID",
-      "description": "Query/Retrieve View Identifier. Overwrites value specified on Device level.",
+      "description": "Query/Retrieve View Identifier.",
       "type": "string",
       "format": "dcmQueryRetrieveViewID"
     },
@@ -154,6 +161,22 @@
       "description": "Specifies URI for the style sheet used to render structured reports to plain text. Overwrites value specified on Device level.",
       "type": "string"
     },
+    "dcmWadoCDA2HtmlTemplateURI": {
+      "title": "Wado CDA to HTML Template URI",
+      "description": "URL to XSL style sheet inserted as <?xml-stylesheet type=\"text/xsl\" href=\"<url>\" > in CDA documents returned by WADO-URI service. If absent, the embedded CDI document is returned verbatim. Overwrites value specified on Device level.",
+      "type": "string"
+    },
+    "dcmWadoThumbnailViewport": {
+      "title": "Wado Thumbnail Viewport",
+      "description": "Dimension of Thumbnails returned by WADO retrieve of Instance Thumbnails, if no Viewport is specified in the request. Format: <width>,<height>. Overwrites value specified on Device level.",
+      "type": "string",
+      "format": "dcmWadoThumbnailViewport"
+    },
+    "dcmWadoZIPEntryNameFormat": {
+      "title": "Wado ZIP Entry Name Format",
+      "description": "Format of entry names in ZIP archive returned by WADO-RS. Overwrites value specified on Device level.",
+      "type": "string"
+    },
     "dcmQueryMaxNumberOfResults": {
       "title": "Query Max Number Of Results",
       "description": "Maximal number of return results by C-FIND SCP. If the number of matches extends the limit, the C-FIND request will be refused. 0 = no limitation. Overwrites value specified on Device level.",
@@ -205,9 +228,8 @@
     },
     "dcmSpanningCFindSCPPolicy": {
       "title": "Spanning C-Find SCP Policy",
-      "description": "Specifies policy for combining matches returned from configured Spanning C-Find SCP with matching entries from the archive DB. Overwrites value specified on Device level.",
+      "description": "Specifies policy for combining matches returned from configured Spanning C-Find SCP with matching entries from the archive DB. SUPPLEMENT (= returns local matches before additional matches from Spanning C-Find SCP ), MERGE (= returns matches from Spanning C-Find SCP before additional local matches), REPLACE (= returns only matches from Spanning C-Find SCP). Overwrites value specified on Device level.",
       "type": "string",
-      "default": "MERGE",
       "enum": [
         "SUPPLEMENT",
         "MERGE",
@@ -259,17 +281,17 @@
     },
     "dcmStorePermissionServiceURL": {
       "title": "Store Permission Service URL",
-      "description": "URL of Store Permission Service which will be invoked on receive of the first object of a study. {<dicomTag>} will be replaced by the value of the attribute in the object. E.g. http://host.name/storage-permission/study/{0020000D}?patientId={00100020}&patientIdIssuer={00100021}&studyDescription={00081030,urlencoded}. Overwrites value specified on Device level.",
+      "description": "URL of Store Permission Service which will be invoked on receive of the first object of a study. {<dicomTag>} will be replaced by the value of the attribute in the object. E.g. http(s)://<store-permission-service-provider-host>:<store-permission-service-provider-port>/storage-permission/study/{0020000D}?patientId={00100020}&patientIdIssuer={00100021}&studyDescription={00081030,urlencoded}. Overwrites value specified on Device level.",
+      "type": "string"
+    },
+    "dcmStorePermissionServiceResponse": {
+      "title": "Store Permission Service Response",
+      "description": "Emulate Store Permission Service Response on receive of the first object of a study. {<dicomTag>} will be replaced by the value of the attribute in the object. Only effective if no Store Permission Service Response is configured. Overwrites value specified on Device level.",
       "type": "string"
     },
     "dcmStorePermissionServiceResponsePattern": {
       "title": "Store Permission Service Response Pattern",
       "description": "Regular Expression applied to responses from Store Permission Service to determine agreement for storage. E.g. \"validation\"\\s*:\\s*\"true\". Overwrites value specified on Device level.",
-      "type": "string"
-    },
-    "dcmStorePermissionServiceExpirationDatePattern": {
-      "title": "Store Permission Service Expiration Date Pattern",
-      "description": "Regular Expression applied to responses from Store Permission Service to extract the initial Study Expiration Date. E.g. \"expirationdate\"\\s*:\\s*\"([0-9]{8})\". Overwrites value specified on Device level.",
       "type": "string"
     },
     "dcmStorePermissionServiceErrorCommentPattern": {
@@ -280,6 +302,11 @@
     "dcmStorePermissionServiceErrorCodePattern": {
       "title": "Store Permission Service Error Code Pattern",
       "description": "Regular Expression applied to responses from Store Permission Service to extract Error Code in hexadecimal. E.g. \"errorcode\"\\s*:\\s*\"(\\p{XDigit}{4})\". Overwrites value specified on Device level.",
+      "type": "string"
+    },
+    "dcmStorePermissionServiceExpirationDatePattern": {
+      "title": "Store Permission Service Expiration Date Pattern",
+      "description": "Regular Expression applied to responses from Store Permission Service to extract the initial Study Expiration Date. E.g. \"expirationdate\"\\s*:\\s*\"([0-9]{8})\". Overwrites value specified on Device level.",
       "type": "string"
     },
     "dcmAllowRejectionForDataRetentionPolicyExpired": {
@@ -310,15 +337,54 @@
         "REJECTED"
       ]
     },
+    "dcmAllowDeletePatient": {
+      "title": "Allow Delete Patient",
+      "description": "Allow permanent deletion of Patients. Enumerated values: NEVER, ALWAYS, WITHOUT_STUDIES. Overwrites value specified on Device level.",
+      "type": "string",
+      "enum": [
+        "NEVER",
+        "ALWAYS",
+        "WITHOUT_STUDIES"
+      ]
+    },
     "dcmDefaultCharacterSet": {
       "title": "Default Character Set",
-      "description": "Value of Specific Character Set (0008,0005) added to Data Sets without Specific Character Set (0008,0005) attribute received by this Network AE. Overwrites value specified on Device level.",
+      "description": "Value of Specific Character Set (0008,0005) added to Data Sets of C-STORE RQs and pending C-FIND RSPs without Specific Character Set (0008,0005) attribute received by this Network AE. Overwrites value specified on Device level.",
       "type": "string",
       "format": "dcmCharset"
+    },
+    "dcmUPSWorklistLabel": {
+      "title": "UPS Worklist Label",
+      "description": "Value of Worklist Label (0074,1202) of created UPS by this Network AE, if the UPS Push SCU or UPS-RS User Agent does not provide a value for this attribute. If absent, the AE Title of the receiving AE will be used. Overwrites value specified on Device level.",
+      "type": "string"
+    },
+    "dcmUPSEventSCU": {
+      "title": "UPS Event SCU",
+      "description": "AE Title of UPS Event SOP Class SCU, to which UPS Event Reports are sent for subscriptions created on this Network AE  - independently if the subscription was created by the N-ACTION DIMSE service, or by a corresponding UPS RESTful service. Overwrites value specified on Device level.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "format": "dcmAETitle"
+    },
+    "dcmUPSEventSCUKeepAlive": {
+      "title": "UPS Event SCU Keep Alive",
+      "description": "Timeout in ms to keep associations to UPS Event SCUs alive. If absent, associations will not be reused for sending multiple UPS Event Reports to one UPS Event SCU. Overwrites value specified on Device level.",
+      "type": "integer",
+      "minimum": 100
     },
     "dcmRetrieveAET": {
       "title": "Retrieve AE Title",
       "description": "Specifies Retrieve AE Titles associated with DICOM objects received by this Network AE. Overwrites value specified on Device level.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "format": "dcmArchiveAETitle"
+    },
+    "dcmReturnRetrieveAET": {
+      "title": "Return Retrieve AE Title",
+      "description": "Retrieve AE Title returned in C-FIND and QIDO responses. If absent, the Retrieve AET associated with the archived entity will be returned. Overwrites value specified on Device level.",
       "type": "array",
       "items": {
         "type": "string"
@@ -333,12 +399,12 @@
     },
     "dcmInvokeImageDisplayPatientURL": {
       "title": "Invoke Image Display Patient URL",
-      "description": "URL to launch external Image Display for a Patient. {} will be replaced by the Patient ID formatted as HL7 CX data type. E.g.: http://display:8080/IHEInvokeImageDisplay?requestType=PATIENT&patientID={}. Overwrites value specified on Device level.",
+      "description": "URL to launch external Image Display for a Patient. {} will be replaced by the Patient ID formatted as HL7 CX data type. E.g.: http(s)://<viewer-host>:<viewer-port>/IHEInvokeImageDisplay?requestType=PATIENT&patientID={}. Overwrites value specified on Device level.",
       "type": "string"
     },
     "dcmInvokeImageDisplayStudyURL": {
       "title": "Invoke Image Display Study URL",
-      "description": "URL to launch external Image Display for a Study. {} will be replaced by the Study Instance UID. E.g.: http://display:8080/IHEInvokeImageDisplay?requestType=STUDY&studyUID={}. Overwrites value specified on Device level.",
+      "description": "URL to launch external Image Display for a Study. {} will be replaced by the Study Instance UID. E.g.: http(s)://<viewer-host>:<viewer-port>/IHEInvokeImageDisplay?requestType=STUDY&studyUID={}. Overwrites value specified on Device level.",
       "type": "string"
     },
     "dcmCopyMoveUpdatePolicy": {
@@ -362,6 +428,47 @@
         "OVERWRITE",
         "REPLACE"
       ]
+    },
+    "dcmStorageVerificationPolicy": {
+      "title": "Storage Verification Policy",
+      "description": "DB_RECORD_EXISTS: only check for existence of DB records, OBJECT_EXISTS: check if object exists on Storage System, OBJECT_SIZE: check size of object on Storage System, OBJECT_FETCH: fetch object from Storage System), OBJECT_CHECKSUM: recalculate checksum of object on Storage System, S3_MD5SUM: check MD5 checksum of object on S3 Storage System. Overwrites value specified on Device level.",
+      "type": "string",
+      "enum": [
+        "DB_RECORD_EXISTS",
+        "OBJECT_EXISTS",
+        "OBJECT_SIZE",
+        "OBJECT_FETCH",
+        "OBJECT_CHECKSUM",
+        "S3_MD5SUM"
+      ]
+    },
+    "dcmStorageVerificationUpdateLocationStatus": {
+      "title": "Storage Verification Update Location Status",
+      "description": "Indicates if the Status of the Location DB record shall be updated on Storage Verification accordingly. Not effective with Storage Verification Policy: DB_RECORD_EXISTS. Overwrites value specified on Device level.",
+      "type": "boolean"
+    },
+    "dcmStorageVerificationStorageID": {
+      "title": "Storage Verification Storage IDs",
+      "description": "Only accept Storage Verification if the validation of the storage of the object on one of the specified Storage Systems is successful. Not effective with Storage Verification Policy: DB_RECORD_EXISTS. Overwrites values specified on Device level.",
+      "type": "array",
+      "items" : { "type": "string" },
+      "format": "dcmStorageID"
+    },
+    "dcmStorageVerificationInitialDelay": {
+      "title": "Storage Verification Initial Delay",
+      "description": "Delay in ISO-8601 duration format PnYnMnD or PnW of first Storage Verification of a Series after it was received. Overwrites values specified on Device level.",
+      "type": "string",
+      "format": "dcmPeriod"
+    },
+    "dcmUpdateLocationStatusOnRetrieve": {
+      "title": "Update Location Status on Retrieve",
+      "description": "Indicates if the Status of the Location DB record shall be updated for objects failed to get fetched from storage on retrieve to MISSING_OBJECT or FAILED_TO_FETCH_OBJECT. Overwrites value specified on Device level.",
+      "type": "boolean"
+    },
+    "dcmStorageVerificationOnRetrieve": {
+      "title": "Storage Verification on Retrieve",
+      "description": "Indicates if failures to fetch an object from Storage on retrieve shall trigger a Storage Verification of the whole Series. Overwrites value specified on Device level.",
+      "type": "boolean"
     },
     "hl7PSUSendingApplication": {
       "title": "HL7 Procedure Status Update Sending Application",
@@ -398,13 +505,65 @@
       "description": "Specifies if the HL7 Procedure Status Update is sent if the timeout for waiting on receive of instances referenced is exceeded. Overwrites value specified on Device level.",
       "type": "boolean"
     },
+    "dcmRelationalQueryNegotiationLenient": {
+      "title": "Relational Query Negotiation Lenient",
+      "description": "Indicates to accept C-FIND RQs without unique keys for levels above the query level also if support for relational-queries was not negotiated. Overwrites value specified on Device level.",
+      "type": "boolean"
+    },
+    "dcmRelationalRetrieveNegotiationLenient": {
+      "title": "Relational Retrieve Negotiation Lenient",
+      "description": "Indicates to accept C-MOVE and C-GET RQs without unique keys for levels above the query level also if support for relational-queries was not negotiated. Overwrites value specified on Device level. Overwrites value specified on Device level.",
+      "type": "boolean"
+    },
+    "dcmRestrictRetrieveAccordingTransferCapabilities": {
+      "title": "Restrict Retrieve According Transfer Capabilities",
+      "description": "Indicates if the set of requested objects to retrieve shall be restricted according the Transfer Capabilities of the Retrieve Destination. CONFIGURATION - consider configured Transfer Capabilities of the Destination AE, but treat a non accepted Presentation Context as failure. Overwrites value specified on Device level.",
+      "type": "string",
+      "enum": [
+        "NO",
+        "YES",
+        "CONFIGURATION"
+      ]
+    },
+    "dcmRejectConflictingPatientAttribute": {
+      "title": "Reject Conflicting Patient Attribute",
+      "description": "DICOM Tag of Patient Attribute which have to match in received objects with the value in previous received objects with equal Patient ID to be accepted. Overwrites value specified on Device level.",
+      "type": "array",
+      "items" : { "type": "string" },
+      "format": "dcmTag"
+    },
+    "dcmStowRetiredTransferSyntax": {
+      "title": "STOW Retired Transfer Syntax",
+      "description": "Store received JPEG Full Progression, Non-Hierarchical JPEG images in DICOM images with corresponding (retired) Transfer Syntax UID 1.2.840.10008.1.2.4.55. Otherwise set 1.2.840.10008.1.2.4.50 (= JPEG Baseline) or 1.2.840.10008.1.2.4.51 (= JPEG Extended) as Transfer Syntax UID of the stored DICOM image, without transcoding to JPEG Baseline or JPEG Extended, but including the JPEG image as received. Overwrites value specified on Device level.",
+      "type": "boolean"
+    },
+    "dcmStowExcludeAPPMarkers": {
+      "title": "STOW Exclude Application Markers",
+      "description": "Indicates if APP markers in JPEG images received in STOW-RS Metadata and Bulkdata requests shall be excluded from the JPEG bit streams encapsulated in created DICOM instances. Overwrites value specified on Device level.",
+      "type": "boolean"
+    },
+    "dcmFallbackCMoveSCPCallingAET": {
+      "title": "Fallback C-Move SCP Calling AE title",
+      "description": "Calling AE Title used in A-ASSOCIATE-RQ to configured Fallback C-MOVE SCP. If absent, the AE Title of the external C-MOVE SCU is used. Overwrites value specified on Device level.",
+      "type": "string",
+      "format": "dcmArchiveAETitle"
+    },
     "dcmExportRule": {
       "title": "Export Rule",
-      "description": "Export Rules. Supplements Export Rules specified on Device level.",
+      "description": "Export Rules applied to DICOM objects received by this AE. Supplements Export Rules specified on Device level.",
       "type": "array",
       "titleKey":"{cn}",
       "items" : {
         "$ref": "exportRule.schema.json"
+      }
+    },
+    "dcmExportPriorsRule": {
+      "title": "Export Priors Rule",
+      "description": "Export Priors Rules applied to DICOM objects received by this AE. Supplements Export Priors Rules specified on Device level.",
+      "type": "array",
+      "titleKey":"{cn}",
+      "items" : {
+        "$ref": "exportPriorsRule.schema.json"
       }
     },
     "dcmRSForwardRule": {

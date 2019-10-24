@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -45,7 +45,6 @@ import org.dcm4che3.data.AttributesCoercion;
 import org.dcm4che3.data.Code;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
-import org.dcm4che3.net.DimseRSP;
 import org.dcm4che3.net.QueryOption;
 import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.conf.QueryRetrieveView;
@@ -74,6 +73,8 @@ public interface QueryService {
     QueryContext newQueryContextQIDO(
             HttpServletRequest httpRequest, String searchMethod, ApplicationEntity ae, QueryParam queryParam);
 
+    QueryContext newQueryContext(ApplicationEntity ae, QueryParam queryParam);
+
     Query createQuery(QueryContext ctx);
 
     Query createPatientQuery(QueryContext ctx);
@@ -86,15 +87,19 @@ public interface QueryService {
 
     Query createMWLQuery(QueryContext ctx);
 
-    Attributes getSeriesAttributes(Long seriesPk, QueryParam queryParam);
+    Query createUPSQuery(QueryContext ctx);
+
+    Query createUPSWithoutQueryEvent(QueryContext ctx);
+
+    Attributes getSeriesAttributes(QueryContext context, Long seriesPk);
+
+    void addLocationAttributes(Attributes attrs, Long instancePk);
 
     long calculateStudySize(Long studyPk);
 
-    long calculateSeriesSize(Long seriesPk);
+    StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryRetrieveView qrView);
 
-    StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryParam queryParam);
-
-    SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryParam queryParam);
+    SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryRetrieveView qrView);
 
     SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryRetrieveView qrView);
 
@@ -103,6 +108,8 @@ public interface QueryService {
 
     Attributes createIAN(ApplicationEntity ae, String studyUID, String seriesUID,
                          String[] retrieveAETs, String retrieveLocationUID, Availability availability);
+
+    Attributes createIAN(ApplicationEntity ae, String studyUID, String seriesUID, String sopUID);
 
     Attributes createXDSiManifest(ApplicationEntity ae, String studyUID,
                                   String[] retrieveAETs, String retrieveLocationUID,
@@ -118,6 +125,8 @@ public interface QueryService {
     Attributes queryExportTaskInfo(
             String studyUID, String seriesUID, String sopIUID, ApplicationEntity ae);
 
+    Attributes getStudyAttributes(String studyUID);
+
     List<Object[]> getSeriesInstanceUIDs(String studyUID);
 
     List<Object[]> getSOPInstanceUIDs(String studyUID);
@@ -129,4 +138,6 @@ public interface QueryService {
     AttributesCoercion getAttributesCoercion(QueryContext ctx);
 
     CFindSCU cfindSCU();
+
+    List<String> getDistinctModalities();
 }

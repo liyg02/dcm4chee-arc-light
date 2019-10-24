@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,20 +40,31 @@
 
 package org.dcm4chee.arc.conf;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.Arrays;
 import java.util.EnumSet;
+import java.util.regex.Pattern;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <gunterze@gmail.com>
  * @since Nov 2016
  */
 public class RSForwardRule {
 
     private String commonName;
 
-    private String baseURI;
+    private String webAppName;
 
     private EnumSet<RSOperation> rsOperations = EnumSet.noneOf(RSOperation.class);
+
+    private boolean ifNotRequestURLPattern;
+
+    private Pattern requestURLPattern;
+
+    private boolean tlsAllowAnyHostname;
+
+    private boolean tlsDisableTrustManager;
 
     public RSForwardRule() {
     }
@@ -70,12 +81,12 @@ public class RSForwardRule {
         this.commonName = commonName;
     }
 
-    public String getBaseURI() {
-        return baseURI;
+    public String getWebAppName() {
+        return webAppName;
     }
 
-    public void setBaseURI(String baseURI) {
-        this.baseURI = baseURI;
+    public void setWebAppName(String webAppName) {
+        this.webAppName = webAppName;
     }
 
     public RSOperation[] getRSOperations() {
@@ -87,15 +98,58 @@ public class RSForwardRule {
         this.rsOperations.addAll(Arrays.asList(rsOperations));
     }
 
-    public boolean match(RSOperation rsOperation) {
-        return rsOperations.contains(rsOperation);
+    public boolean isTlsAllowAnyHostname() {
+        return tlsAllowAnyHostname;
+    }
+
+    public void setTlsAllowAnyHostname(boolean tlsAllowAnyHostname) {
+        this.tlsAllowAnyHostname = tlsAllowAnyHostname;
+    }
+
+    public boolean isTlsDisableTrustManager() {
+        return tlsDisableTrustManager;
+    }
+
+    public void setTlsDisableTrustManager(boolean tlsDisableTrustManager) {
+        this.tlsDisableTrustManager = tlsDisableTrustManager;
+    }
+
+    public String getRequestURLPattern() {
+        if (requestURLPattern == null)
+            return null;
+
+        String s = requestURLPattern.pattern();
+        return ifNotRequestURLPattern ? '!' + s : s;
+    }
+
+    public void setRequestURLPattern(String requestURLPattern) {
+        if (requestURLPattern == null || requestURLPattern.isEmpty()) {
+            this.requestURLPattern = null;
+            this.ifNotRequestURLPattern = false;
+        } else if (requestURLPattern.charAt(0) == '!') {
+            this.requestURLPattern = Pattern.compile(requestURLPattern.substring(1));
+            this.ifNotRequestURLPattern = true;
+        } else {
+            this.requestURLPattern = Pattern.compile(requestURLPattern);
+            this.ifNotRequestURLPattern = false;
+        }
+    }
+
+    public boolean match(RSOperation rsOperation, HttpServletRequest request) {
+        if (!rsOperations.contains(rsOperation))
+            return false;
+
+        if (requestURLPattern == null)
+            return true;
+
+        return ifNotRequestURLPattern != requestURLPattern.matcher(request.getRequestURL().toString()).matches();
     }
 
     @Override
     public String toString() {
         return "RSForwardRule{" +
                 "cn='" + commonName + '\'' +
-                ", baseURI='" + baseURI + '\'' +
+                ", webAppName='" + webAppName + '\'' +
                 ", ops=" + rsOperations +
                 '}';
     }

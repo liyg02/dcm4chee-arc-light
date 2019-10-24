@@ -43,6 +43,7 @@ package org.dcm4chee.arc.entity;
 import org.dcm4che3.util.TagUtils;
 
 import javax.persistence.*;
+import java.util.Date;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -54,19 +55,45 @@ import javax.persistence.*;
 
 @NamedQueries({
         @NamedQuery(name = Metadata.FIND_BY_STORAGE_ID_AND_STATUS,
-                query = "select m from Metadata m where m.storageID=?1 and m.status=?2")
+                query = "select m from Metadata m where m.storageID=?1 and m.status=?2"),
+        @NamedQuery(name=Metadata.FIND_BY_SERIES_IUID_AND_STORAGE_ID,
+                query="select se.metadata from Series se " +
+                        "where se.seriesInstanceUID = ?1 and se.metadata.storageID = ?2"),
+        @NamedQuery(name = Metadata.UPDATE_STATUS_FROM,
+                query = "update Metadata m set m.status = ?3 where m.pk = ?1 and m.status = ?2"),
+        @NamedQuery(name = Metadata.DELETE_BY_PK,
+                query = "delete from Metadata m where m.pk = ?1")
 })
 
 public class Metadata {
 
     public static final String FIND_BY_STORAGE_ID_AND_STATUS = "Metadata.FindByStorageIDAndStatus";
+    public static final String FIND_BY_SERIES_IUID_AND_STORAGE_ID = "Metadata.FindBySeriesIUIDAndStorageID";
+    public static final String UPDATE_STATUS_FROM = "Metadata.UpdateStatusFrom";
+    public static final String DELETE_BY_PK = "Metadata.DeleteByPk";
 
-    public enum Status { OK, TO_DELETE, FAILED_TO_DELETE }
+    public enum Status {
+        OK,                         // 0
+        TO_DELETE,                  // 1
+        FAILED_TO_DELETE,           // 2
+        MISSING_OBJECT,             // 3
+        FAILED_TO_FETCH_METADATA,   // 4
+        FAILED_TO_FETCH_OBJECT,     // 5
+        DIFFERING_OBJECT_SIZE,      // 6
+        DIFFERING_OBJECT_CHECKSUM,  // 7
+        DIFFERING_S3_MD5SUM,        // 8
+        FAILED_TO_DELETE2           // 9
+    }
 
     @Id
     @GeneratedValue(strategy= GenerationType.IDENTITY)
     @Column(name = "pk")
     private long pk;
+
+    @Basic(optional = false)
+    @Temporal(TemporalType.TIMESTAMP)
+    @Column(name = "created_time", updatable = false)
+    private Date createdTime;
 
     @Basic(optional = false)
     @Column(name = "storage_id", updatable = false)
@@ -141,5 +168,10 @@ public class Metadata {
                 + ", size=" + size
                 + ", status=" + status
                 + "]";
+    }
+
+    @PrePersist
+    public void onPrePersist() {
+        createdTime = new Date();
     }
 }

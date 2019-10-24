@@ -53,7 +53,8 @@
             <module name="org.dcm4che.conf.ldap-imageio" export="TRUE"/>
             <module name="org.dcm4che.core" export="TRUE"/>
             <module name="org.dcm4che.dcmr" export="TRUE"/>
-            <module name="org.dcm4che.dict-arc" export="TRUE"/>
+            <module name="org.dcm4che.deident" export="TRUE"/>
+            <module name="org.dcm4che.dict-priv" export="TRUE" services="export"/>
             <module name="org.dcm4che.json" export="TRUE"/>
             <module name="org.dcm4che.mime" export="TRUE"/>
             <module name="org.dcm4che.ws-rs" export="TRUE"/>
@@ -64,15 +65,27 @@
             <module name="org.dcm4che.imageio" export="TRUE" services="export"/>
             <module name="org.dcm4che.image" export="TRUE"/>
             <module name="org.dcm4che.soundex" export="TRUE"/>
+            <module name="org.dcm4che.xdsi" export="TRUE"/>
             <!-- apache-cxf modules -->
             <module name="org.apache.cxf.impl" export="TRUE"/>
-            <!-- querydsl modules -->
-            <module name="com.querydsl" export="TRUE"/>
             <!-- jclouds modules -->
             <module name="org.apache.jclouds.core" export="TRUE"/>
             <module name="org.apache.jclouds.blobstore" export="TRUE" services="export"/>
             <!-- emc-ecs modules -->
             <module name="com.emc.ecs" export="TRUE"/>
         </dependencies>
+        <exclusions>
+            <module name="org.jboss.resteasy.resteasy-json-binding-provider"/>
+        </exclusions>
     </deployment>
+    <sub-deployment name="dcm4chee-arc-war-${project.version}-${dcm4chee-arc-war-classifier}.war">
+        <exclusions>
+            <module name="org.jboss.resteasy.resteasy-json-binding-provider"/>
+        </exclusions>
+    </sub-deployment>
+    <sub-deployment name="dcm4chee-arc-rs-client-${project.version}.jar">
+        <exclusions>
+            <module name="org.jboss.resteasy.resteasy-json-binding-provider"/>
+        </exclusions>
+    </sub-deployment>
 </jboss-deployment-structure>

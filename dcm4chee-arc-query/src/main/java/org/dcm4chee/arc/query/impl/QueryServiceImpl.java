@@ -40,9 +40,8 @@
 
 package org.dcm4chee.arc.query.impl;
 
-import com.querydsl.core.BooleanBuilder;
-import org.dcm4che3.conf.api.IApplicationEntityCache;
 import org.dcm4che3.data.*;
+import org.dcm4che3.io.SAXTransformer;
 import org.dcm4che3.io.TemplatesCache;
 import org.dcm4che3.io.XSLTAttributesCoercion;
 import org.dcm4che3.net.*;
@@ -51,19 +50,19 @@ import org.dcm4che3.util.UIDUtils;
 import org.dcm4chee.arc.LeadingCFindSCPQueryCache;
 import org.dcm4chee.arc.code.CodeCache;
 import org.dcm4chee.arc.conf.*;
-import org.dcm4chee.arc.entity.*;
+import org.dcm4chee.arc.entity.Instance;
+import org.dcm4chee.arc.entity.Series;
+import org.dcm4chee.arc.entity.SeriesQueryAttributes;
+import org.dcm4chee.arc.entity.StudyQueryAttributes;
 import org.dcm4chee.arc.query.Query;
 import org.dcm4chee.arc.query.QueryContext;
 import org.dcm4chee.arc.query.QueryService;
 import org.dcm4chee.arc.query.scu.CFindSCU;
 import org.dcm4chee.arc.query.scu.CFindSCUAttributeCoercion;
-import org.dcm4chee.arc.query.util.QueryBuilder;
 import org.dcm4chee.arc.query.util.QueryParam;
 import org.dcm4chee.arc.storage.ReadContext;
 import org.dcm4chee.arc.storage.Storage;
 import org.dcm4chee.arc.storage.StorageFactory;
-import org.hibernate.Session;
-import org.hibernate.StatelessSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,7 +75,10 @@ import javax.servlet.http.HttpServletRequest;
 import javax.xml.transform.Templates;
 import javax.xml.transform.TransformerConfigurationException;
 import java.io.IOException;
-import java.util.*;
+import java.util.Collection;
+import java.util.Date;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.zip.ZipInputStream;
 
 /**
@@ -105,9 +107,6 @@ class QueryServiceImpl implements QueryService {
     private CFindSCU cfindscu;
 
     @Inject
-    private IApplicationEntityCache aeCache;
-
-    @Inject
     private LeadingCFindSCPQueryCache leadingCFindSCPQueryCache;
 
     @Inject
@@ -119,32 +118,24 @@ class QueryServiceImpl implements QueryService {
     @Inject
     private Event<QueryContext> queryEvent;
 
-    StatelessSession openStatelessSession() {
-        return em.unwrap(Session.class).getSessionFactory().openStatelessSession();
-    }
-
     @Override
     public QueryContext newQueryContextFIND(Association as, String sopClassUID, EnumSet<QueryOption> queryOpts) {
         ApplicationEntity ae = as.getApplicationEntity();
         QueryParam queryParam = new QueryParam(ae);
         queryParam.setCombinedDatetimeMatching(queryOpts.contains(QueryOption.DATETIME));
         queryParam.setFuzzySemanticMatching(queryOpts.contains(QueryOption.FUZZY));
-        return new QueryContextImpl(as, sopClassUID, ae, initCodeEntities(queryParam), this);
+        return new QueryContextImpl(ae, queryParam, this).find(as, sopClassUID);
     }
 
     @Override
     public QueryContext newQueryContextQIDO(
             HttpServletRequest httpRequest, String searchMethod, ApplicationEntity ae, QueryParam queryParam) {
-        return new QueryContextImpl(httpRequest, searchMethod, ae, initCodeEntities(queryParam), this);
+        return new QueryContextImpl(ae, queryParam, this).qido(httpRequest, searchMethod);
     }
 
-    private QueryParam initCodeEntities(QueryParam param) {
-        QueryRetrieveView qrView = param.getQueryRetrieveView();
-        param.setHideRejectionNotesWithCode(
-                codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes()));
-        param.setShowInstancesRejectedByCode(
-                codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()));
-        return param;
+    @Override
+    public QueryContext newQueryContext(ApplicationEntity ae, QueryParam queryParam) {
+        return new QueryContextImpl(ae, queryParam, this);
     }
 
     @Override
@@ -164,33 +155,49 @@ class QueryServiceImpl implements QueryService {
 
     @Override
     public Query createPatientQuery(QueryContext ctx) {
-        return new PatientQuery(ctx, openStatelessSession());
+        return new PatientQuery(ctx, em);
     }
 
     @Override
     public Query createStudyQuery(QueryContext ctx) {
-        return new StudyQuery(ctx, openStatelessSession());
+        return new StudyQuery(ctx, em);
     }
 
     @Override
     public Query createSeriesQuery(QueryContext ctx) {
-        return new SeriesQuery(ctx, openStatelessSession());
+        return new SeriesQuery(ctx, em);
     }
 
     @Override
     public Query createInstanceQuery(QueryContext ctx) {
-        return new InstanceQuery(ctx, openStatelessSession());
+        return new InstanceQuery(ctx, em, codeCache);
     }
 
     @Override
     public Query createMWLQuery(QueryContext ctx) {
         queryEvent.fire(ctx);
-        return new MWLQuery(ctx, openStatelessSession());
+        return new MWLQuery(ctx, em);
     }
 
     @Override
-    public Attributes getSeriesAttributes(Long seriesPk, QueryParam queryParam) {
-        return ejb.getSeriesAttributes(seriesPk, queryParam);
+    public Query createUPSQuery(QueryContext ctx) {
+        queryEvent.fire(ctx);
+        return createUPSWithoutQueryEvent(ctx);
+    }
+
+    @Override
+    public Query createUPSWithoutQueryEvent(QueryContext ctx) {
+        return new UPSQuery(ctx, em);
+    }
+
+    @Override
+    public Attributes getSeriesAttributes(QueryContext context, Long seriesPk) {
+        return ejb.getSeriesAttributes(seriesPk, context);
+    }
+
+    @Override
+    public void addLocationAttributes(Attributes attrs, Long instancePk) {
+        ejb.addLocationAttributes(attrs, instancePk);
     }
 
     @Override
@@ -199,45 +206,44 @@ class QueryServiceImpl implements QueryService {
     }
 
     @Override
-    public long calculateSeriesSize(Long seriesPk) {
-        return querySizeEJB.calculateSeriesSize(seriesPk);
+    public StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryRetrieveView qrView) {
+        return queryAttributesEJB.calculateStudyQueryAttributes(studyPk, qrView);
     }
 
     @Override
-    public StudyQueryAttributes calculateStudyQueryAttributes(Long studyPk, QueryParam queryParam) {
-        return queryAttributesEJB.calculateStudyQueryAttributes(studyPk, queryParam);
-    }
-
-    @Override
-    public SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryParam queryParam) {
-        return ejb.calculateSeriesQueryAttributesIfNotExists(seriesPk, queryParam);
+    public SeriesQueryAttributes calculateSeriesQueryAttributesIfNotExists(Long seriesPk, QueryRetrieveView qrView) {
+        return ejb.calculateSeriesQueryAttributesIfNotExists(seriesPk, qrView);
     }
 
     @Override
     public SeriesQueryAttributes calculateSeriesQueryAttributes(Long seriesPk, QueryRetrieveView qrView) {
-        return queryAttributesEJB.calculateSeriesQueryAttributes(seriesPk, qrView,
-                codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes()),
-                codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()));
+        return queryAttributesEJB.calculateSeriesQueryAttributes(seriesPk, qrView);
     }
 
     @Override
     public Attributes getStudyAttributesWithSOPInstanceRefs(
             String studyUID, ApplicationEntity ae, Collection<Attributes> seriesAttrs) {
-        SOPInstanceRefsPredicateBuilder builder = new SOPInstanceRefsPredicateBuilder(studyUID);
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
         return ejb.getStudyAttributesWithSOPInstanceRefs(
-                QueryServiceEJB.SOPInstanceRefsType.KOS_XDSI, studyUID, builder.build(ae), seriesAttrs,
+                QueryServiceEJB.SOPInstanceRefsType.KOS_XDSI, studyUID, null, null, qrView, seriesAttrs,
                 null, null);
     }
 
     @Override
     public Attributes createIAN(ApplicationEntity ae, String studyUID, String seriesUID,
                                 String[] retrieveAETs, String retrieveLocationUID, Availability availability) {
-        SOPInstanceRefsPredicateBuilder builder = new SOPInstanceRefsPredicateBuilder(studyUID);
-        if (seriesUID != null)
-            builder.setSeriesInstanceUID(seriesUID);
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
         return ejb.getSOPInstanceRefs(
-                QueryServiceEJB.SOPInstanceRefsType.IAN, studyUID, builder.build(ae), null,
+                QueryServiceEJB.SOPInstanceRefsType.IAN, studyUID, seriesUID, null, qrView, null,
                 retrieveAETs, retrieveLocationUID, availability);
+    }
+
+    @Override
+    public Attributes createIAN(ApplicationEntity ae, String studyUID, String seriesUID, String sopUID) {
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
+        return ejb.getSOPInstanceRefs(
+                QueryServiceEJB.SOPInstanceRefsType.IAN, studyUID, seriesUID, sopUID, qrView, null,
+                null, null, null);
     }
 
     @Override
@@ -245,9 +251,9 @@ class QueryServiceImpl implements QueryService {
                                          String[] retrieveAETs, String retrieveLocationUID,
                                          Code conceptNameCode, int seriesNumber, int instanceNumber,
                                          Collection<Attributes> seriesAttrs) {
-        SOPInstanceRefsPredicateBuilder builder = new SOPInstanceRefsPredicateBuilder(studyUID);
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
         Attributes attrs = ejb.getStudyAttributesWithSOPInstanceRefs(
-                QueryServiceEJB.SOPInstanceRefsType.KOS_XDSI, studyUID, builder.build(ae), seriesAttrs,
+                QueryServiceEJB.SOPInstanceRefsType.KOS_XDSI, studyUID, null, null, qrView, seriesAttrs,
                 retrieveAETs, retrieveLocationUID);
         if (attrs == null || !attrs.containsValue(Tag.CurrentRequestedProcedureEvidenceSequence))
             return null;
@@ -259,36 +265,28 @@ class QueryServiceImpl implements QueryService {
 
     @Override
     public Attributes createActionInfo(String studyIUID, String seriesIUID, String sopIUID, ApplicationEntity ae) {
-        SOPInstanceRefsPredicateBuilder builder = new SOPInstanceRefsPredicateBuilder(studyIUID);
-        if (seriesIUID != null && !seriesIUID.equals("*"))
-            builder.setSeriesInstanceUID(seriesIUID);
-        if (sopIUID != null && !sopIUID.equals("*"))
-            builder.setSOPInstanceUID(sopIUID);
-        return ejb.getSOPInstanceRefs(QueryServiceEJB.SOPInstanceRefsType.STGCMT, studyIUID, builder.build(ae),
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
+        return ejb.getSOPInstanceRefs(QueryServiceEJB.SOPInstanceRefsType.STGCMT, studyIUID, seriesIUID, sopIUID, qrView,
                 null, null, null, null);
     }
 
     @Override
     public Attributes queryExportTaskInfo(String studyIUID, String seriesIUID, String sopIUID, ApplicationEntity ae) {
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
         if (seriesIUID == null || seriesIUID.equals("*"))
-            return ejb.queryStudyExportTaskInfo(studyIUID, initCodeEntities(new QueryParam(ae)));
-        if (sopIUID == null || sopIUID.equals("*"))
-            return ejb.querySeriesExportTaskInfo(studyIUID, seriesIUID, initCodeEntities(new QueryParam(ae)));
-        return ejb.queryObjectExportTaskInfo(studyIUID, seriesIUID, sopIUID);
+            return ejb.queryStudyExportTaskInfo(studyIUID, qrView);
+        Attributes attrs = ejb.querySeriesExportTaskInfo(studyIUID, seriesIUID, qrView);
+        if (sopIUID != null && !sopIUID.equals("*"))
+            attrs.setInt(Tag.NumberOfStudyRelatedInstances, VR.IS, 1);
+        return attrs;
     }
 
     @Override
     public Attributes createRejectionNote(
             ApplicationEntity ae, String studyUID, String seriesUID, String objectUID, RejectionNote rjNote) {
-        SOPInstanceRefsPredicateBuilder builder = new SOPInstanceRefsPredicateBuilder(studyUID);
-        if (seriesUID != null) {
-            builder.setSeriesInstanceUID(seriesUID);
-            if (objectUID != null)
-                builder.setSOPInstanceUID(objectUID);
-        }
-
+        QueryRetrieveView qrView = ae.getAEExtensionNotNull(ArchiveAEExtension.class).getQueryRetrieveView();
         Attributes attrs = ejb.getStudyAttributesWithSOPInstanceRefs(
-                QueryServiceEJB.SOPInstanceRefsType.KOS_IOCM, studyUID, builder.build(ae),
+                QueryServiceEJB.SOPInstanceRefsType.KOS_IOCM, studyUID, seriesUID, objectUID, qrView,
                 null,null, null);
         if (attrs == null || !attrs.containsValue(Tag.CurrentRequestedProcedureEvidenceSequence))
             return null;
@@ -307,6 +305,11 @@ class QueryServiceImpl implements QueryService {
 
     private void mkKOS(Attributes attrs, RejectionNote rjNote) {
         mkKOS(attrs, rjNote.getRejectionNoteCode(), rjNote.getSeriesNumber(), rjNote.getInstanceNumber());
+    }
+
+    @Override
+    public Attributes getStudyAttributes(String studyUID) {
+        return ejb.getStudyAttributes(studyUID);
     }
 
     @Override
@@ -380,7 +383,11 @@ class QueryServiceImpl implements QueryService {
     }
 
     private String typeOf(String cuid) {
-        return "COMPOSITE";
+        String uidName = UID.nameOf(cuid);
+        int index = uidName.lastIndexOf(" Storage");
+        return uidName.startsWith("Image", index - 5) ? "IMAGE"
+            : uidName.startsWith("Waveform", index - 8) ? "WAVEFORM"
+            : "COMPOSITE";
     }
 
     private Attributes templateIdentifier() {
@@ -405,29 +412,6 @@ class QueryServiceImpl implements QueryService {
         return item;
     }
 
-    private class SOPInstanceRefsPredicateBuilder {
-        private final BooleanBuilder predicate;
-
-        private SOPInstanceRefsPredicateBuilder(String studyUID) {
-            predicate = new BooleanBuilder(QStudy.study.studyInstanceUID.eq(studyUID));
-        }
-
-        public void setSeriesInstanceUID(String seriesUID) {
-            predicate.and(QSeries.series.seriesInstanceUID.eq(seriesUID));
-        }
-
-        public void setSOPInstanceUID(String objectUID) {
-            predicate.and(QInstance.instance.sopInstanceUID.eq(objectUID));
-        }
-
-        public BooleanBuilder build(ApplicationEntity ae) {
-            QueryParam queryParam = initCodeEntities(new QueryParam(ae));
-            predicate.and(QueryBuilder.hideRejectedInstance(queryParam));
-            predicate.and(QueryBuilder.hideRejectionNote(queryParam));
-            return predicate;
-        }
-    }
-
     @Override
     public AttributesCoercion getAttributesCoercion(QueryContext ctx) {
         ArchiveAEExtension aeExt = ctx.getArchiveAEExtension();
@@ -442,7 +426,9 @@ class QueryServiceImpl implements QueryService {
         if (xsltStylesheetURI != null)
             try {
                 Templates tpls = TemplatesCache.getDefault().get(StringUtils.replaceSystemProperties(xsltStylesheetURI));
-                coercion = new XSLTAttributesCoercion(tpls, null).includeKeyword(!rule.isNoKeywords());
+                coercion = new XSLTAttributesCoercion(tpls, null)
+                        .includeKeyword(!rule.isNoKeywords())
+                        .setupTransformer(setupTransformer(ctx));
             } catch (TransformerConfigurationException e) {
                 LOG.error("{}: Failed to compile XSL: {}", ctx.getAssociation(), xsltStylesheetURI, e);
             }
@@ -451,11 +437,28 @@ class QueryServiceImpl implements QueryService {
             coercion = new CFindSCUAttributeCoercion(ctx.getLocalApplicationEntity(), leadingCFindSCP,
                     rule.getAttributeUpdatePolicy(), cfindscu, leadingCFindSCPQueryCache, coercion);
         }
+        LOG.info("Coerce Attributes from rule: {}", rule);
         return coercion;
+    }
+
+    private SAXTransformer.SetupTransformer setupTransformer(QueryContext ctx) {
+        return t -> {
+            t.setParameter("LocalAET", ctx.getCalledAET());
+            if (ctx.getCallingAET() != null)
+                t.setParameter("RemoteAET", ctx.getCallingAET());
+
+            t.setParameter("RemoteHost", ctx.getRemoteHostName());
+        };
     }
 
     @Override
     public CFindSCU cfindSCU() {
         return cfindscu;
+    }
+
+    @Override
+    public List<String> getDistinctModalities() {
+        return em.createNamedQuery(Series.FIND_DISTINCT_MODALITIES, String.class)
+                .getResultList();
     }
 }

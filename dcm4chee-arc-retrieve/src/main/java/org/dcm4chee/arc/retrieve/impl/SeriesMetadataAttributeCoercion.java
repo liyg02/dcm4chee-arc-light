@@ -44,10 +44,10 @@ import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.AttributesCoercion;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
-import org.dcm4che3.dict.archive.ArchiveTag;
+import org.dcm4che3.dict.archive.PrivateTag;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.entity.Location;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
+import org.dcm4chee.arc.store.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
 import org.dcm4chee.arc.retrieve.SeriesInfo;
 import org.dcm4chee.arc.retrieve.StudyInfo;
@@ -66,49 +66,63 @@ public class SeriesMetadataAttributeCoercion implements AttributesCoercion {
     }
 
     @Override
+    public String remapUID(String uid) {
+        return uid;
+    }
+
+    @Override
     public void coerce(Attributes attrs, Attributes modified) {
         attrs.setString(Tag.RetrieveAETitle, VR.AE, inst.getRetrieveAETs());
         attrs.setString(Tag.InstanceAvailability, VR.CS, inst.getAvailability().toString());
 
         StudyInfo studyInfo = ctx.getStudyInfos().get(0);
         if (studyInfo.getExpirationDate() != null)
-            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StudyExpirationDate, VR.DA,
+            attrs.setString(PrivateTag.PrivateCreator, PrivateTag.StudyExpirationDate, VR.DA,
                     studyInfo.getExpirationDate());
         if (!studyInfo.getAccessControlID().equals("*"))
-            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StudyAccessControlID, VR.LO,
+            attrs.setString(PrivateTag.PrivateCreator, PrivateTag.StudyAccessControlID, VR.LO,
                     studyInfo.getAccessControlID());
 
         SeriesInfo seriesInfo = ctx.getSeriesInfos().get(0);
         if (seriesInfo.getExpirationDate() != null)
-            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SeriesExpirationDate, VR.DA,
+            attrs.setString(PrivateTag.PrivateCreator, PrivateTag.SeriesExpirationDate, VR.DA,
                     seriesInfo.getExpirationDate());
-        attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.SendingApplicationEntityTitleOfSeries, VR.AE,
+        attrs.setString(PrivateTag.PrivateCreator, PrivateTag.SendingApplicationEntityTitleOfSeries, VR.AE,
                 seriesInfo.getSourceAET());
 
-        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.InstanceReceiveDateTime, VR.DT,
+        attrs.setDate(PrivateTag.PrivateCreator, PrivateTag.InstanceReceiveDateTime, VR.DT,
                 inst.getCreatedTime());
-        attrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.InstanceUpdateDateTime, VR.DT,
+        attrs.setDate(PrivateTag.PrivateCreator, PrivateTag.InstanceUpdateDateTime, VR.DT,
                 inst.getUpdatedTime());
         if (inst.getRejectionCode() != null)
-            attrs.newSequence(ArchiveTag.PrivateCreator, ArchiveTag.RejectionCodeSequence, 1).
+            attrs.newSequence(PrivateTag.PrivateCreator, PrivateTag.RejectionCodeSequence, 1).
                     add(inst.getRejectionCode());
         if (inst.getExternalRetrieveAET() != null) {
-            attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.InstanceExternalRetrieveAETitle, VR.AE,
+            attrs.setString(PrivateTag.PrivateCreator, PrivateTag.InstanceExternalRetrieveAETitle, VR.AE,
                     inst.getExternalRetrieveAET());
         }
+        Attributes item = null;
         for (Location location : inst.getLocations()) {
             if (location.getObjectType() == Location.ObjectType.DICOM_FILE) {
-                attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StorageID, VR.LO,
+                if (item == null)
+                    item = attrs;
+                else
+                    attrs.ensureSequence(PrivateTag.PrivateCreator, PrivateTag.OtherStorageSequence, 1)
+                            .add(item = new Attributes(5));
+                item.setString(PrivateTag.PrivateCreator, PrivateTag.StorageID, VR.LO,
                         location.getStorageID());
-                attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StoragePath, VR.LO,
+                item.setString(PrivateTag.PrivateCreator, PrivateTag.StoragePath, VR.LO,
                         StringUtils.split(location.getStoragePath(), '/'));
-                attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StorageTransferSyntaxUID, VR.UI,
+                item.setString(PrivateTag.PrivateCreator, PrivateTag.StorageTransferSyntaxUID, VR.UI,
                         location.getTransferSyntaxUID());
-                attrs.setInt(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectSize, VR.UL,
+                item.setInt(PrivateTag.PrivateCreator, PrivateTag.StorageObjectSize, VR.UL,
                         (int) location.getSize());
                 if (location.getDigestAsHexString() != null)
-                    attrs.setString(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectDigest, VR.LO,
+                    item.setString(PrivateTag.PrivateCreator, PrivateTag.StorageObjectDigest, VR.LO,
                             location.getDigestAsHexString());
+                if (location.getStatus() != Location.Status.OK)
+                    item.setString(PrivateTag.PrivateCreator, PrivateTag.StorageObjectStatus, VR.CS,
+                            location.getStatus().name());
             }
         }
     }

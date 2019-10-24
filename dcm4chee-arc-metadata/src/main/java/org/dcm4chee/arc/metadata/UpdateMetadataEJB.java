@@ -46,6 +46,8 @@ import org.dcm4chee.arc.entity.Series;
 import javax.ejb.Stateless;
 import javax.persistence.EntityManager;
 import javax.persistence.PersistenceContext;
+import javax.persistence.TemporalType;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -64,7 +66,21 @@ public class UpdateMetadataEJB {
                 .getResultList();
     }
 
-    public void updateDB(Long seriesPk, Metadata metadata) {
+    public boolean claim(Series.MetadataUpdate metadataUpdate) {
+        return em.createNamedQuery(Series.CLAIM_UPDATE_METADATA)
+                .setParameter(1, metadataUpdate.seriesPk)
+                .setParameter(2, metadataUpdate.scheduledUpdateTime)
+                .executeUpdate() > 0;
+    }
+
+    public void incrementMetadataUpdateFailures(Long seriesPk, Date time) {
+        em.createNamedQuery(Series.INCREMENT_METADATA_UPDATE_FAILURES)
+                .setParameter(1, seriesPk)
+                .setParameter(2, time, TemporalType.TIMESTAMP)
+                .executeUpdate();
+    }
+
+    public void commit(Long seriesPk, Metadata metadata) {
         Series series = em.find(Series.class, seriesPk);
         em.persist(metadata);
         Metadata prev = series.getMetadata();
@@ -72,5 +88,6 @@ public class UpdateMetadataEJB {
             prev.setStatus(Metadata.Status.TO_DELETE);
         series.setMetadata(metadata);
         series.setMetadataScheduledUpdateTime(null);
+        series.setMetadataUpdateFailures(0);
     }
 }

@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -55,12 +55,9 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+import java.util.*;
 
 /**
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
@@ -81,47 +78,65 @@ public class QueryAttributeSets {
     @NoCache
     @Path("/{type}")
     @Produces("application/json")
-    public StreamingOutput listAttributeSets(@PathParam("type") String type) {
-        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        final AttributeSet.Type attrSetType = attrSetTypeOf(type);
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    public Response listAttributeSets(@PathParam("type") String type) {
+        logRequest();
+        ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+        try {
+            final AttributeSet.Type attrSetType = AttributeSet.Type.valueOf(type);
+            return Response.ok((StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
-                ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
                 gen.writeStartArray();
-                for (AttributeSet attrSet : toInstalledSortedAttrSet(arcDev.getAttributeSet(attrSetType))) {
+                for (AttributeSet attrSet : sortedAttributeSets(arcDev.getAttributeSet(attrSetType))) {
                     JsonWriter writer = new JsonWriter(gen);
                     gen.writeStartObject();
                     writer.writeNotNullOrDef("type", attrSet.getType().name(), null);
                     writer.writeNotNullOrDef("id", attrSet.getID(), null);
                     writer.writeNotNullOrDef("description", attrSet.getDescription(), null);
                     writer.writeNotNullOrDef("title", attrSet.getTitle(), null);
-                    for (Map.Entry<String, String> property : attrSet.getProperties().entrySet()) {
-                        writer.writeNotNullOrDef(property.getKey(), property.getValue(), null);
-                    }
+                    attrSet.getProperties().forEach((key, value) -> writer.writeNotNullOrDef(key, value, null));
                     gen.writeEnd();
                 }
                 gen.writeEnd();
                 gen.flush();
-            }
-        };
-    }
-
-    private AttributeSet.Type attrSetTypeOf(String type) {
-        try {
-            return AttributeSet.Type.valueOf(type);
+            }).build();
         } catch (IllegalArgumentException e) {
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
+            return errResponse("Attribute Set of type : " + type + " not found.", Response.Status.NOT_FOUND);
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
         }
     }
 
-    private List<AttributeSet> toInstalledSortedAttrSet(Map<String, AttributeSet> attrSets) {
-        List<AttributeSet> list = new ArrayList<>(attrSets.size());
-        for (AttributeSet attrSet : attrSets.values())
-            if (attrSet.isInstalled())
-                list.add(attrSet);
-        Collections.sort(list);
-        return list;
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
+    private AttributeSet[] sortedAttributeSets(Map<String, AttributeSet> attrSets) {
+        return attrSets.values().stream()
+                            .filter(AttributeSet::isInstalled)
+                            .sorted(Comparator.comparing(AttributeSet::getID))
+                            .toArray(AttributeSet[]::new);
+    }
+
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

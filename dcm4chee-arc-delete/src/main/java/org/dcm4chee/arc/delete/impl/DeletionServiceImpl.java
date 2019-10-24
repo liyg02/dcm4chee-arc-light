@@ -42,14 +42,16 @@ package org.dcm4chee.arc.delete.impl;
 
 
 import org.dcm4che3.data.Code;
-import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.AllowDeleteStudyPermanently;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.delete.*;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.patient.PatientMgtContext;
 import org.dcm4chee.arc.patient.PatientService;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
+import org.dcm4chee.arc.store.StoreService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -59,8 +61,8 @@ import javax.inject.Inject;
 import javax.persistence.EntityManager;
 import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
+import java.io.IOException;
 import java.util.Date;
-import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -76,10 +78,16 @@ public class DeletionServiceImpl implements DeletionService {
     private EntityManager em;
 
     @Inject
+    private Device device;
+
+    @Inject
     private DeletionServiceEJB ejb;
 
     @Inject
     private PatientService patientService;
+
+    @Inject
+    private StoreService storeService;
 
     @Inject
     private Event<StudyDeleteContext> studyDeletedEvent;
@@ -90,21 +98,20 @@ public class DeletionServiceImpl implements DeletionService {
 
     @Override
     public int deleteRejectedInstancesBefore(Code rjCode, Date before, int fetchSize) {
-        return delete(before != null ? Location.FIND_BY_REJECTION_CODE_BEFORE : Location.FIND_BY_REJECTION_CODE,
-                rjCode, before, fetchSize);
+        return delete(ejb::deleteRejectedInstances, rjCode, before, fetchSize);
     }
 
     @Override
     public int deleteRejectionNotesBefore(Code rjCode, Date before, int fetchSize) {
-        return delete(before != null ? Location.FIND_BY_CONCEPT_NAME_CODE_BEFORE : Location.FIND_BY_CONCEPT_NAME_CODE,
-                rjCode, before, fetchSize);
+        return delete(ejb::deleteRejectionNotes, rjCode, before, fetchSize);
     }
 
-    private int delete(String queryName, Code rjCode, Date before, int fetchSize) {
+    private int delete(DeletionServiceEJB.DeleteRejectedInstancesOrRejectionNotes cmd,
+            Code rjCode, Date before, int fetchSize) {
         int total = 0;
         int deleted;
         do {
-            total += deleted = ejb.deleteRejectedInstancesOrRejectionNotesBefore(queryName, rjCode, before, fetchSize);
+            total += deleted = cmd.delete(rjCode, before, fetchSize);
         } while (deleted == fetchSize);
         return total;
     }
@@ -117,73 +124,89 @@ public class DeletionServiceImpl implements DeletionService {
     }
 
     @Override
-    public void deleteStudy(String studyUID, HttpServletRequestInfo httpServletRequestInfo, ApplicationEntity ae)
-            throws StudyNotFoundException, StudyNotEmptyException {
-        StudyDeleteContext ctx = null;
+    public void deleteStudy(String studyUID, HttpServletRequestInfo httpServletRequestInfo, ArchiveAEExtension arcAE)
+            throws Exception {
         try {
-            Study study = em.createNamedQuery(Study.FIND_BY_STUDY_IUID, Study.class)
-                    .setParameter(1, studyUID).getSingleResult();
-            ArchiveAEExtension arcAE = ae.getAEExtension(ArchiveAEExtension.class);
-            AllowDeleteStudyPermanently allowDeleteStudy = arcAE.allowDeleteStudy();
-            if (study != null) {
-                ctx = createStudyDeleteContext(study.getPk(), httpServletRequestInfo);
-                boolean studyDeleted = studyDeleted(ctx, study, allowDeleteStudy);
-                if (!studyDeleted)
-                    throw new StudyNotEmptyException("Study is not empty. - ");
-                studyDeletedEvent.fire(ctx);
-                LOG.info("Successfully delete {} from database", ctx.getStudy());
-            }
+            deleteStudy(em.createNamedQuery(Study.FIND_BY_STUDY_IUID, Study.class)
+                    .setParameter(1, studyUID).getSingleResult(),
+                httpServletRequestInfo,
+                arcAE,
+            null);
         } catch (NoResultException e) {
             throw new StudyNotFoundException(e.getMessage());
-        } catch (StudyNotEmptyException e) {
-            ctx.setException(e);
-            studyDeletedEvent.fire(ctx);
-            throw e;
+        }
+    }
+
+    private void deleteStudy(Study study, HttpServletRequestInfo httpServletRequestInfo, ArchiveAEExtension arcAE,
+                       PatientMgtContext pCtx) throws Exception {
+        StudyDeleteContext ctx = createStudyDeleteContext(study.getPk(), httpServletRequestInfo);
+        try {
+            studyDeleted(ctx, study, arcAE, pCtx);
+            LOG.info("Successfully delete {} from database", study);
         } catch (Exception e) {
-            LOG.warn("Failed to delete {} on {}", ctx.getStudy(), e);
+            LOG.warn("Failed to delete {} on {}", study, e);
             ctx.setException(e);
+            throw e;
+        } finally {
             studyDeletedEvent.fire(ctx);
         }
     }
 
     @Override
-    public void deletePatient(PatientMgtContext ctx) {
-        ejb.deleteMWLItemsOfPatient(ctx);
-        List<Study> sList = em.createNamedQuery(Study.FIND_BY_PATIENT, Study.class)
-                .setParameter(1, ctx.getPatient()).getResultList();
-        StudyDeleteContext sCtx;
-        if (!sList.isEmpty()) {
-            for (Study study : sList) {
-                try {
-                    sCtx = createStudyDeleteContext(study.getPk(), ctx.getHttpServletRequestInfo());
-                    studyDeleted(sCtx, study, AllowDeleteStudyPermanently.REJECTED);
-                    LOG.info("Successfully delete {} from database", study);
-                } catch (Exception e) {
-                    LOG.warn("Failed to delete {} on {}", study, e);
-                    ctx.setException(e);
-                    patientMgtEvent.fire(ctx);
-                }
-            }
-        }
+    public void deletePatient(PatientMgtContext ctx, ArchiveAEExtension arcAE) {
+        em.createNamedQuery(Study.FIND_BY_PATIENT, Study.class)
+                .setParameter(1, ctx.getPatient())
+                .getResultList()
+                .forEach(study -> {
+                    try {
+                        deleteStudy(study, ctx.getHttpServletRequestInfo(), arcAE, ctx);
+                    } catch (Exception e) {
+                        ctx.setException(e);
+                    }
+                });
         if (ctx.getException() == null) {
-            patientService.deletePatientFromUI(ctx);
+            patientService.deletePatient(ctx);
             LOG.info("Successfully delete {} from database", ctx.getPatient());
         }
+
+        patientMgtEvent.fire(ctx);
     }
 
-    private boolean studyDeleted(StudyDeleteContext ctx, Study study, AllowDeleteStudyPermanently allowDeleteStudy) {
+    private void studyDeleted(StudyDeleteContext ctx, Study study, ArchiveAEExtension arcAE, PatientMgtContext pCtx)
+            throws Exception {
+        AllowDeleteStudyPermanently allowDeleteStudy = AllowDeleteStudyPermanently.ALWAYS;
         ctx.setStudy(study);
         ctx.setPatient(study.getPatient());
-        ctx.setDeletePatientOnDeleteLastStudy(false);
-        if (study.getRejectionState() == RejectionState.COMPLETE || allowDeleteStudy == AllowDeleteStudyPermanently.ALWAYS) {
+        if (pCtx == null) {
+            ctx.setDeletePatientOnDeleteLastStudy(arcAE.getArchiveDeviceExtension().isDeletePatientOnDeleteLastStudy());
+            allowDeleteStudy = arcAE.allowDeleteStudy();
+        }
+        RejectionState rejectionState = study.getRejectionState();
+
+        if (rejectionState == RejectionState.NONE && allowDeleteStudy == AllowDeleteStudyPermanently.ALWAYS) {
+            ejb.findSeriesWithPurgedInstances(study.getPk())
+                    .forEach(series ->
+                        {
+                            try {
+                                storeService.restoreInstances(
+                                        storeService.newStoreSession(device.getApplicationEntities().iterator().next()),
+                                        study.getStudyInstanceUID(),
+                                        series.getSeriesInstanceUID(),
+                                        device.getDeviceExtension(ArchiveDeviceExtension.class).getPurgeInstanceRecordsDelay());
+                            } catch (IOException e) {
+                                LOG.info("Restore instances failed for series {} \n", series.getSeriesInstanceUID(), e);
+                            }
+                        });
             ejb.deleteStudy(ctx);
-            return true;
+            return;
         }
-        else if (study.getRejectionState() == RejectionState.EMPTY) {
+
+        if (rejectionState == RejectionState.COMPLETE
+                || allowDeleteStudy == AllowDeleteStudyPermanently.ALWAYS)
+            ejb.deleteStudy(ctx);
+        else if (rejectionState == RejectionState.EMPTY)
             ejb.deleteEmptyStudy(ctx);
-            return true;
-        }
         else
-            return false;
+            throw new StudyNotEmptyException("Study is not empty.");
     }
 }

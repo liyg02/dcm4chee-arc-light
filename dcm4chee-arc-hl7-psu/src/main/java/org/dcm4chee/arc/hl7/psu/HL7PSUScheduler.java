@@ -44,7 +44,6 @@ import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Sequence;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.net.ApplicationEntity;
-import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Duration;
@@ -72,9 +71,6 @@ public class HL7PSUScheduler extends Scheduler {
     private static final Logger LOG = LoggerFactory.getLogger(HL7PSUScheduler.class);
 
     @Inject
-    private Device device;
-
-    @Inject
     private HL7PSUEJB ejb;
 
     @Inject
@@ -92,18 +88,21 @@ public class HL7PSUScheduler extends Scheduler {
     @Override
     protected Duration getPollingInterval() {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        return arcDev.getHl7PSUTaskPollingInterval();
+        return arcDev.getHL7PSUTaskPollingInterval();
     }
 
     @Override
     protected void execute() {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        int fetchSize = arcDev.getHl7PSUTaskFetchSize();
+        int fetchSize = arcDev.getHL7PSUTaskFetchSize();
         long hl7psuTaskPk = 0;
         List<HL7PSUTask> hl7psuTasks;
         do {
             hl7psuTasks = ejb.fetchHL7PSUTasksForMPPS(device.getDeviceName(), hl7psuTaskPk, fetchSize);
-            for (HL7PSUTask hl7psuTask : hl7psuTasks)
+            for (HL7PSUTask hl7psuTask : hl7psuTasks) {
+                if (getPollingInterval() == null)
+                    return;
+
                 try {
                     hl7psuTaskPk = hl7psuTask.getPk();
                     ApplicationEntity ae = device.getApplicationEntity(hl7psuTask.getAETitle());
@@ -115,10 +114,14 @@ public class HL7PSUScheduler extends Scheduler {
                 } catch (Exception e) {
                     LOG.warn("Failed to process {}:\n", hl7psuTask, e);
                 }
+            }
         } while (hl7psuTasks.size() == fetchSize);
         do {
             hl7psuTasks = ejb.fetchHL7PSUTasksForStudy(device.getDeviceName(), fetchSize);
             for (HL7PSUTask hl7psuTask : hl7psuTasks) {
+                if (getPollingInterval() == null)
+                    return;
+
                 ApplicationEntity ae = device.getApplicationEntity(hl7psuTask.getAETitle());
                 ArchiveAEExtension arcAE = ae.getAEExtension(ArchiveAEExtension.class);
                 HL7PSU action = hl7PSUActionOnStudy(arcAE);

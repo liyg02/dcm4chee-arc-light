@@ -70,6 +70,19 @@ public class SupplementAssigningAuthorities implements AttributesCoercion {
         return device != null ? new SupplementAssigningAuthorities(Entity.MPPS, device, next) : next;
     }
 
+    public static AttributesCoercion forMWL(Device device, AttributesCoercion next) {
+        return device != null ? new SupplementAssigningAuthorities(Entity.MWL, device, next) : next;
+    }
+
+    public static AttributesCoercion forQuery(Device device, AttributesCoercion next) {
+        return device != null ? new SupplementAssigningAuthorities(Entity.Query, device, next) : next;
+    }
+
+    @Override
+    public String remapUID(String uid) {
+        return next != null ? next.remapUID(uid) : uid;
+    }
+
     @Override
     public void coerce(Attributes attrs, Attributes modified) {
         entity.supplement(this, attrs);
@@ -90,6 +103,16 @@ public class SupplementAssigningAuthorities implements AttributesCoercion {
             void supplement(SupplementAssigningAuthorities coercion, Attributes attrs) {
                 coercion.supplementMPPS(attrs);
             }
+        }, MWL {
+            @Override
+            void supplement(SupplementAssigningAuthorities coercion, Attributes attrs) {
+                coercion.supplementMWL(attrs);
+            }
+        }, Query {
+            @Override
+            void supplement(SupplementAssigningAuthorities coercion, Attributes attrs) {
+                coercion.supplementQuery(attrs);
+            }
         };
 
         abstract void supplement(SupplementAssigningAuthorities coercion, Attributes attrs);
@@ -107,11 +130,26 @@ public class SupplementAssigningAuthorities implements AttributesCoercion {
         supplementIssuers(attrs);
         supplementRequestIssuers(attrs);
         supplementRequestIssuers(attrs.getSequence(Tag.RequestAttributesSequence));
+        LOG.info("Supplement composite object from device: {}", device.getDeviceName());
     }
 
     private void supplementMPPS(Attributes attrs) {
         supplementIssuers(attrs);
         supplementRequestIssuers(attrs.getSequence(Tag.ScheduledStepAttributesSequence));
+        LOG.info("Supplement MPPS from device: {}", device.getDeviceName());
+    }
+
+    private void supplementMWL(Attributes attrs) {
+        supplementIssuers(attrs);
+        supplementRequestIssuers(attrs);
+        LOG.info("Supplement MWL from device: {}", device.getDeviceName());
+    }
+
+    private void supplementQuery(Attributes attrs) {
+        supplementIssuers(attrs);
+        supplementRequestIssuers(attrs);
+        supplementRequestIssuers(attrs.getSequence(Tag.RequestAttributesSequence));
+        LOG.info("Supplement composite query from device: {}", device.getDeviceName());
     }
 
     private void supplementValue(Attributes attrs, int tag, VR vr, String... values) {

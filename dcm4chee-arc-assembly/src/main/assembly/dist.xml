@@ -67,6 +67,7 @@
       <outputDirectory>.</outputDirectory>
       <includes>
         <include>configuration/dcm4chee-arc/key.jks</include>
+        <include>configuration/dcm4chee-arc/cacerts.jks</include>
       </includes>
       <lineEnding>keep</lineEnding>
     </fileSet>
@@ -92,7 +93,6 @@
       <includes>
         <include>org.dcm4che:dcm4che-jboss-modules</include>
         <include>org.dcm4che:ecs-object-client-jboss-modules</include>
-        <include>org.dcm4che:querydsl-jboss-modules</include>
         <include>org.dcm4che:jdbc-jboss-modules</include>
         <include>org.dcm4che:jclouds-jboss-modules</include>
         <include>org.dcm4che:jai_imageio-jboss-modules</include>

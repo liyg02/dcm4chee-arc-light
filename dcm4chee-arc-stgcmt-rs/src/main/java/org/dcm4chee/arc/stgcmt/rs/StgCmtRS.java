@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2017
+ * Portions created by the Initial Developer are Copyright (C) 2017-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,7 +40,9 @@
 
 package org.dcm4chee.arc.stgcmt.rs;
 
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4chee.arc.entity.StgCmtResult;
+import org.dcm4chee.arc.query.util.TaskQueryParam;
 import org.dcm4chee.arc.stgcmt.StgCmtManager;
 import org.jboss.resteasy.annotations.cache.NoCache;
 import org.slf4j.Logger;
@@ -56,9 +58,8 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.text.ParseException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -86,8 +87,14 @@ public class StgCmtRS {
     @QueryParam("studyUID")
     private String studyUID;
 
-    @QueryParam("exporterID")
+    @QueryParam("ExporterID")
     private String exporterID;
+
+    @QueryParam("batchID")
+    private String batchID;
+
+    @QueryParam("JMSMessageID")
+    private String msgID;
 
     @QueryParam("updatedBefore")
     @Pattern(regexp = "(19|20)\\d{2}\\-\\d{2}\\-\\d{2}")
@@ -104,52 +111,65 @@ public class StgCmtRS {
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput listStgCmts() throws Exception {
+    public Response listStgCmts() {
         logRequest();
-        final List<StgCmtResult> stgCmtResults = mgr.listStgCmts(
-                statusOf(status), studyUID, exporterID, parseInt(offset), parseInt(limit));
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+        try {
+            final List<StgCmtResult> stgCmtResults = mgr.listStgCmts(
+                    stgCmtResultQueryParam(), parseInt(offset), parseInt(limit));
+            return Response.ok((StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
-                for (StgCmtResult stgCmtResult : stgCmtResults) {
+                stgCmtResults.forEach(stgCmtResult -> {
+                    JsonWriter writer = new JsonWriter(gen);
                     gen.writeStartObject();
-                    gen.write("dicomDeviceName", stgCmtResult.getDeviceName());
-                    gen.write("transactionUID", stgCmtResult.getTransactionUID());
-                    gen.write("status", stgCmtResult.getStatus().toString());
-                    gen.write("studyUID", stgCmtResult.getStudyInstanceUID());
-                    gen.write("seriesUID", stgCmtResult.getSeriesInstanceUID());
-                    gen.write("objectUID", stgCmtResult.getSopInstanceUID());
-                    gen.write("exporterID", stgCmtResult.getExporterID());
-                    gen.write("requested", stgCmtResult.getNumberOfInstances());
-                    if (stgCmtResult.getNumberOfFailures() > 0)
-                        gen.write("failures", stgCmtResult.getNumberOfFailures());
-                    gen.write("createdTime", stgCmtResult.getCreatedTime().toString());
-                    gen.write("updatedTime", stgCmtResult.getUpdatedTime().toString());
+                    writer.writeNotNullOrDef("dicomDeviceName", stgCmtResult.getDeviceName(), null);
+                    writer.writeNotNullOrDef("transactionUID", stgCmtResult.getTransactionUID(), null);
+                    writer.writeNotNullOrDef("status", stgCmtResult.getStatus().name(), null);
+                    writer.writeNotNullOrDef("studyUID", stgCmtResult.getStudyInstanceUID(), null);
+                    writer.writeNotNullOrDef("seriesUID", stgCmtResult.getSeriesInstanceUID(), null);
+                    writer.writeNotNullOrDef("objectUID", stgCmtResult.getSopInstanceUID(), null);
+                    writer.writeNotNullOrDef("exporterID", stgCmtResult.getExporterID(), null);
+                    writer.writeNotNullOrDef("JMSMessageID", stgCmtResult.getMessageID(), null);
+                    writer.writeNotNullOrDef("batchID", stgCmtResult.getBatchID(), null);
+                    writer.writeNotNullOrDef("requested", stgCmtResult.getNumberOfInstances(), 0);
+                    writer.writeNotNullOrDef("failures", stgCmtResult.getNumberOfFailures(), 0);
+                    writer.writeNotNullOrDef("createdTime", stgCmtResult.getCreatedTime().toString(), null);
+                    writer.writeNotNullOrDef("updatedTime", stgCmtResult.getUpdatedTime().toString(), null);
                     gen.writeEnd();
-                }
+                });
                 gen.writeEnd();
                 gen.flush();
-            }
-        };
+            }).build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
     }
 
     @DELETE
     @Path("{transactionUID}")
     public void deleteStgCmt(@PathParam("transactionUID") String transactionUID) {
         logRequest();
-        if (!mgr.deleteStgCmt(transactionUID))
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
+        try {
+            if (!mgr.deleteStgCmt(transactionUID))
+                throw new WebApplicationException(
+                        errResponse("No such Storage Commitment Result " + transactionUID, Response.Status.NOT_FOUND));
+        } catch (Exception e) {
+            throw new WebApplicationException(
+                    errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR));
+        }
     }
 
     @DELETE
     @Produces("application/json")
-    public String deleteStgCmts() {
+    public Response deleteStgCmts() {
         logRequest();
-        return "{\"deleted\":"
-                + mgr.deleteStgCmts(statusOf(status), parseDate(updatedBefore))
-                + '}';
+        try {
+            return Response.ok(
+                    "{\"deleted\":" + mgr.deleteStgCmts(statusOf(status), parseDate(updatedBefore)) + '}')
+                    .build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
     }
 
     private static StgCmtResult.Status statusOf(String status) {
@@ -160,18 +180,46 @@ public class StgCmtRS {
         return s != null ? Integer.parseInt(s) : 0;
     }
 
-    private static Date parseDate(String s) {
-        try {
-            return s != null
-                    ? new SimpleDateFormat("yyyy-MM-dd").parse(s)
-                    : null;
-        } catch (ParseException e) {
-            throw new RuntimeException(e);
-        }
+    private static Date parseDate(String s) throws Exception {
+        return s != null
+                ? new SimpleDateFormat("yyyy-MM-dd").parse(s)
+                : null;
     }
 
     private void logRequest() {
-        LOG.info("Process {} {} from {}@{}", request.getMethod(), request.getRequestURI(),
-                request.getRemoteUser(), request.getRemoteHost());
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
+
+    private TaskQueryParam stgCmtResultQueryParam() {
+        TaskQueryParam taskQueryParam = new TaskQueryParam();
+        taskQueryParam.setStgCmtStatus(statusOf(status));
+        taskQueryParam.setStgCmtExporterID(exporterID);
+        taskQueryParam.setStudyIUID(studyUID);
+        taskQueryParam.setStudyIUID(batchID);
+        taskQueryParam.setJmsMessageID(msgID);
+        return taskQueryParam;
     }
 }

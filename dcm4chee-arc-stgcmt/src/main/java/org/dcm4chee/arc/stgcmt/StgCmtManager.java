@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -44,27 +44,76 @@ import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Sequence;
 import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.entity.StgCmtResult;
+import org.dcm4chee.arc.entity.StorageVerificationTask;
+import org.dcm4chee.arc.event.QueueMessageEvent;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
+import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
+import org.dcm4chee.arc.qmgt.Outcome;
+import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
+import org.dcm4chee.arc.query.util.TaskQueryParam;
 
+import javax.persistence.Tuple;
+import java.io.IOException;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Sep 2016
  */
 public interface StgCmtManager {
+    String QUEUE_NAME = "StgVerTasks";
+
     void addExternalRetrieveAETs(Attributes eventInfo, Device device);
 
     void persistStgCmtResult(StgCmtResult result);
 
-    List<StgCmtResult> listStgCmts(
-            StgCmtResult.Status status, String studyUID, String exporterID, int offset, int limit);
+    List<StgCmtResult> listStgCmts(TaskQueryParam stgCmtResultQueryParam, int offset, int limit);
 
     boolean deleteStgCmt(String transactionUID);
 
     int deleteStgCmts(StgCmtResult.Status status, Date updatedBefore);
 
-    Attributes calculateResult(Sequence refSopSeq, String transactionUID);
+    void calculateResult(StgCmtContext ctx, Sequence refSopSeq);
 
-    Attributes calculateResult(String studyIUID, String seriesIUID, String sopIUID);
+    boolean calculateResult(StgCmtContext ctx, String studyIUID, String seriesIUID, String sopIUID) throws IOException;
+
+    boolean scheduleStgVerTask(StorageVerificationTask storageVerificationTask, HttpServletRequestInfo httpServletRequestInfo,
+                               String batchID)
+            throws QueueSizeLimitExceededException;
+
+    Outcome executeStgVerTask(StorageVerificationTask storageVerificationTask, HttpServletRequestInfo httpServletRequestInfo)
+            throws IOException;
+
+    boolean cancelStgVerTask(Long pk, QueueMessageEvent queueEvent) throws IllegalTaskStateException;
+
+    long cancelStgVerTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam);
+
+    Tuple findDeviceNameAndMsgPropsByPk(Long pk);
+
+    void rescheduleStgVerTask(Long pk, QueueMessageEvent queueEvent);
+
+    void rescheduleStgVerTask(String stgVerTaskQueueMsgId);
+
+    List<String> listDistinctDeviceNames(TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam);
+
+    List<String> listStgVerTaskQueueMsgIDs(
+            TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam, int limit);
+
+    List<Tuple> listStgVerTaskQueueMsgIDAndMsgProps(
+            TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam, int limit);
+
+    boolean deleteStgVerTask(Long pk, QueueMessageEvent queueEvent);
+
+    int deleteTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam, int deleteTasksFetchSize);
+
+    List<StgVerBatch> listStgVerBatches(
+            TaskQueryParam queueBatchQueryParam, TaskQueryParam stgVerBatchQueryParam, int offset, int limit);
+
+    long countTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam);
+
+    Iterator<StorageVerificationTask> listStgVerTasks(
+            TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam, int offset, int limit);
 }

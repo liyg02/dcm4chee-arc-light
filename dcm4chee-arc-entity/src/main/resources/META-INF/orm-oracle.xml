@@ -111,6 +111,16 @@
     </attributes>
   </entity>
 
+  <entity class="org.dcm4chee.arc.entity.DiffTask">
+    <sequence-generator name="diff_task_pk_seq" sequence-name="diff_task_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="diff_task_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
   <entity class="org.dcm4chee.arc.entity.IanTask">
     <sequence-generator name="ian_task_pk_seq" sequence-name="ian_task_pk_seq" allocation-size="1"/>
     <attributes>
@@ -279,6 +289,16 @@
     </attributes>
   </entity>
 
+  <entity class="org.dcm4chee.arc.entity.RejectedInstance">
+    <sequence-generator name="rejected_instance_pk_seq" sequence-name="rejected_instance_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="rejected_instance_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
   <entity class="org.dcm4chee.arc.entity.Series">
     <sequence-generator name="series_pk_seq" sequence-name="series_pk_seq" allocation-size="1"/>
     <attributes>
@@ -338,6 +358,16 @@
     </attributes>
   </entity>
 
+  <entity class="StorageVerificationTask">
+    <sequence-generator name="stgver_task_pk_seq" sequence-name="stgver_task_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="stgver_task_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
   <entity class="org.dcm4chee.arc.entity.Study">
     <sequence-generator name="study_pk_seq" sequence-name="study_pk_seq" allocation-size="1"/>
     <attributes>
@@ -371,18 +401,44 @@
     </attributes>
   </entity>
 
-  <embeddable class="org.dcm4che3.data.Issuer">
+  <entity class="org.dcm4chee.arc.entity.UPS">
+    <sequence-generator name="ups_pk_seq" sequence-name="ups_pk_seq" allocation-size="1"/>
     <attributes>
-      <basic name="localNamespaceEntityID" optional="true">
-        <column name="entity_id"/>
-      </basic>
-      <basic name="universalEntityID" optional="true">
-        <column name="entity_uid"/>
-      </basic>
-      <basic name="universalEntityIDType" optional="true">
-        <column name="entity_uid_type"/>
-      </basic>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="ups_pk_seq"/>
+      </id>
     </attributes>
-  </embeddable>
+  </entity>
+
+  <entity class="org.dcm4chee.arc.entity.UPSRequest">
+    <sequence-generator name="ups_request_pk_seq" sequence-name="ups_request_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="ups_request_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
+  <entity class="org.dcm4chee.arc.entity.Subscription">
+    <sequence-generator name="subscription_pk_seq" sequence-name="subscription_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="subscription_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
+
+  <entity class="org.dcm4chee.arc.entity.GlobalSubscription">
+    <sequence-generator name="global_subscription_pk_seq" sequence-name="global_subscription_pk_seq" allocation-size="1"/>
+    <attributes>
+      <id name="pk">
+        <column name="pk"/>
+        <generated-value strategy="SEQUENCE" generator="global_subscription_pk_seq"/>
+      </id>
+    </attributes>
+  </entity>
 
 </entity-mappings>

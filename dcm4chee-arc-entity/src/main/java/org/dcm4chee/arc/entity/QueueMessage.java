@@ -40,6 +40,7 @@
 
 package org.dcm4chee.arc.entity;
 
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.util.StringUtils;
 
 import javax.jms.JMSException;
@@ -56,45 +57,35 @@ import java.util.*;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Sep 2015
  */
 @Entity
 @Table(name = "queue_msg", uniqueConstraints = @UniqueConstraint(columnNames = "msg_id"),
     indexes = {
+        @Index(columnList = "device_name"),
         @Index(columnList = "queue_name"),
         @Index(columnList = "msg_status"),
-        @Index(columnList = "updated_time")
+        @Index(columnList = "created_time"),
+        @Index(columnList = "updated_time"),
+        @Index(columnList = "batch_id")
 })
 @NamedQueries({
         @NamedQuery(name = QueueMessage.FIND_BY_MSG_ID,
                 query = "select o from QueueMessage o where o.messageID=?1"),
-        @NamedQuery(name = QueueMessage.FIND_BY_QUEUE_NAME,
-                query = "select o from QueueMessage o where o.queueName=?1 order by o.scheduledTime desc"),
-        @NamedQuery(name = QueueMessage.COUNT_BY_QUEUE_NAME_AND_STATUS,
-                query = "select count(o) from QueueMessage o where o.queueName=?1 and o.status=?2"),
-        @NamedQuery(name = QueueMessage.FIND_BY_QUEUE_NAME_AND_STATUS,
-                query = "select o from QueueMessage o where o.queueName=?1 and o.status=?2 order by o.pk desc"),
-        @NamedQuery(name = QueueMessage.DELETE_BY_QUEUE_NAME,
-                query = "delete from QueueMessage o where o.queueName=?1"),
-        @NamedQuery(name = QueueMessage.DELETE_BY_QUEUE_NAME_AND_STATUS,
-                query = "delete from QueueMessage o where o.queueName=?1 and o.status=?2"),
-        @NamedQuery(name = QueueMessage.DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE,
-                query = "delete from QueueMessage o where o.queueName=?1 and o.updatedTime<?2"),
-        @NamedQuery(name = QueueMessage.DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE,
-                query = "delete from QueueMessage o where o.queueName=?1 and o.status=?2 and o.updatedTime<?3 ")
+        @NamedQuery(name = QueueMessage.FIND_DEVICE_BY_BATCH_ID,
+                query = "select distinct o.deviceName from QueueMessage o where o.batchID=?1 order by o.deviceName"),
+        @NamedQuery(name = QueueMessage.COUNT_BY_DEVICE_AND_QUEUE_NAME_AND_STATUS,
+                query = "select count(o) from QueueMessage o where o.deviceName=?1 and o.queueName=?2 and o.status=?3"),
+        @NamedQuery(name = QueueMessage.COUNT_BY_BATCH_ID_AND_STATUS,
+                query = "select count(o) from QueueMessage o where o.batchID=?1 and o.status=?2")
 })
 public class QueueMessage {
 
     public static final String FIND_BY_MSG_ID = "QueueMessage.FindByMsgId";
-    public static final String FIND_BY_QUEUE_NAME = "QueueMessage.FindByQueueName";
-    public static final String COUNT_BY_QUEUE_NAME_AND_STATUS = "QueueMessage.CountByQueueNameAndStatus";
-    public static final String FIND_BY_QUEUE_NAME_AND_STATUS = "QueueMessage.FindByQueueNameAndStatus";
-    public static final String DELETE_BY_QUEUE_NAME = "QueueMessage.DeleteByQueueName";
-    public static final String DELETE_BY_QUEUE_NAME_AND_STATUS = "QueueMessage.DeleteByQueueNameAndStatus";
-    public static final String DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE =
-            "QueueMessage.DeleteByQueueNameAndUpdatedBefore";
-    public static final String DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE =
-            "QueueMessage.DeleteByQueueNameAndStatusAndUpdatedBefore";
+    public static final String FIND_DEVICE_BY_BATCH_ID = "QueueMessage.FindDeviceByBatchId";
+    public static final String COUNT_BY_DEVICE_AND_QUEUE_NAME_AND_STATUS = "QueueMessage.CountByDeviceAndQueueNameAndStatus";
+    public static final String COUNT_BY_BATCH_ID_AND_STATUS = "QueueMessage.CountByBatchIdAndStatus";
 
     public enum Status {
         SCHEDULED, IN_PROCESS, COMPLETED, WARNING, FAILED, CANCELED, TO_SCHEDULE;
@@ -129,6 +120,10 @@ public class QueueMessage {
     private Date updatedTime;
 
     @Basic(optional = false)
+    @Column(name = "device_name")
+    private String deviceName;
+
+    @Basic(optional = false)
     @Column(name = "queue_name")
     private String queueName;
 
@@ -141,7 +136,7 @@ public class QueueMessage {
     private String messageID;
 
     @Basic(optional = false)
-    @Column(name = "msg_props", updatable = false, length = 4000)
+    @Column(name = "msg_props", length = 4000)
     private String messageProperties;
 
     @Basic(optional = false)
@@ -169,6 +164,9 @@ public class QueueMessage {
     @Column(name = "num_failures")
     private int numberOfFailures;
 
+    @Column(name = "batch_id", updatable = false)
+    private String batchID;
+
     @Column(name = "error_msg")
     private String errorMessage;
 
@@ -181,14 +179,22 @@ public class QueueMessage {
     @OneToOne(mappedBy = "queueMessage")
     private RetrieveTask retrieveTask;
 
+    @OneToOne(mappedBy = "queueMessage")
+    private DiffTask diffTask;
+
+    @OneToOne(mappedBy = "queueMessage")
+    private StorageVerificationTask storageVerificationTask;
+
     public QueueMessage() {
     }
 
-    public QueueMessage(String queueName, ObjectMessage msg) {
+    public QueueMessage(String deviceName, String queueName, ObjectMessage msg, long delay) {
         try {
+            this.deviceName = deviceName;
             this.queueName = queueName;
             this.messageID = msg.getJMSMessageID();
             this.priority = msg.getJMSPriority();
+            this.scheduledTime = new Date(System.currentTimeMillis() + delay);
             this.messageProperties = propertiesOf(msg);
             this.messageBody = serialize(msg.getObject());
             this.status = Status.SCHEDULED;
@@ -199,6 +205,14 @@ public class QueueMessage {
 
     public long getPk() {
         return pk;
+    }
+
+    public String getDeviceName() {
+        return deviceName;
+    }
+
+    public void setDeviceName(String deviceName) {
+        this.deviceName = deviceName;
     }
 
     public int getPriority() {
@@ -269,6 +283,10 @@ public class QueueMessage {
         return scheduledTime;
     }
 
+    public void setScheduledTime(Date scheduledTime) {
+        this.scheduledTime = scheduledTime;
+    }
+
     public String getOutcomeMessage() {
         return outcomeMessage;
     }
@@ -281,38 +299,35 @@ public class QueueMessage {
         return exportTask;
     }
 
-    public void setExportTask(ExportTask exportTask) {
-        this.exportTask = exportTask;
-    }
-
     public RetrieveTask getRetrieveTask() {
         return retrieveTask;
     }
 
-    public void setRetrieveTask(RetrieveTask retrieveTask) {
-        this.retrieveTask = retrieveTask;
+    public DiffTask getDiffTask() {
+        return diffTask;
     }
 
-    public void reschedule(ObjectMessage msg, Date date) {
-        try {
-            this.messageID = msg.getJMSMessageID();
-            this.scheduledTime = date;
-            this.status = Status.SCHEDULED;
-        } catch (JMSException e) {
-            throw toJMSRuntimeException(e);
-        }
+    public StorageVerificationTask getStorageVerificationTask() {
+        return storageVerificationTask;
+    }
+
+    public String getBatchID() {
+        return batchID;
+    }
+
+    public void setBatchID(String batchID) {
+        this.batchID = batchID;
     }
 
     public void writeAsJSON(Writer out) throws IOException {
         JsonGenerator gen = Json.createGenerator(out);
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        JsonWriter writer = new JsonWriter(gen);
         gen.writeStartObject();
-        gen.write("id", messageID);
-        gen.write("queue", queueName);
-        gen.write("priority", priority);
-        gen.write("createdTime", df.format(createdTime));
-        gen.write("updatedTime", df.format(updatedTime));
-        writeStatusAsJSONTo(gen, df);
+        writer.writeNotNullOrDef("priority", priority, 0);
+        writer.writeNotNullOrDef("createdTime", df.format(createdTime), null);
+        writer.writeNotNullOrDef("updatedTime", df.format(updatedTime), null);
+        writeStatusAsJSONTo(writer, df);
         gen.flush();
         out.write(',');
         out.write(messageProperties);
@@ -320,21 +335,57 @@ public class QueueMessage {
         gen.flush();
     }
 
-    public void writeStatusAsJSONTo(JsonGenerator gen, DateFormat df) {
-        gen.write("status", status.toString());
-        if (numberOfFailures > 0)
-            gen.write("failures", numberOfFailures);
-        gen.write("scheduledTime", df.format(scheduledTime));
+    public void writeStatusAsJSONTo(JsonWriter writer, DateFormat df) {
+        writer.writeNotNullOrDef("queue", queueName, null);
+        writer.writeNotNullOrDef("JMSMessageID", messageID, null);
+        writer.writeNotNullOrDef("dicomDeviceName", deviceName, null);
+        writer.writeNotNullOrDef("status", status.toString(), null);
+        writer.writeNotNullOrDef("batchID", batchID, null);
+        writer.writeNotNullOrDef("failures", numberOfFailures, 0);
+        writer.writeNotNullOrDef("scheduledTime", df.format(scheduledTime), null);
         if (processingStartTime != null)
-            gen.write("processingStartTime", df.format(processingStartTime));
+            writer.writeNotNullOrDef("processingStartTime", df.format(processingStartTime), null);
         if (processingEndTime != null)
-            gen.write("processingEndTime", df.format(processingEndTime));
-        if (errorMessage != null)
-            gen.write("errorMessage", errorMessage);
-        if (outcomeMessage != null)
-            gen.write("outcomeMessage", outcomeMessage);
+            writer.writeNotNullOrDef("processingEndTime", df.format(processingEndTime), null);
+        writer.writeNotNullOrDef("errorMessage", errorMessage, null);
+        writer.writeNotNullOrDef("outcomeMessage", outcomeMessage, null);
     }
 
+    public void writeStatusAsCSVTo(Writer writer, DateFormat df, char delimiter) throws IOException {
+        writer.write(messageID);
+        writer.write(delimiter);
+        writer.write(queueName);
+        writer.write(delimiter);
+        writer.write(deviceName);
+        writer.write(delimiter);
+        writer.write(status.toString());
+        writer.append(delimiter);
+        writer.write(df.format(scheduledTime));
+        writer.append(delimiter);
+        if (numberOfFailures > 0)
+            writer.write(String.valueOf(numberOfFailures));
+        writer.append(delimiter);
+        if (batchID != null)
+            writer.write(batchID);
+        writer.append(delimiter);
+        if (processingStartTime != null)
+            writer.write(df.format(processingStartTime));
+        writer.append(delimiter);
+        if (processingEndTime != null)
+            writer.write(df.format(processingEndTime));
+        writer.append(delimiter);
+        if (errorMessage != null) {
+            writer.write('"');
+            writer.write(errorMessage.replace("\"", "\"\""));
+            writer.write('"');
+        }
+        writer.append(delimiter);
+        if (outcomeMessage != null) {
+            writer.write('"');
+            writer.write(outcomeMessage.replace("\"", "\"\""));
+            writer.write('"');
+        }
+    }
 
     private String propertiesOf(ObjectMessage msg) throws JMSException {
         StringBuilder sb = new StringBuilder(512);
@@ -343,11 +394,11 @@ public class QueueMessage {
             String name = names.nextElement();
             if (!name.startsWith("JMS")) {
                 Object o = msg.getObjectProperty(name);
-                boolean quote = o instanceof String;
                 sb.append('"').append(name).append('"').append(':');
-                if (quote) sb.append('"');
-                sb.append(o);
-                if (quote) sb.append('"');
+                if (o instanceof String)
+                    sb.append('"').append(((String) o).replace("\"", "\\\"")).append('"');
+                else
+                    sb.append(o);
                 if (names.hasMoreElements()) sb.append(',');
             }
         }
@@ -418,7 +469,6 @@ public class QueueMessage {
         Date now = new Date();
         createdTime = now;
         updatedTime = now;
-        scheduledTime = now;
     }
 
     @PreUpdate

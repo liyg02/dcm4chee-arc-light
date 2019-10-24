@@ -46,7 +46,7 @@
 
   <groupId>org.dcm4che.dcm4chee-arc</groupId>
   <artifactId>dcm4chee-arc-parent</artifactId>
-  <version>5.11.1</version>
+  <version>5.19.1</version>
   <packaging>pom</packaging>
 
   <properties>
@@ -55,23 +55,23 @@
     <maven.compiler.target>1.8</maven.compiler.target>
     <maven.compiler.source>1.8</maven.compiler.source>
     <!-- Define the version of the JBoss BOMs we want to import to specify tested stacks. -->
-    <wildfly-javaee7.version>10.1.0.Final</wildfly-javaee7.version>
-    <jbossws-cxf-client.version>5.1.5.Final</jbossws-cxf-client.version>
-    <apache-cxf.version>3.1.6</apache-cxf.version>
-    <maven-war-plugin.version>3.0.0</maven-war-plugin.version>
-    <jaxws-tools-maven-plugin.version>1.2.0.Final</jaxws-tools-maven-plugin.version>
+    <wildfly-jakartaee8.version>18.0.0.Final</wildfly-jakartaee8.version>
+    <jbossws-cxf-client.version>5.3.0.Final</jbossws-cxf-client.version>
+    <apache-cxf.version>3.3.3</apache-cxf.version>
+    <maven-war-plugin.version>3.2.0</maven-war-plugin.version>
+    <maven-assembly-plugin.version>3.1.0</maven-assembly-plugin.version>
+    <maven-ear-plugin.version>3.0.1</maven-ear-plugin.version>
+    <download-maven-plugin.version>1.4.0</download-maven-plugin.version>
+    <jaxws-tools-maven-plugin.version>1.2.1.Final</jaxws-tools-maven-plugin.version>
     <!-- Versions -->
     <dcm4che.version>${project.version}</dcm4che.version>
     <jai_imageio.version>1.2-pre-dr-b04</jai_imageio.version>
-    <hibernate.version>5.1.10.Final</hibernate.version>
-    <jboss-ejb3-ext-api.version>2.2.0.Final</jboss-ejb3-ext-api.version>
-    <resteasy.version>3.0.24.Final</resteasy.version>
-    <jclouds.version>2.0.2</jclouds.version>
+    <keycloak.version>7.0.0</keycloak.version>
+    <jclouds.version>2.2.0</jclouds.version>
     <ecs-object-client.version>3.0.0</ecs-object-client.version>
-    <querydsl.version>4.1.4</querydsl.version>
     <jdbc-jboss-modules.version>1.0.0</jdbc-jboss-modules.version>
-    <glassfish-json.version>1.0.4</glassfish-json.version>
-    <junit.version>4.11</junit.version>
+    <jakarta.json.version>1.1.6</jakarta.json.version>
+    <junit.version>4.12</junit.version>
 
     <!-- JPA -->
     <ds>java:/PacsDS</ds>
@@ -82,14 +82,14 @@
     <repository>
       <id>www.dcm4che.org</id>
       <name>dcm4che Repository</name>
-      <url>scp://www.dcm4che.org:443/home/maven2</url>
+      <url>scp://www.dcm4che.org/home/maven2</url>
     </repository>
   </distributionManagement>
   <repositories>
     <repository>
       <id>www.dcm4che.org</id>
       <name>dcm4che Repository</name>
-      <url>http://www.dcm4che.org/maven2</url>
+      <url>http://maven.dcm4che.org</url>
     </repository>
     <repository>
       <id>jboss-ga-repository</id>
@@ -98,6 +98,10 @@
     <repository>
       <id>jboss-earlyaccess-repository</id>
       <url>http://maven.repository.redhat.com/earlyaccess/all/</url>
+    </repository>
+    <repository>
+      <id>jboss-releases</id>
+      <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
     </repository>
     <repository>
       <id>jboss-thirdparty-repository</id>
@@ -131,8 +135,8 @@
     <dependencies>
       <dependency>
         <groupId>org.wildfly.bom</groupId>
-        <artifactId>wildfly-javaee7-with-tools</artifactId>
-        <version>${wildfly-javaee7.version}</version>
+        <artifactId>wildfly-jakartaee8-with-tools</artifactId>
+        <version>${wildfly-jakartaee8.version}</version>
         <type>pom</type>
         <scope>import</scope>
       </dependency>
@@ -153,9 +157,10 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>org.glassfish</groupId>
-        <artifactId>javax.json</artifactId>
-        <version>${glassfish-json.version}</version>
+        <groupId>org.keycloak</groupId>
+        <artifactId>keycloak-admin-client</artifactId>
+        <version>${keycloak.version}</version>
+        <scope>provided</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -218,7 +223,13 @@
     </dependency>
     <dependency>
       <groupId>org.dcm4che</groupId>
-      <artifactId>dcm4che-dict-arc</artifactId>
+      <artifactId>dcm4che-deident</artifactId>
+      <version>${dcm4che.version}</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.dcm4che</groupId>
+      <artifactId>dcm4che-dict-priv</artifactId>
       <version>${dcm4che.version}</version>
       <scope>provided</scope>
     </dependency>
@@ -288,39 +299,65 @@
       <version>${dcm4che.version}</version>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>org.dcm4che</groupId>
+      <artifactId>dcm4che-xdsi</artifactId>
+      <version>${dcm4che.version}</version>
+      <scope>provided</scope>
+    </dependency>
 
     <dependency>
       <groupId>org.glassfish</groupId>
-      <artifactId>javax.json</artifactId>
-      <version>${glassfish-json.version}</version>
+      <artifactId>jakarta.json</artifactId>
+      <version>${jakarta.json.version}</version>
       <scope>provided</scope>
     </dependency>
 
     <dependency>
       <groupId>org.hibernate</groupId>
       <artifactId>hibernate-core</artifactId>
-      <version>${hibernate.version}</version>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.hibernate</groupId>
+      <artifactId>hibernate-entitymanager</artifactId>
       <scope>provided</scope>
     </dependency>
 
     <dependency>
       <groupId>org.jboss.ejb3</groupId>
       <artifactId>jboss-ejb3-ext-api</artifactId>
-      <version>${jboss-ejb3-ext-api.version}</version>
       <scope>provided</scope>
     </dependency>
 
     <dependency>
       <groupId>org.jboss.resteasy</groupId>
       <artifactId>resteasy-multipart-provider</artifactId>
-      <version>${resteasy.version}</version>
       <scope>provided</scope>
     </dependency>
 
     <dependency>
-      <groupId>com.querydsl</groupId>
-      <artifactId>querydsl-jpa</artifactId>
-      <version>${querydsl.version}</version>
+      <groupId>javax.jws</groupId>
+      <artifactId>jsr181-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+   <dependency>
+      <groupId>org.jboss.spec.javax.websocket</groupId>
+      <artifactId>jboss-websocket-api_1.1_spec</artifactId>
+     <scope>provided</scope>
+   </dependency>
+
+    <dependency>
+      <groupId>org.jboss.spec.javax.xml.ws</groupId>
+      <artifactId>jboss-jaxws-api_2.3_spec</artifactId>
+      <scope>provided</scope>
+    </dependency>
+
+    <dependency>
+      <groupId>org.jboss.spec.javax.xml.soap</groupId>
+      <artifactId>jboss-saaj-api_1.4_spec</artifactId>
       <scope>provided</scope>
     </dependency>
 
@@ -358,28 +395,28 @@
       <artifactId>jboss-ejb-api_3.2_spec</artifactId>
       <scope>provided</scope>
     </dependency>
-    <!-- Import Java Persistence API, Version 2.1 -->
+    <!-- Import Java Persistence API -->
     <dependency>
-      <groupId>org.hibernate.javax.persistence</groupId>
-      <artifactId>hibernate-jpa-2.1-api</artifactId>
+      <groupId>jakarta.persistence</groupId>
+      <artifactId>jakarta.persistence-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <!-- Import the CDI API -->
     <dependency>
-      <groupId>javax.enterprise</groupId>
-      <artifactId>cdi-api</artifactId>
+      <groupId>jakarta.enterprise</groupId>
+      <artifactId>jakarta.enterprise.cdi-api</artifactId>
       <scope>provided</scope>
     </dependency>
     <!-- Import the Common Annotations API (JSR-250) -->
     <dependency>
       <groupId>org.jboss.spec.javax.annotation</groupId>
-      <artifactId>jboss-annotations-api_1.2_spec</artifactId>
+      <artifactId>jboss-annotations-api_1.3_spec</artifactId>
       <scope>provided</scope>
     </dependency>
     <!-- Import the Servlet API -->
     <dependency>
       <groupId>org.jboss.spec.javax.servlet</groupId>
-      <artifactId>jboss-servlet-api_3.1_spec</artifactId>
+      <artifactId>jboss-servlet-api_4.0_spec</artifactId>
       <scope>provided</scope>
     </dependency>
     <!-- Import Concurrency Utilities for Java EE (JSR-236) -->
@@ -396,8 +433,8 @@
     </dependency>
     <!-- Import Bean Validation API -->
     <dependency>
-      <groupId>javax.validation</groupId>
-      <artifactId>validation-api</artifactId>
+      <groupId>jakarta.validation</groupId>
+      <artifactId>jakarta.validation-api</artifactId>
       <scope>provided</scope>
     </dependency>
 
@@ -413,32 +450,50 @@
   <modules>
     <module>dcm4chee-arc-audit</module>
     <module>dcm4chee-arc-code</module>
+    <module>dcm4chee-arc-compress</module>
     <module>dcm4chee-arc-conf</module>
     <module>dcm4chee-arc-conf-data</module>
     <module>dcm4chee-arc-conf-json</module>
     <module>dcm4chee-arc-conf-ldap</module>
+    <module>dcm4chee-arc-conf-keycloak</module>
     <module>dcm4chee-arc-conf-rs</module>
     <module>dcm4chee-arc-conf-test</module>
+    <module>dcm4chee-arc-conf-ui</module>
+    <module>dcm4chee-arc-cors</module>
     <module>dcm4chee-arc-ctrl</module>
     <module>dcm4chee-arc-delete</module>
+    <module>dcm4chee-arc-diff</module>
+    <module>dcm4chee-arc-diff-rs</module>
     <module>dcm4chee-arc-dimse-rs</module>
     <module>dcm4chee-arc-entity</module>
     <module>dcm4chee-arc-event</module>
     <module>dcm4chee-arc-export</module>
-    <module>dcm4chee-arc-export-mgt</module>
+    <module>dcm4chee-arc-export-curve2pr</module>
     <module>dcm4chee-arc-export-dicom</module>
+    <module>dcm4chee-arc-export-impax-report</module>
+    <module>dcm4chee-arc-export-mgt</module>
+    <module>dcm4chee-arc-export-pr2ko</module>
+    <module>dcm4chee-arc-export-query-attrs</module>
     <module>dcm4chee-arc-export-rs</module>
+    <module>dcm4chee-arc-export-storage</module>
+    <module>dcm4chee-arc-export-study-size</module>
     <module>dcm4chee-arc-export-wado</module>
     <module>dcm4chee-arc-export-xdsi</module>
     <module>dcm4chee-arc-hl7</module>
     <module>dcm4chee-arc-hl7-psu</module>
     <module>dcm4chee-arc-hl7-rs</module>
+    <module>dcm4chee-arc-ian-rs</module>
     <module>dcm4chee-arc-ian-scu</module>
     <module>dcm4chee-arc-id</module>
+    <module>dcm4chee-arc-impax-report</module>
+    <module>dcm4chee-arc-impax-report-rs</module>
     <module>dcm4chee-arc-iocm-rs</module>
     <module>dcm4chee-arc-issuer</module>
     <module>dcm4chee-arc-keycloak</module>
+    <module>dcm4chee-arc-keycloak-rs</module>
     <module>dcm4chee-arc-metadata</module>
+    <module>dcm4chee-arc-metrics</module>
+    <module>dcm4chee-arc-metrics-rs</module>
     <module>dcm4chee-arc-mima</module>
     <module>dcm4chee-arc-monitor-rs</module>
     <module>dcm4chee-arc-mpps</module>
@@ -447,6 +502,12 @@
     <module>dcm4chee-arc-mwl-rs</module>
     <module>dcm4chee-arc-mwl-scp</module>
     <module>dcm4chee-arc-patient</module>
+    <module>dcm4chee-arc-pdq</module>
+    <module>dcm4chee-arc-pdq-dicom</module>
+    <module>dcm4chee-arc-pdq-rs</module>
+    <module>dcm4chee-arc-pdq-scheduler</module>
+    <module>dcm4chee-arc-pdq-xroad</module>
+    <module>dcm4chee-arc-prefetch</module>
     <module>dcm4chee-arc-procedure</module>
     <module>dcm4chee-arc-qido</module>
     <module>dcm4chee-arc-qmgt</module>
@@ -455,7 +516,6 @@
     <module>dcm4chee-arc-query-scu</module>
     <module>dcm4chee-arc-query-scp</module>
     <module>dcm4chee-arc-query-util</module>
-    <module>dcm4chee-arc-realm-rs</module>
     <module>dcm4chee-arc-retrieve</module>
     <module>dcm4chee-arc-retrieve-mgt</module>
     <module>dcm4chee-arc-retrieve-rs</module>
@@ -463,6 +523,7 @@
     <module>dcm4chee-arc-retrieve-scu</module>
     <module>dcm4chee-arc-retrieve-xdsi</module>
     <module>dcm4chee-arc-rs-client</module>
+    <module>dcm4chee-arc-rs-util</module>
     <module>dcm4chee-arc-service</module>
     <module>dcm4chee-arc-stgcmt</module>
     <module>dcm4chee-arc-stgcmt-rs</module>
@@ -476,11 +537,16 @@
     <module>dcm4chee-arc-store-scp</module>
     <module>dcm4chee-arc-stow</module>
     <module>dcm4chee-arc-study</module>
+    <module>dcm4chee-arc-ups</module>
+    <module>dcm4chee-arc-ups-rs</module>
+    <module>dcm4chee-arc-ups-scp</module>
     <module>dcm4chee-arc-validation</module>
     <module>dcm4chee-arc-wado</module>
     <module>dcm4chee-arc-war</module>
     <module>dcm4chee-arc-ui2</module>
-    <module>dcm4chee-arc-xdsi</module>
+    <module>dcm4chee-arc-xroad</module>
+    <module>dcm4chee-arc-xroad-rs</module>
+    <module>dcm4chee-arc-xsl-cda</module>
     <module>dcm4chee-arc-ear</module>
     <module>dcm4chee-arc-assembly</module>
     <module>dcm4chee-arr-proxy</module>

@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,6 +42,7 @@ package org.dcm4chee.arc.study;
 
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.soundex.FuzzyStr;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.AttributeFilter;
@@ -62,6 +63,8 @@ public interface StudyMgtContext {
     FuzzyStr getFuzzyStr();
 
     HttpServletRequest getHttpRequest();
+
+    UnparsedHL7Message getUnparsedHL7Message();
 
     String getRemoteHostName();
 
@@ -100,4 +103,20 @@ public interface StudyMgtContext {
     String getSeriesInstanceUID();
 
     void setSeriesInstanceUID(String seriesUID);
+
+    String getExpirationExporterID();
+
+    void setExpirationExporterID(String expirationExporterID);
+
+    boolean isFreezeExpirationDate();
+
+    void setFreezeExpirationDate(boolean freezeExpirationDate);
+
+    boolean isUnfreezeExpirationDate();
+
+    void setUnfreezeExpirationDate(boolean UnfreezeExpirationDate);
+
+    String getAccessControlID();
+
+    void setAccessControlID(String accessControlID);
 }

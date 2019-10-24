@@ -1,5 +1,5 @@
 /*
- * *** BEGIN LICENSE BLOCK *****
+ * **** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
  * The contents of this file are subject to the Mozilla Public License Version
@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2018
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -35,23 +35,25 @@
  * the provisions above, a recipient may use your version of this file under
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
- * *** END LICENSE BLOCK *****
+ * **** END LICENSE BLOCK *****
+ *
  */
 
 package org.dcm4chee.arc.query.impl;
 
-import com.querydsl.core.Tuple;
-import com.querydsl.core.types.OrderSpecifier;
-import com.querydsl.jpa.hibernate.HibernateQuery;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4chee.arc.query.Query;
 import org.dcm4chee.arc.query.QueryContext;
-import org.hibernate.StatelessSession;
-import org.hibernate.Transaction;
+import org.dcm4chee.arc.query.util.QueryBuilder;
+import org.hibernate.annotations.QueryHints;
 
+import javax.persistence.*;
+import javax.persistence.criteria.CriteriaBuilder;
+import javax.persistence.criteria.CriteriaQuery;
 import java.util.Iterator;
+import java.util.stream.Stream;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -60,31 +62,22 @@ import java.util.Iterator;
 abstract class AbstractQuery implements Query {
 
     protected final QueryContext context;
-    protected final StatelessSession session;
-    protected HibernateQuery<Tuple> query;
+    protected final EntityManager em;
+    protected final CriteriaBuilder cb;
+    protected final QueryBuilder builder;
+    private Stream<Tuple> resultStream;
     private Iterator<Tuple> results;
-    private long offset;
-    private long limit;
+    private int offset;
+    private int limit;
+    private int fetchSize;
     private int rejected;
     private int matches;
 
-    public AbstractQuery(QueryContext context, StatelessSession session) {
+    AbstractQuery(QueryContext context, EntityManager em) {
         this.context = context;
-        this.session = session;
-    }
-
-    public void initQuery() {
-        query = newHibernateQuery();
-    }
-
-    @Override
-    public void initSizeQuery() {
-        throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public void initUnknownSizeQuery() {
-        throw new UnsupportedOperationException();
+        this.em = em;
+        this.cb = em.getCriteriaBuilder();
+        this.builder = new QueryBuilder(cb);
     }
 
     @Override
@@ -93,71 +86,43 @@ abstract class AbstractQuery implements Query {
     }
 
     @Override
-    public Transaction beginTransaction() {
-        return session.beginTransaction();
-    }
-
-    protected abstract HibernateQuery<Tuple> newHibernateQuery();
-
-    protected abstract Attributes toAttributes(Tuple results);
-
-    private void checkQuery() {
-        if (query == null)
-            throw new IllegalStateException("query not initalized");
+    public void executeQuery(int fetchSize) {
+        executeQuery(fetchSize, 0, -1);
     }
 
     @Override
-    public void setFetchSize(int fetchSize) {
-        checkQuery();
-        query.setFetchSize(fetchSize);
-    }
-
-    @Override
-    public void executeQuery() {
-        checkQuery();
+    public void executeQuery(int fetchSize, int offset, int limit) {
+        this.fetchSize = fetchSize;
+        this.offset = offset;
+        this.limit = limit;
         rejected = 0;
         matches = 0;
-        results = offset > 0 ? query.fetch().iterator() : query.iterate();
+        close(resultStream);
+        TypedQuery<Tuple> query = em.createQuery(multiselect())
+                .setHint(QueryHints.FETCH_SIZE, fetchSize);
+        if (offset > 0)
+            query.setFirstResult(offset);
+        if (limit > 0)
+            query.setMaxResults(limit);
+        resultStream = query.getResultStream();
+        results = resultStream.iterator();
     }
 
     @Override
-    public long count() {
-        checkQuery();
-        return query.fetchCount();
+    public long fetchCount() {
+        return QueryBuilder.unbox(em.createQuery(count()).getSingleResult(), 0L);
     }
 
     @Override
-    public long size() {
-        checkQuery();
-        Long size = query.fetchOne().get(0, Long.class);
-        return size != null ? size.longValue() : 0L;
+    public long fetchSize() {
+        return QueryBuilder.unbox(em.createQuery(sumStudySize()).getSingleResult(), 0L);
     }
 
     @Override
-    public Long nextPk() {
-        return results.hasNext()
-                ? results.next().get(0, Long.class)
-                : null;
-    }
-
-    @Override
-    public void limit(long limit) {
-        checkQuery();
-        query.limit(limit);
-        this.limit = limit;
-    }
-
-    @Override
-    public void offset(long offset) {
-        checkQuery();
-        query.offset(offset);
-        this.offset = offset;
-    }
-
-    @Override
-    public void orderBy(OrderSpecifier<?>... orderSpecifiers) {
-        checkQuery();
-        query.orderBy(orderSpecifiers);
+    public Stream<Long> withUnknownSize(int fetchSize) {
+        return em.createQuery(withUnknownSize())
+                .setHint(QueryHints.FETCH_SIZE, fetchSize)
+                .getResultStream();
     }
 
     @Override
@@ -166,9 +131,7 @@ abstract class AbstractQuery implements Query {
         if (hasNext || rejected == 0 || limit != matches)
             return hasNext;
 
-        offset(offset + matches);
-        limit(rejected);
-        executeQuery();
+        executeQuery(fetchSize, offset + matches, rejected);
         return results.hasNext();
     }
 
@@ -197,9 +160,28 @@ abstract class AbstractQuery implements Query {
 
     @Override
     public void close() {
-        session.close();
+        close(resultStream);
         context.close();
     }
+
+    private void close(Stream<Tuple> resultStream) {
+        if (resultStream != null)
+            resultStream.close();
+    }
+
+    protected abstract CriteriaQuery<Tuple> multiselect();
+
+    protected abstract CriteriaQuery<Long> count();
+
+    protected CriteriaQuery<Long> sumStudySize() {
+        throw new UnsupportedOperationException();
+    }
+
+    protected CriteriaQuery<Long> withUnknownSize() {
+        throw new UnsupportedOperationException();
+    }
+
+    protected abstract Attributes toAttributes(Tuple results);
 
     static String[] splitAndAppend(String s, String append) {
         String[] ss = StringUtils.split(s, '\\');
@@ -210,5 +192,10 @@ abstract class AbstractQuery implements Query {
             ss[src.length] = append;
         }
         return ss;
+    }
+
+    protected String[] retrieveAETs(String retrieveAETs, String externalRetrieveAET) {
+        String[] aets = context.getArchiveAEExtension().returnRetrieveAETitles();
+        return aets.length > 0 ? aets : splitAndAppend(retrieveAETs, externalRetrieveAET);
     }
 }

@@ -1,5 +1,5 @@
 /*
- * *** BEGIN LICENSE BLOCK *****
+ * **** BEGIN LICENSE BLOCK *****
  * Version: MPL 1.1/GPL 2.0/LGPL 2.1
  *
  * The contents of this file are subject to the Mozilla Public License Version
@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2018
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -35,24 +35,25 @@
  * the provisions above, a recipient may use your version of this file under
  * the terms of any one of the MPL, the GPL or the LGPL.
  *
- * *** END LICENSE BLOCK *****
+ * **** END LICENSE BLOCK *****
+ *
  */
 
 package org.dcm4chee.arc.query.impl;
 
-import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.Tuple;
-import com.querydsl.core.types.Expression;
-import com.querydsl.jpa.hibernate.HibernateQuery;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
-import org.dcm4che3.dict.archive.ArchiveTag;
-import org.dcm4chee.arc.entity.AttributesBlob;
-import org.dcm4chee.arc.entity.QPatient;
+import org.dcm4che3.dict.archive.PrivateTag;
+import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.query.QueryContext;
-import org.dcm4chee.arc.query.util.QueryBuilder;
-import org.hibernate.StatelessSession;
+
+import javax.persistence.EntityManager;
+import javax.persistence.Tuple;
+import javax.persistence.criteria.*;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -60,45 +61,83 @@ import org.hibernate.StatelessSession;
  */
 class PatientQuery extends AbstractQuery {
 
-    private static final Expression<?>[] SELECT = {
-            QPatient.patient.pk,
-            QPatient.patient.numberOfStudies,
-            QPatient.patient.createdTime,
-            QPatient.patient.updatedTime,
-            QueryBuilder.patientAttributesBlob.encodedAttributes
-    };
+    private Root<Patient> patient;
+    private Path<byte[]> patientAttrBlob;
 
-    public PatientQuery(QueryContext context, StatelessSession session) {
-        super(context, session);
+    PatientQuery(QueryContext context, EntityManager em) {
+        super(context, em);
     }
 
     @Override
-    protected HibernateQuery<Tuple> newHibernateQuery() {
-        HibernateQuery<Tuple> q = new HibernateQuery<Void>(session).select(SELECT).from(QPatient.patient);
-        q = QueryBuilder.applyPatientLevelJoins(q,
-                context.getPatientIDs(),
-                context.getQueryKeys(),
-                context.getQueryParam(),
-                context.isOrderByPatientName());
-        BooleanBuilder predicates = new BooleanBuilder();
-        QueryBuilder.addPatientLevelPredicates(predicates,
-                context.getPatientIDs(),
-                context.getQueryKeys(),
-                context.getQueryParam());
+    protected CriteriaQuery<Tuple> multiselect() {
+        CriteriaQuery<Tuple> q = cb.createTupleQuery();
+        this.patient = q.from(Patient.class);
+        return order(restrict(q, patient)).multiselect(
+                patient.get(Patient_.pk),
+                patient.get(Patient_.numberOfStudies),
+                patient.get(Patient_.createdTime),
+                patient.get(Patient_.updatedTime),
+                patient.get(Patient_.verificationTime),
+                patient.get(Patient_.verificationStatus),
+                patient.get(Patient_.failedVerifications),
+                patientAttrBlob = patient.join(Patient_.attributesBlob).get(AttributesBlob_.encodedAttributes));
+    }
 
-        return q.where(predicates);
+    @Override
+    protected CriteriaQuery<Long> count() {
+        CriteriaQuery<Long> q = cb.createQuery(Long.class);
+        Root<Patient> patient = q.from(Patient.class);
+        return restrict(q, patient).select(cb.count(patient));
     }
 
     @Override
     protected Attributes toAttributes(Tuple results) {
-        Attributes patAttrs = AttributesBlob.decodeAttributes(
-                results.get(QueryBuilder.patientAttributesBlob.encodedAttributes), null);
-        patAttrs.setInt(Tag.NumberOfPatientRelatedStudies, VR.IS, results.get(QPatient.patient.numberOfStudies));
-        patAttrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientCreateDateTime, VR.DT,
-                results.get(QPatient.patient.createdTime));
-        patAttrs.setDate(ArchiveTag.PrivateCreator, ArchiveTag.PatientUpdateDateTime, VR.DT,
-                results.get(QPatient.patient.updatedTime));
+        Attributes patAttrs = AttributesBlob.decodeAttributes(results.get(patientAttrBlob), null);
+        addPatientQRAttrs(patient, context, results, patAttrs);
         return patAttrs;
+    }
+
+    private CriteriaQuery<Tuple> order(CriteriaQuery<Tuple> q) {
+        if (context.getOrderByTags() != null) {
+            q.orderBy(builder.orderPatients(patient, context.getOrderByTags()));
+        }
+        return q;
+    }
+
+    private <T> CriteriaQuery<T> restrict(CriteriaQuery<T> q, Root<Patient> patient) {
+        List<Predicate> predicates = builder.patientPredicates(q, patient,
+                context.getPatientIDs(),
+                context.getQueryKeys(),
+                context.getQueryParam());
+        if (!predicates.isEmpty())
+            q.where(predicates.toArray(new Predicate[0]));
+        return q;
+    }
+
+    static void addPatientQRAttrs(Path<Patient> patient, QueryContext context, Tuple results, Attributes attrs) {
+        attrs.setInt(Tag.NumberOfPatientRelatedStudies, VR.IS,
+                results.get(patient.get(Patient_.numberOfStudies)));
+        if (!context.isReturnPrivate())
+            return;
+
+        attrs.setDate(PrivateTag.PrivateCreator, PrivateTag.PatientCreateDateTime, VR.DT,
+                results.get(patient.get(Patient_.createdTime)));
+        attrs.setDate(PrivateTag.PrivateCreator, PrivateTag.PatientUpdateDateTime, VR.DT,
+                results.get(patient.get(Patient_.updatedTime)));
+        Date verificationTime = results.get(patient.get(Patient_.verificationTime));
+        if (verificationTime != null) {
+            attrs.setDate(PrivateTag.PrivateCreator, PrivateTag.PatientVerificationDateTime, VR.DT,
+                    verificationTime);
+        }
+        Patient.VerificationStatus verificationStatus = results.get(patient.get(Patient_.verificationStatus));
+        if (verificationStatus != Patient.VerificationStatus.UNVERIFIED || verificationTime != null) {
+            attrs.setString(PrivateTag.PrivateCreator, PrivateTag.PatientVerificationStatus, VR.CS,
+                    verificationStatus.name());
+        }
+        int failures = results.get(patient.get(Patient_.failedVerifications));
+        if (failures > 0) {
+            attrs.setInt(PrivateTag.PrivateCreator, PrivateTag.FailedVerificationsOfPatient, VR.US, failures);
+        }
     }
 
     @Override

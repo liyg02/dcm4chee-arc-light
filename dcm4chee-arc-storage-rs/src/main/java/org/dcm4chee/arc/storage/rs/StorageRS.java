@@ -17,7 +17,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2017
+ *  Portions created by the Initial Developer are Copyright (C) 2017-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -44,10 +44,8 @@ package org.dcm4chee.arc.storage.rs;
 import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
-import org.dcm4chee.arc.conf.ArchiveAEExtension;
-import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
-import org.dcm4chee.arc.conf.DeleterThreshold;
-import org.dcm4chee.arc.conf.StorageDescriptor;
+import org.dcm4che3.util.StringUtils;
+import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.storage.Storage;
 import org.dcm4chee.arc.storage.StorageFactory;
 import org.jboss.resteasy.annotations.cache.NoCache;
@@ -60,18 +58,18 @@ import javax.json.Json;
 import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.Pattern;
-import javax.ws.rs.Path;
-import javax.ws.rs.GET;
-import javax.ws.rs.Produces;
-import javax.ws.rs.QueryParam;
+import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
 import java.io.IOException;
-import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.*;
 
 /**
  * @author Vrinda Nayak <vrinda.nayak@j4care.com>
+ * @author Gunter Zeilinger <gunterze@gmail.com>
  * @since May 2017
  */
 
@@ -104,42 +102,70 @@ public class StorageRS {
     @QueryParam("usableSpaceBelow")
     private Long usableSpaceBelow;
 
+    @QueryParam("dcmStorageClusterID")
+    private String storageClusterID;
+
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput search() throws Exception {
-        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        return new StreamingOutput() {
-            @Override
-            public void write (OutputStream out) throws IOException {
+    public Response search() {
+        logRequest();
+        try {
+            return Response.ok((StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
-                for (StorageSystem ss : getStorageSystems()) {
+                getStorageSystems().forEach(ss -> {
                     StorageDescriptor desc = ss.desc;
                     JsonWriter writer = new JsonWriter(gen);
                     gen.writeStartObject();
                     gen.write("dcmStorageID", desc.getStorageID());
                     gen.write("dcmURI", desc.getStorageURIStr());
                     writer.writeNotNullOrDef("dcmDigestAlgorithm", desc.getDigestAlgorithm(), null);
-                    writer.writeNotNullOrDef("dcmInstanceAvailability", desc.getInstanceAvailability(), null);
+                    writer.writeNotNullOrDef("dcmInstanceAvailability", desc.getInstanceAvailability(), Availability.ONLINE);
+                    writer.writeNotNullOrDef("dcmStorageDuration", desc.getStorageDuration(), StorageDuration.PERMANENT);
                     writer.writeNotDef("dcmReadOnly", desc.isReadOnly(), false);
+                    writer.writeNotDef("dcmNoDeletionConstraint", desc.isNoDeletionConstraint(), false);
+                    writer.writeNotDef("dcmDeleterThreads", desc.getDeleterThreads(), 1);
                     if (desc.getStorageThreshold() != null)
                         gen.write("storageThreshold", desc.getStorageThreshold().getMinUsableDiskSpace());
                     writeDeleterThresholds(writer, gen, desc.getDeleterThresholds());
-                    writer.writeNotNullOrDef("dcmExternalRetrieveAET", desc.getExternalRetrieveAETitle(), null);
+                    writer.writeNotEmpty("dcmExternalRetrieveAET", desc.getExternalRetrieveAETitles());
+                    writer.writeNotNullOrDef("dcmExportStorageID", desc.getExportStorageID(), null);
+                    if (desc.getRetrieveCacheStorageID() != null) {
+                        gen.write("dcmRetrieveCacheStorageID", desc.getRetrieveCacheStorageID());
+                        gen.write("dcmRetrieveCacheMaxParallel", desc.getRetrieveCacheMaxParallel());
+                    }
                     writer.writeNotEmpty("dcmProperty", descriptorProperties(desc.getProperties()));
-                    writer.writeNotEmpty("dicomAETitle", ss.aets.toArray(new String[ss.aets.size()]));
-                    writer.writeNotEmpty("usages", ss.usages.toArray(new String[ss.usages.size()]));
-                    if (ss.usableSpace > 0L)
-                        gen.write("usableSpace", ss.usableSpace);
-                    if (ss.usableSpace > 0L)
-                        gen.write("totalSpace", ss.totalSpace);
+                    writer.writeNotEmpty("dicomAETitle", ss.aets);
+                    writer.writeNotNullOrDef("dcmStorageClusterID", desc.getStorageClusterID(), null);
+                    writer.writeNotEmpty("dcmDeleteStudiesOlderThan",
+                            desc.getRetentionPeriodsAsStrings(RetentionPeriod.DeleteStudies.OlderThan));
+                    writer.writeNotEmpty("dcmDeleteStudiesReceivedBefore",
+                            desc.getRetentionPeriodsAsStrings(RetentionPeriod.DeleteStudies.ReceivedBefore));
+                    writer.writeNotEmpty("dcmDeleteStudiesNotUsedSince",
+                            desc.getRetentionPeriodsAsStrings(RetentionPeriod.DeleteStudies.NotUsedSince));
+                    writer.writeNotEmpty("usages", ss.usages);
+                    gen.write("usableSpace", ss.usableSpace);
+                    gen.write("totalSpace", ss.totalSpace);
                     gen.writeEnd();
-                }
+                });
                 gen.writeEnd();
                 gen.flush();
-            }
-        };
+            }).build();
+        } catch (IllegalStateException e) {
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
     }
 
     private String[] descriptorProperties(Map<String, ?> props) {
@@ -154,90 +180,95 @@ public class StorageRS {
         if (deleterThresholds.isEmpty())
             return;
         writer.writeStartArray("deleterThreshold");
-        for (DeleterThreshold deleterThreshold : deleterThresholds) {
+        deleterThresholds.forEach(deleterThreshold -> {
             writer.writeStartObject();
             gen.write(deleterThreshold.getPrefix(), deleterThreshold.getMinUsableDiskSpace());
             writer.writeEnd();
-        }
+        });
         writer.writeEnd();
     }
 
     private List<StorageSystem> getStorageSystems() {
-        List<StorageSystem> storageSystems = new ArrayList<>();
         if (dicomAETitle != null) {
             ApplicationEntity ae = device.getApplicationEntity(dicomAETitle, true);
             if (ae == null || !ae.isInstalled()) {
-                LOG.info("Dicom AE Title in query param is not installed : " + dicomAETitle);
-                return storageSystems;
+                LOG.info("Archive AE {} not provided by Device {}", dicomAETitle, device.getDeviceName());
+                return Collections.EMPTY_LIST;
             }
         }
-        List<StorageDescriptor> sortedStorageDescriptors = getSortedStorageDescriptors();
-        for (StorageDescriptor desc : sortedStorageDescriptors)
-            storageSystems.add(new StorageSystem(desc));
-        Iterator<StorageSystem> iter = storageSystems.iterator();
-        while (iter.hasNext()) {
-            StorageSystem ss = iter.next();
-            if ((usableSpaceBelow != null && ss.usableSpace > usableSpaceBelow)
-                    || (dicomAETitle != null && !ss.aets.contains(dicomAETitle))
-                    || (usage != null && !ss.usages.contains(usage))
-                    || (uriScheme != null && !ss.desc.getStorageURI().getScheme().equals(uriScheme)))
-                iter.remove();
-        }
+        List<StorageSystem> storageSystems = new ArrayList<>();
+        ArchiveDeviceExtension arcdev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+        arcdev.getStorageDescriptors().forEach(desc -> {
+            String storageID = desc.getStorageID();
+            Set<String> usages = new HashSet<>();
+            Set<String> aets = new HashSet<>();
+            if (StringUtils.contains(arcdev.getSeriesMetadataStorageIDs(), storageID))
+                usages.add("dcmSeriesMetadataStorageID");
+
+            device.getApplicationEntities().forEach(ae -> {
+                ArchiveAEExtension arcAE = ae.getAEExtension(ArchiveAEExtension.class);
+                if (StringUtils.contains(arcAE.getObjectStorageIDs(), desc.getStorageID())) {
+                    usages.add("dcmObjectStorageID");
+                    aets.add(ae.getAETitle());
+                }
+                if (StringUtils.contains(arcAE.getMetadataStorageIDs(), desc.getStorageID())) {
+                    usages.add("dcmMetadataStorageID");
+                    aets.add(ae.getAETitle());
+                }
+            });
+            if ((dicomAETitle == null || aets.contains(dicomAETitle))
+                && (usage == null || usages.contains(usage))
+                && (storageClusterID == null || storageClusterID.equals(desc.getStorageClusterID()))
+                && (uriScheme == null || desc.getStorageURI().getScheme().equals(uriScheme))) {
+                try (Storage storage = storageFactory.getStorage(desc)) {
+                    long usableSpace = storage.getUsableSpace();
+                    if (usableSpaceBelow == null || usableSpace < usableSpaceBelow) {
+                        long totalSpace = storage.getTotalSpace();
+                        storageSystems.add(new StorageSystem(desc, usableSpace, totalSpace, usages, aets));
+                    }
+                } catch (IOException e) {
+                    LOG.warn("Failed to access {}", desc, e);
+                }
+            }
+        });
+        storageSystems.sort(Comparator.comparing(storageSystem -> storageSystem.desc.getStorageID()));
         return storageSystems;
     }
 
-    private List<StorageDescriptor> getSortedStorageDescriptors() {
-        ArchiveDeviceExtension ext = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        List<StorageDescriptor> storageDescriptors = new ArrayList<>();
-        storageDescriptors.addAll(ext.getStorageDescriptors());
-        storageDescriptors.sort(Comparator.comparing(StorageDescriptor::getStorageID));
-        return storageDescriptors;
+    private static class StorageSystem {
+        final StorageDescriptor desc;
+        final long usableSpace;
+        final long totalSpace;
+        final String[] usages;
+        final String[] aets;
+
+        StorageSystem(StorageDescriptor desc, long usableSpace, long totalSpace,
+                      Collection<String> usages, Collection<String> aets) {
+            this.desc = desc;
+            this.usableSpace = usableSpace;
+            this.totalSpace = totalSpace;
+            this.usages = usages.toArray(StringUtils.EMPTY_STRING);
+            this.aets = aets.toArray(StringUtils.EMPTY_STRING);
+            Arrays.sort(this.usages);
+            Arrays.sort(this.aets);
+        }
     }
 
-    class StorageSystem {
-        private StorageDescriptor desc;
-        private long usableSpace;
-        private long totalSpace;
-        private List<String> usages = new ArrayList<>();
-        private List<String> aets = new ArrayList<>();
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
+    }
 
-        StorageSystem(StorageDescriptor desc) {
-            this.desc = desc;
-            getSpaceInfo(desc);
-            getAETsAndUsages(desc);
-        }
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
 
-        void getSpaceInfo(StorageDescriptor desc) {
-            try (Storage storage = storageFactory.getStorage(desc)) {
-                if (storage.getUsableSpace() != -1)
-                    usableSpace = storage.getUsableSpace();
-                if (storage.getTotalSpace() != -1)
-                    totalSpace = storage.getTotalSpace();
-            } catch (IOException e) {
-                LOG.warn("Failed to access {}", desc.getStorageURI(), e);
-            }
-        }
-
-        void getAETsAndUsages(StorageDescriptor desc) {
-            for (String aet : device.getApplicationAETitles()) {
-                if (usages.size() == 2)
-                    break;
-                ApplicationEntity ae = device.getApplicationEntity(aet);
-                ArchiveAEExtension arcAE = ae.getAEExtension(ArchiveAEExtension.class);
-                if (Arrays.asList(arcAE.getObjectStorageIDs()).contains(desc.getStorageID())) {
-                    usages.add("dcmObjectStorageID");
-                    aets.add(aet);
-                }
-                if (Arrays.asList(arcAE.getMetadataStorageIDs()).contains(desc.getStorageID())) {
-                    usages.add("dcmMetadataStorageID");
-                    aets.add(aet);
-                }
-            }
-            ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-            for (String seriesMetadataStorageID : arcDev.getSeriesMetadataStorageIDs())
-                if (arcDev.getStorageDescriptor(seriesMetadataStorageID).getStorageID().equals(desc.getStorageID()))
-                    usages.add("dcmSeriesMetadataStorageID");
-        }
-
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

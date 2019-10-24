@@ -46,16 +46,19 @@ import org.dcm4che3.data.Tag;
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Association;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4che3.util.SafeClose;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.query.QueryService;
 import org.dcm4chee.arc.query.QueryContext;
+import org.dcm4chee.arc.query.util.OrderByTag;
 import org.dcm4chee.arc.query.util.QueryParam;
 import org.dcm4chee.arc.storage.Storage;
 
 import javax.servlet.http.HttpServletRequest;
 import java.util.HashMap;
+import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -70,30 +73,30 @@ class QueryContextImpl implements QueryContext {
     private QueryRetrieveLevel2 qrLevel;
     private IDWithIssuer[] patientIDs = {};
     private Attributes queryKeys;
+    private Attributes coercedQueryKeys = new Attributes();
     private Attributes returnKeys;
-    private boolean orderByPatientName;
+    private boolean returnPrivate;
     private String sopClassUID;
     private String searchMethod;
     private final HashMap<String, Storage> storageMap = new HashMap<>();
+    private List<OrderByTag> orderByTags;
 
-    public QueryContextImpl(HttpServletRequest httpRequest, String searchMethod, ApplicationEntity ae,
-                            QueryParam queryParam, QueryService queryService) {
-        this(ae, queryParam, queryService);
-        this.httpRequest = httpRequest;
-        this.searchMethod = searchMethod;
-    }
-
-    private QueryContextImpl(ApplicationEntity ae, QueryParam queryParam, QueryService queryService) {
+    QueryContextImpl(ApplicationEntity ae, QueryParam queryParam, QueryService queryService) {
         this.ae = ae;
         this.queryService = queryService;
         this.queryParam = queryParam;
     }
 
-    public QueryContextImpl(Association as, String sopClassUID, ApplicationEntity ae, QueryParam queryParam,
-                            QueryServiceImpl queryService) {
-        this(ae, queryParam, queryService);
+    QueryContextImpl find(Association as, String sopClassUID) {
         this.as = as;
         this.sopClassUID = sopClassUID;
+        return this;
+    }
+
+    QueryContextImpl qido(HttpServletRequest httpRequest, String searchMethod) {
+        this.httpRequest = httpRequest;
+        this.searchMethod = searchMethod;
+        return this;
     }
 
     @Override
@@ -148,7 +151,7 @@ class QueryContextImpl implements QueryContext {
 
     @Override
     public String getRemoteHostName() {
-        return httpRequest != null ? httpRequest.getRemoteHost() : as.getSocket().getInetAddress().getHostName();
+        return httpRequest != null ? httpRequest.getRemoteHost() : ReverseDNS.hostNameOf(as.getSocket().getInetAddress());
     }
 
     @Override
@@ -192,6 +195,21 @@ class QueryContextImpl implements QueryContext {
     }
 
     @Override
+    public Attributes getCoercedQueryKeys() {
+        return coercedQueryKeys;
+    }
+
+    @Override
+    public boolean isReturnPrivate() {
+        return returnPrivate;
+    }
+
+    @Override
+    public void setReturnPrivate(boolean returnPrivate) {
+        this.returnPrivate = returnPrivate;
+    }
+
+    @Override
     public QueryParam getQueryParam() {
         return queryParam;
     }
@@ -205,19 +223,19 @@ class QueryContextImpl implements QueryContext {
     }
 
     @Override
-    public boolean isOrderByPatientName() {
-        return orderByPatientName;
+    public List<OrderByTag> getOrderByTags() {
+        return orderByTags;
     }
 
     @Override
-    public void setOrderByPatientName(boolean orderByPatientName) {
-        this.orderByPatientName = orderByPatientName;
+    public void setOrderByTags(List<OrderByTag> orderByTags) {
+        this.orderByTags = orderByTags;
     }
 
     @Override
     public boolean isConsiderPurgedInstances() {
         return qrLevel == QueryRetrieveLevel2.IMAGE
-                && getArchiveDeviceExtension().getPurgeInstanceRecordsPollingInterval() != null
+                && getArchiveDeviceExtension().isPurgeInstanceRecords()
                 && queryKeys.containsValue(Tag.SeriesInstanceUID);
     }
 

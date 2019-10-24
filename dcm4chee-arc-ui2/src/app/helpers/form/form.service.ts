@@ -15,7 +15,7 @@ function testValidation(c: AbstractControl){
 export class FormService{
     constructor(private _fb: FormBuilder){}
 
-    toFormGroup(formelements: FormElement<any>[]){
+    toFormGroup(formelements: FormElement<any>[]):FormGroup{
         return this._fb.group(this.convertFormElement(formelements));
     }
 
@@ -122,6 +122,17 @@ export class FormService{
                         }
                     });
                     group[element.key] = validation ? $this._fb.array(checkboxArr, validation) : $this._fb.array(checkboxArr);
+                    break;
+                case 'dynamiccheckbox':
+                    if(element['type'] === 'array'){
+                        element['value'] = element['value'] || [];
+                        group[element.key] = validation ? $this._fb.array(element['value'], validation) : $this._fb.array(element['value']);
+                    }else{
+                        element['value'] = element['value'] || '';
+                        group[element.key] = validation ? $this._fb.control(element['value'], validation)
+                            : $this._fb.control(element['value']);
+
+                    }
                     break;
                 default:
                     if (element.key){

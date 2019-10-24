@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -53,15 +53,12 @@ import javax.json.Json;
 import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
 import javax.validation.constraints.Pattern;
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.QueryParam;
+import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.Arrays;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Comparator;
 
 /**
@@ -88,17 +85,13 @@ public class QueryRejectionNotes {
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput query() throws Exception {
-        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    public Response query() {
+        logRequest();
+        try {
+            return Response.ok((StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
                 for (RejectionNote rjNote : sortedRejectionNotes()) {
-                    if (rjNote.isRevokeRejection() != Boolean.parseBoolean(revokeRejection))
-                        continue;
-
                     Code code = rjNote.getRejectionNoteCode();
                     JsonWriter writer = new JsonWriter(gen);
                     gen.writeStartObject();
@@ -111,15 +104,40 @@ public class QueryRejectionNotes {
                 }
                 gen.writeEnd();
                 gen.flush();
-            }
-        };
+            }).build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
     }
 
     private RejectionNote[] sortedRejectionNotes() {
-        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        RejectionNote[] rejectionNotes = arcDev.getRejectionNotes().toArray(new RejectionNote[arcDev.getRejectionNotes().size()]);
-        Arrays.sort(rejectionNotes, Comparator.comparing(RejectionNote::getRejectionNoteLabel));
-        return rejectionNotes;
+        return device.getDeviceExtension(ArchiveDeviceExtension.class)
+                .getRejectionNotes().stream()
+                .sorted(Comparator.comparing(RejectionNote::getRejectionNoteLabel))
+                .filter(rjNote -> rjNote.isRevokeRejection() == Boolean.parseBoolean(revokeRejection))
+                .toArray(RejectionNote[]::new);
     }
 
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
 }

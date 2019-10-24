@@ -42,9 +42,9 @@ package org.dcm4chee.arc.exporter;
 
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.qmgt.Outcome;
-import org.dcm4chee.arc.xdsi.RegistryResponseType;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4che3.xdsi.RegistryResponseType;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -55,6 +55,7 @@ public class DefaultExportContext implements ExportContext {
 
     private final Exporter exporter;
     private String messageID;
+    private String batchID;
     private String studyInstanceUID;
     private String seriesInstanceUID;
     private String sopInstanceUID;
@@ -83,6 +84,16 @@ public class DefaultExportContext implements ExportContext {
     @Override
     public void setMessageID(String messageID) {
         this.messageID = messageID;
+    }
+
+    @Override
+    public String getBatchID() {
+        return batchID;
+    }
+
+    @Override
+    public void setBatchID(String batchID) {
+        this.batchID = batchID;
     }
 
     @Override

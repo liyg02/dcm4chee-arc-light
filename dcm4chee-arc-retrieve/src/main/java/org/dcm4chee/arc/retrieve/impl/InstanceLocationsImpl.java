@@ -42,9 +42,10 @@ package org.dcm4chee.arc.retrieve.impl;
 
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.Tag;
+import org.dcm4che3.data.UID;
 import org.dcm4chee.arc.conf.Availability;
 import org.dcm4chee.arc.entity.Location;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
+import org.dcm4chee.arc.store.InstanceLocations;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -59,6 +60,7 @@ public class InstanceLocationsImpl implements InstanceLocations {
     private final String sopClassUID;
     private final String sopInstanceUID;
     private final Attributes attributes;
+    private Long instancePk;
     private Attributes rejectionCode;
     private String retrieveAETs;
     private String extRetrieveAET;
@@ -72,6 +74,11 @@ public class InstanceLocationsImpl implements InstanceLocations {
         this.sopClassUID = attrs.getString(Tag.SOPClassUID);
         this.sopInstanceUID = attrs.getString(Tag.SOPInstanceUID);
         this.attributes = attrs;
+    }
+
+    @Override
+    public void setInstancePk(Long instancePk) {
+        this.instancePk = instancePk;
     }
 
     public void setRejectionCode(Attributes rejectionCode) {
@@ -105,6 +112,11 @@ public class InstanceLocationsImpl implements InstanceLocations {
     @Override
     public String toString() {
         return "Instance[iuid=" + sopInstanceUID + ",cuid=" + sopClassUID + "]";
+    }
+
+    @Override
+    public Long getInstancePk() {
+        return instancePk;
     }
 
     @Override
@@ -156,5 +168,32 @@ public class InstanceLocationsImpl implements InstanceLocations {
     @Override
     public boolean isContainsMetadata() {
         return containsMetadata;
+    }
+
+    @Override
+    public boolean isImage() {
+        return attributes.contains(Tag.BitsAllocated) && !sopClassUID.equals(UID.RTDoseStorage);
+    }
+
+    @Override
+    public boolean isVideo() {
+        switch (locations.get(0).getTransferSyntaxUID()) {
+            case UID.MPEG2:
+            case UID.MPEG2MainProfileHighLevel:
+            case UID.MPEG4AVCH264HighProfileLevel41:
+            case UID.MPEG4AVCH264BDCompatibleHighProfileLevel41:
+            case UID.MPEG4AVCH264HighProfileLevel42For2DVideo:
+            case UID.MPEG4AVCH264HighProfileLevel42For3DVideo:
+            case UID.MPEG4AVCH264StereoHighProfileLevel42:
+            case UID.HEVCH265MainProfileLevel51:
+            case UID.HEVCH265Main10ProfileLevel51:
+                return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean isMultiframe() {
+        return attributes.getInt(Tag.NumberOfFrames, 1) > 1;
     }
 }

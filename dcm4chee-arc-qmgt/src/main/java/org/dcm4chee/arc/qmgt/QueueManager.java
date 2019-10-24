@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,20 +41,27 @@
 package org.dcm4chee.arc.qmgt;
 
 import org.dcm4chee.arc.entity.QueueMessage;
+import org.dcm4chee.arc.event.QueueMessageEvent;
+import org.dcm4chee.arc.query.util.TaskQueryParam;
 
 import javax.jms.ObjectMessage;
+import javax.persistence.Tuple;
 import java.io.Serializable;
-import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Sep 2015
  */
 public interface QueueManager {
     ObjectMessage createObjectMessage(Serializable object);
 
-    QueueMessage scheduleMessage(String queueName, ObjectMessage message, int priority) throws QueueSizeLimitExceededException;
+    QueueMessage scheduleMessage(String queueName, ObjectMessage message, int priority, String batchID, long delay)
+            throws QueueSizeLimitExceededException;
+
+    long countScheduledMessagesOnThisDevice(String queueName);
 
     QueueMessage onProcessingStart(String msgId);
 
@@ -62,13 +69,33 @@ public interface QueueManager {
 
     QueueMessage onProcessingFailed(String msgId, Throwable e);
 
-    boolean cancelProcessing(String msgId) throws IllegalTaskStateException;
+    boolean cancelTask(String msgId, QueueMessageEvent queueEvent) throws IllegalTaskStateException;
 
-    boolean rescheduleMessage(String msgId, String queueName) throws IllegalTaskStateException;
+    long cancelTasks(TaskQueryParam queueTaskQueryParam);
 
-    boolean deleteMessage(String msgId);
+    long cancelRetrieveTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam retrieveTaskQueryParam);
 
-    int deleteMessages(String queueName, QueueMessage.Status status, Date updatedBefore);
+    long cancelExportTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam exportTaskQueryParam);
 
-    List<QueueMessage> search(String queueName, QueueMessage.Status status, int offset, int limit);
+    long cancelDiffTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam diffTaskQueryParam);
+
+    long cancelStgVerTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam stgVerTaskQueryParam);
+
+    void rescheduleTask(String msgId, String queueName, QueueMessageEvent queueEvent);
+
+    boolean deleteTask(String msgId, QueueMessageEvent queueEvent);
+
+    int deleteTasks(TaskQueryParam taskQueryParam, int deleteTaskFetchSize);
+
+    Iterator<QueueMessage> listQueueMessages(TaskQueryParam taskQueryParam, int offset, int limit);
+
+    long countTasks(TaskQueryParam taskQueryParam);
+
+    List<String> listDistinctDeviceNames(TaskQueryParam queueTaskQueryParam);
+
+    List<String> listQueueMsgIDs(TaskQueryParam queueTaskQueryParam, int limit);
+
+    List<Tuple> listQueueMsgIDAndMsgProps(TaskQueryParam queueTaskQueryParam, int limit);
+
+    Tuple findDeviceNameAndMsgPropsByMsgID(String msgID);
 }

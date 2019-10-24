@@ -55,8 +55,8 @@ import org.dcm4chee.arc.conf.ArchiveAEExtension;
 import org.dcm4chee.arc.conf.SpanningCFindSCPPolicy;
 import org.dcm4chee.arc.query.Query;
 import org.dcm4chee.arc.query.QueryContext;
+import org.dcm4chee.arc.query.RunInTransaction;
 import org.dcm4chee.arc.query.scu.CFindSCU;
-import org.hibernate.Transaction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,6 +72,7 @@ public class ArchiveQueryTask extends BasicQueryTask {
     private static final Logger LOG = LoggerFactory.getLogger(ArchiveQueryTask.class);
 
     private final QueryContext ctx;
+    private final RunInTransaction runInTx;
     private final AttributesCoercion coercion;
     private final int uniqueKey;
     private final VR vrOfUniqueKey;
@@ -84,14 +85,15 @@ public class ArchiveQueryTask extends BasicQueryTask {
     private DimseRSP spanningCFindRSP;
     private Attributes spanningMatch;
     private Query query;
-    private Transaction transaction;
     private State state = State.NOT_INITALIZED;
     private Set<String> uniqueKeys = new HashSet<>();
     private int removeUniqueKeyFromSpanningMatch;
 
-    public ArchiveQueryTask(Association as, PresentationContext pc, Attributes rq, Attributes keys, QueryContext ctx) {
+    public ArchiveQueryTask(Association as, PresentationContext pc, Attributes rq, Attributes keys, QueryContext ctx,
+            RunInTransaction runInTx) {
         super(as, pc, rq, keys);
         this.ctx = ctx;
+        this.runInTx = runInTx;
         this.coercion = ctx.getQueryService().getAttributesCoercion(ctx);
         uniqueKey = ctx.getQueryRetrieveLevel().uniqueKey();
         vrOfUniqueKey = ctx.getQueryRetrieveLevel().vrOfUniqueKey();
@@ -104,6 +106,11 @@ public class ArchiveQueryTask extends BasicQueryTask {
     }
 
     @Override
+    public void run() {
+        runInTx.execute(super::run);
+    }
+
+    @Override
     protected void close() {
         closeQuery();
         releaseSpanningAssociation();
@@ -111,12 +118,6 @@ public class ArchiveQueryTask extends BasicQueryTask {
 
     private void closeQuery() {
         if (query != null) {
-            if (transaction != null)
-                try {
-                    transaction.commit();
-                } catch (Exception e) {
-                    LOG.warn("Failed to commit transaction:\n{}", e);
-                }
             query.close();
             query = null;
         }
@@ -161,14 +162,11 @@ public class ArchiveQueryTask extends BasicQueryTask {
     private void initQuery() throws DicomServiceException {
         this.query = ctx.getQueryService().createQuery(ctx);
         setOptionalKeysNotSupported(query.isOptionalKeysNotSupported());
-        query.initQuery();
         if (queryMaxNumberOfResults > 0 && !ctx.containsUniqueKey()
-                && query.count() > queryMaxNumberOfResults) {
+                && query.fetchCount() > queryMaxNumberOfResults) {
             throw new DicomServiceException(Status.UnableToProcess, "Request entity too large");
         }
-        transaction = query.beginTransaction();
-        query.setFetchSize(queryFetchSize);
-        query.executeQuery();
+        query.executeQuery(queryFetchSize);
     }
 
     private void initSpanning() throws Exception {
@@ -178,14 +176,14 @@ public class ArchiveQueryTask extends BasicQueryTask {
                 spanningCFindSCP,
                 ctx.getSOPClassUID(),
                 as.getQueryOptionsFor(ctx.getSOPClassUID()));
-        spanningCFindRSP = cfindscu.query(spanningAssoc, Priority.NORMAL, spanningQueryKeys(), 0);
+        spanningCFindRSP = cfindscu.query(spanningAssoc, Priority.NORMAL, spanningQueryKeys(), 0, 1, null);
         spanningCFindRSP.next();
         nextSpanningMatch();
     }
 
     private Attributes spanningQueryKeys() {
         Attributes queryKeys = ctx.getQueryKeys();
-        if (!queryKeys.containsValue(uniqueKey)) {
+        if (!queryKeys.contains(uniqueKey)) {
             queryKeys = new Attributes(queryKeys);
             queryKeys.setNull(uniqueKey, vrOfUniqueKey);
             removeUniqueKeyFromSpanningMatch = uniqueKey;

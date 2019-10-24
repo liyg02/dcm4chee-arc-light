@@ -40,7 +40,6 @@ package org.dcm4chee.arc.ian.scu;
 
 import org.dcm4che3.data.*;
 import org.dcm4che3.net.ApplicationEntity;
-import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.Scheduler;
 import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.entity.IanTask;
@@ -69,9 +68,6 @@ import java.util.List;
 @ApplicationScoped
 public class IANScheduler extends Scheduler {
     private static final Logger LOG = LoggerFactory.getLogger(IANScheduler.class);
-
-    @Inject
-    private Device device;
 
     @Inject
     private IANEJB ejb;
@@ -103,7 +99,10 @@ public class IANScheduler extends Scheduler {
         Attributes ian;
         do {
             ianTasks = ejb.fetchIANTasksForMPPS(device.getDeviceName(), ianTaskPk, fetchSize);
-            for (IanTask ianTask : ianTasks)
+            for (IanTask ianTask : ianTasks) {
+                if (getPollingInterval() == null)
+                    return;
+
                 try {
                     ianTaskPk = ianTask.getPk();
                     ApplicationEntity ae = device.getApplicationEntity(ianTask.getCallingAET(), true);
@@ -116,10 +115,14 @@ public class IANScheduler extends Scheduler {
                 } catch (Exception e) {
                     LOG.warn("Failed to process {}", ianTask, e);
                 }
+            }
         } while (ianTasks.size() == fetchSize);
         do {
             ianTasks = ejb.fetchIANTasksForStudy(device.getDeviceName(), fetchSize);
-            for (IanTask ianTask : ianTasks)
+            for (IanTask ianTask : ianTasks) {
+                if (getPollingInterval() == null)
+                    return;
+
                 try {
                     ApplicationEntity ae = device.getApplicationEntity(ianTask.getCallingAET(), true);
                     if (ianTask.getMpps() == null) {
@@ -146,6 +149,7 @@ public class IANScheduler extends Scheduler {
                 } catch (Exception e) {
                     LOG.warn("Failed to process {}", ianTask, e);
                 }
+            }
         } while (ianTasks.size() == fetchSize);
     }
 
@@ -214,6 +218,13 @@ public class IANScheduler extends Scheduler {
         if (ian != null)
             for (String remoteAET : descriptor.getIanDestinations())
                 ejb.scheduleMessage(ctx.getAETitle(), ian, remoteAET);
+    }
+
+    public void scheduleIAN(ApplicationEntity ae, String remoteAET, String studyUID, String seriesUID)
+            throws QueueSizeLimitExceededException {
+        Attributes ian = queryService.createIAN(ae, studyUID, seriesUID, null);
+        if (ian != null)
+            ejb.scheduleMessage(ae.getAETitle(), ian, remoteAET);
     }
 
     private Attributes createIANForMPPS(ApplicationEntity ae, MPPS mpps) {

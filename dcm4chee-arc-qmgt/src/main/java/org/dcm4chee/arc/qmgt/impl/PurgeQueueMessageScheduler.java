@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,22 +40,24 @@
 
 package org.dcm4chee.arc.qmgt.impl;
 
-import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.Scheduler;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.Duration;
 import org.dcm4chee.arc.conf.QueueDescriptor;
 import org.dcm4chee.arc.entity.QueueMessage;
 import org.dcm4chee.arc.qmgt.QueueManager;
+import org.dcm4chee.arc.query.util.TaskQueryParam;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import java.util.Collections;
 import java.util.Date;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Apr 2016
  */
 @ApplicationScoped
@@ -64,10 +66,7 @@ public class PurgeQueueMessageScheduler extends Scheduler {
     private static final Logger LOG = LoggerFactory.getLogger(PurgeQueueMessageScheduler.class);
 
     @Inject
-    private Device device;
-
-    @Inject
-    private QueueManager ejb;
+    private QueueManager mgr;
 
     protected PurgeQueueMessageScheduler() {
         super(Mode.scheduleWithFixedDelay);
@@ -87,8 +86,12 @@ public class PurgeQueueMessageScheduler extends Scheduler {
     @Override
     protected void execute() {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
-        for (QueueDescriptor desc : arcDev.getQueueDescriptors())
+        for (QueueDescriptor desc : arcDev.getQueueDescriptors()) {
             delete(desc.getQueueName(), QueueMessage.Status.COMPLETED, desc.getPurgeQueueMessageCompletedDelay());
+            delete(desc.getQueueName(), QueueMessage.Status.FAILED, desc.getPurgeQueueMessageFailedDelay());
+            delete(desc.getQueueName(), QueueMessage.Status.WARNING, desc.getPurgeQueueMessageWarningDelay());
+            delete(desc.getQueueName(), QueueMessage.Status.CANCELED, desc.getPurgeQueueMessageCanceledDelay());
+        }
     }
 
     private void delete(String queueName, QueueMessage.Status status, Duration delay) {
@@ -96,6 +99,25 @@ public class PurgeQueueMessageScheduler extends Scheduler {
             return;
 
         Date before = new Date(System.currentTimeMillis() - delay.getSeconds() * 1000);
-        ejb.deleteMessages(queueName, status, before);
+        int deleted = 0;
+        int count;
+        int deleteTaskFetchSize = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class)
+                                    .getQueueTasksFetchSize();
+        do {
+            count = mgr.deleteTasks(
+                    taskQueryParam(queueName, status, before),
+                    deleteTaskFetchSize);
+            deleted += count;
+        } while (count >= deleteTaskFetchSize);
+        if (deleted > 0)
+            LOG.info("Deleted {} {} messages from queue {}", deleted, status, queueName);
+    }
+
+    private TaskQueryParam taskQueryParam(String queueName, QueueMessage.Status status, Date updatedBefore) {
+        TaskQueryParam taskQueryParam = new TaskQueryParam();
+        taskQueryParam.setQueueName(Collections.singletonList(queueName));
+        taskQueryParam.setStatus(status);
+        taskQueryParam.setUpdatedBefore(updatedBefore);
+        return taskQueryParam;
     }
 }

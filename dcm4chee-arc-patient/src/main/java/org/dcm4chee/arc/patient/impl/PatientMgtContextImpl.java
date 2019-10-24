@@ -40,6 +40,7 @@
 
 package org.dcm4chee.arc.patient.impl;
 
+import org.dcm4che3.audit.AuditMessages;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.IDWithIssuer;
 import org.dcm4che3.net.Association;
@@ -47,13 +48,14 @@ import org.dcm4che3.net.Device;
 import org.dcm4che3.net.hl7.HL7Application;
 import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4che3.soundex.FuzzyStr;
+import org.dcm4che3.util.ReverseDNS;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.ArchiveHL7ApplicationExtension;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.conf.Entity;
 import org.dcm4chee.arc.entity.Patient;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.patient.PatientMgtContext;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
 
 import java.net.Socket;
 
@@ -65,6 +67,7 @@ import java.net.Socket;
 public class PatientMgtContextImpl implements PatientMgtContext {
 
     private final AttributeFilter attributeFilter;
+    private final AttributeFilter studyAttributeFilter;
     private final FuzzyStr fuzzyStr;
     private HL7Application hl7app;
     private Association as;
@@ -75,14 +78,17 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     private IDWithIssuer previousPatientID;
     private Attributes previousAttributes;
     private Attributes.UpdatePolicy attributeUpdatePolicy = Attributes.UpdatePolicy.OVERWRITE;
-    private String eventActionCode;
+    private String eventActionCode = AuditMessages.EventActionCode.Read;
     private Exception exception;
     private Patient patient;
     private HttpServletRequestInfo httpServletRequestInfo;
+    private Patient.VerificationStatus patientVerificationStatus = Patient.VerificationStatus.UNVERIFIED;
+    private String pdqServiceURI;
 
     PatientMgtContextImpl(Device device) {
         ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
         this.attributeFilter = arcDev.getAttributeFilter(Entity.Patient);
+        this.studyAttributeFilter = arcDev.getAttributeFilter(Entity.Study);
         this.fuzzyStr = arcDev.getFuzzyStr();
     }
 
@@ -116,6 +122,11 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     }
 
     @Override
+    public AttributeFilter getStudyAttributeFilter() {
+        return studyAttributeFilter;
+    }
+
+    @Override
     public FuzzyStr getFuzzyStr() {
         return fuzzyStr;
     }
@@ -140,7 +151,7 @@ public class PatientMgtContextImpl implements PatientMgtContext {
         return httpServletRequestInfo != null
                 ? httpServletRequestInfo.requesterHost
                 : socket != null
-                    ? socket.getInetAddress().getHostName() : null;
+                    ? ReverseDNS.hostNameOf(socket.getInetAddress()) : null;
     }
 
     @Override
@@ -150,7 +161,7 @@ public class PatientMgtContextImpl implements PatientMgtContext {
 
         ArchiveHL7ApplicationExtension arcHL7App =
                 hl7app.getHL7ApplicationExtension(ArchiveHL7ApplicationExtension.class);
-        return arcHL7App != null && arcHL7App.isHl7NoPatientCreateMessageType(msg.msh().getMessageType());
+        return arcHL7App != null && arcHL7App.isHL7NoPatientCreateMessageType(msg.msh().getMessageType());
     }
 
     @Override
@@ -238,5 +249,25 @@ public class PatientMgtContextImpl implements PatientMgtContext {
     @Override
     public void setHttpServletRequestInfo(HttpServletRequestInfo httpServletRequestInfo) {
         this.httpServletRequestInfo = httpServletRequestInfo;
+    }
+
+    @Override
+    public Patient.VerificationStatus getPatientVerificationStatus() {
+        return patientVerificationStatus;
+    }
+
+    @Override
+    public void setPatientVerificationStatus(Patient.VerificationStatus patientVerificationStatus) {
+        this.patientVerificationStatus = patientVerificationStatus;
+    }
+
+    @Override
+    public String getPDQServiceURI() {
+        return pdqServiceURI;
+    }
+
+    @Override
+    public void setPDQServiceURI(String pdqServiceURI) {
+        this.pdqServiceURI = pdqServiceURI;
     }
 }

@@ -1,20 +1,16 @@
 import { Component } from '@angular/core';
-import {MdDialogRef} from '@angular/material';
+import {MatDialogRef} from '@angular/material';
 
 @Component({
   selector: 'app-delete-rejected-instances',
   templateUrl: './delete-rejected-instances.component.html',
-    styles: [`
-        .vex-theme-os.confirm{
-            width:500px;
-            
-        }
+    styles: [`        
     `]
 })
 export class DeleteRejectedInstancesComponent{
     private _rjnotes;
     private _results: any;
-    constructor(public dialogRef: MdDialogRef<DeleteRejectedInstancesComponent>) { }
+    constructor(public dialogRef: MatDialogRef<DeleteRejectedInstancesComponent>) { }
 
     get rjnotes() {
         return this._rjnotes;

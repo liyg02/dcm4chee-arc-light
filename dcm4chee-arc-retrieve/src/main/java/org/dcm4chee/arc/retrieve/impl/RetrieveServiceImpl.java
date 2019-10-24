@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -40,54 +40,59 @@
 
 package org.dcm4chee.arc.retrieve.impl;
 
-import com.querydsl.core.BooleanBuilder;
-import com.querydsl.core.Tuple;
-import com.querydsl.core.types.Expression;
-import com.querydsl.jpa.hibernate.HibernateQuery;
 import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.conf.api.IApplicationEntityCache;
 import org.dcm4che3.data.*;
-import org.dcm4che3.dict.archive.ArchiveTag;
+import org.dcm4che3.deident.DeIdentificationAttributesCoercion;
+import org.dcm4che3.dict.archive.PrivateTag;
 import org.dcm4che3.imageio.codec.Transcoder;
-import org.dcm4che3.io.BulkDataCreator;
-import org.dcm4che3.io.DicomInputStream;
-import org.dcm4che3.io.TemplatesCache;
-import org.dcm4che3.io.XSLTAttributesCoercion;
+import org.dcm4che3.io.*;
 import org.dcm4che3.json.JSONReader;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.service.DicomServiceException;
 import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.SafeClose;
 import org.dcm4che3.util.StringUtils;
+import org.dcm4che3.util.UIDUtils;
 import org.dcm4chee.arc.LeadingCFindSCPQueryCache;
+import org.dcm4chee.arc.code.CodeCache;
 import org.dcm4chee.arc.conf.*;
 import org.dcm4chee.arc.entity.*;
+import org.dcm4chee.arc.metrics.MetricsService;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.query.scu.CFindSCU;
 import org.dcm4chee.arc.query.scu.CFindSCUAttributeCoercion;
-import org.dcm4chee.arc.retrieve.*;
-import org.dcm4chee.arc.code.CodeCache;
 import org.dcm4chee.arc.query.util.QueryBuilder;
+import org.dcm4chee.arc.retrieve.*;
 import org.dcm4chee.arc.storage.ReadContext;
 import org.dcm4chee.arc.storage.Storage;
 import org.dcm4chee.arc.storage.StorageFactory;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
-import org.hibernate.Session;
-import org.hibernate.StatelessSession;
+import org.dcm4chee.arc.store.InstanceLocations;
+import org.dcm4chee.arc.store.StoreService;
+import org.dcm4chee.arc.store.StoreSession;
+import org.dcm4chee.arc.store.UpdateLocation;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.ApplicationScoped;
+import javax.enterprise.event.Event;
 import javax.inject.Inject;
 import javax.json.Json;
 import javax.persistence.EntityManager;
+import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
+import javax.persistence.Tuple;
+import javax.persistence.criteria.*;
 import javax.servlet.http.HttpServletRequest;
 import javax.xml.transform.Templates;
 import javax.xml.transform.TransformerConfigurationException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.NoSuchFileException;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -101,64 +106,17 @@ public class RetrieveServiceImpl implements RetrieveService {
 
     private static Logger LOG = LoggerFactory.getLogger(RetrieveServiceImpl.class);
 
-    private static final int MAX_FAILED_IUIDS_LEN = 4000;
-
-    private static final Expression<?>[] SELECT = {
-            QLocation.location.pk,
-            QLocation.location.storageID,
-            QLocation.location.storagePath,
-            QLocation.location.objectType,
-            QLocation.location.transferSyntaxUID,
-            QLocation.location.digest,
-            QLocation.location.size,
-            QLocation.location.status,
-            QSeries.series.pk,
-            QInstance.instance.pk,
-            QInstance.instance.retrieveAETs,
-            QInstance.instance.externalRetrieveAET,
-            QInstance.instance.availability,
-            QInstance.instance.createdTime,
-            QInstance.instance.updatedTime,
-            QCodeEntity.codeEntity.codeValue,
-            QCodeEntity.codeEntity.codingSchemeDesignator,
-            QCodeEntity.codeEntity.codeMeaning,
-            QUIDMap.uIDMap.pk,
-            QUIDMap.uIDMap.encodedMap,
-            QueryBuilder.instanceAttributesBlob.encodedAttributes
-    };
-
-    static final Expression<?>[] PATIENT_STUDY_SERIES_ATTRS = {
-            QPatient.patient.updatedTime,
-            QStudy.study.pk,
-            QStudy.study.studyInstanceUID,
-            QStudy.study.accessTime,
-            QStudy.study.failedRetrieves,
-            QStudy.study.completeness,
-            QStudy.study.modifiedTime,
-            QStudy.study.expirationDate,
-            QStudy.study.accessControlID,
-            QSeries.series.seriesInstanceUID,
-            QSeries.series.failedRetrieves,
-            QSeries.series.completeness,
-            QSeries.series.updatedTime,
-            QSeries.series.expirationDate,
-            QSeries.series.sourceAET,
-            QueryBuilder.seriesAttributesBlob.encodedAttributes,
-            QueryBuilder.studyAttributesBlob.encodedAttributes,
-            QueryBuilder.patientAttributesBlob.encodedAttributes
-    };
-
-    static final Expression<?>[] METADATA_STORAGE_PATH = {
-            QSeries.series.pk,
-            QMetadata.metadata.storageID,
-            QMetadata.metadata.storagePath,
-    };
-
     @PersistenceContext(unitName = "dcm4chee-arc")
     private EntityManager em;
 
     @Inject
     private StorageFactory storageFactory;
+
+    @Inject
+    private StoreService storeService;
+
+    @Inject
+    private MetricsService metricsService;
 
     @Inject
     private Device device;
@@ -178,12 +136,17 @@ public class RetrieveServiceImpl implements RetrieveService {
     @Inject
     private LeadingCFindSCPQueryCache leadingCFindSCPQueryCache;
 
-    StatelessSession openStatelessSession() {
-        return em.unwrap(Session.class).getSessionFactory().openStatelessSession();
+    @Inject @RetrieveFailures
+    private Event<RetrieveContext> retrieveFailures;
+
+    @Override
+    public Device getDevice() {
+        return device;
     }
 
-    private ArchiveDeviceExtension getArchiveDeviceExtension() {
-        return device.getDeviceExtension(ArchiveDeviceExtension.class);
+    @Override
+    public ArchiveDeviceExtension getArchiveDeviceExtension() {
+        return device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
     }
 
     @Override
@@ -228,10 +191,10 @@ public class RetrieveServiceImpl implements RetrieveService {
 
     @Override
     public RetrieveContext newRetrieveContextIOCM(
-            HttpServletRequest request, String localAET, String studyUID, String... seriesUIDs) {
+            HttpServletRequestInfo request, String localAET, String studyUID, String... seriesUIDs) {
         ArchiveAEExtension arcAE = device.getApplicationEntity(localAET, true).getAEExtension(ArchiveAEExtension.class);
         RetrieveContext ctx = new RetrieveContextImpl(this, arcAE, localAET, null);
-        ctx.setHttpRequest(request);
+        ctx.setHttpServletRequestInfo(request);
         ctx.setStudyInstanceUIDs(studyUID);
         ctx.setSeriesInstanceUIDs(seriesUIDs);
         return ctx;
@@ -240,28 +203,24 @@ public class RetrieveServiceImpl implements RetrieveService {
     @Override
     public RetrieveContext newRetrieveContextXDSI(
             HttpServletRequest request, String localAET,
-            List<String> studyUIDs, List<String> seriesUIDs, List<String> objectUIDs) {
+            String[] studyUIDs, String[] seriesUIDs, String[] objectUIDs) {
         ArchiveAEExtension arcAE = device.getApplicationEntity(localAET, true).getAEExtension(ArchiveAEExtension.class);
         RetrieveContext ctx = new RetrieveContextImpl(this, arcAE, localAET, arcAE.getQueryRetrieveView());
-        initCodes(ctx);
-        ctx.setHttpRequest(request);
-        int numStudies = studyUIDs.size();
-        ctx.setStudyInstanceUIDs(studyUIDs.toArray(new String[numStudies]));
-        if (numStudies == 1) {
-            int numSeries = seriesUIDs.size();
-            ctx.setSeriesInstanceUIDs(seriesUIDs.toArray(new String[numSeries]));
-            if (numSeries == 1) {
-                int numObjects = objectUIDs.size();
-                ctx.setSopInstanceUIDs(objectUIDs.toArray(new String[numObjects]));
+        ctx.setHttpServletRequestInfo(HttpServletRequestInfo.valueOf(request));
+        ctx.setStudyInstanceUIDs(studyUIDs);
+        if (studyUIDs.length == 1) {
+            ctx.setSeriesInstanceUIDs(seriesUIDs);
+            if (seriesUIDs.length == 1) {
+                ctx.setSopInstanceUIDs(objectUIDs);
             }
         }
         return ctx;
     }
 
-    private RetrieveContext newRetrieveContext(String localAET, String studyUID, String seriesUID, String objectUID) {
+    @Override
+    public RetrieveContext newRetrieveContext(String localAET, String studyUID, String seriesUID, String objectUID) {
         ArchiveAEExtension arcAE = device.getApplicationEntity(localAET, true).getAEExtension(ArchiveAEExtension.class);
         RetrieveContext ctx = new RetrieveContextImpl(this, arcAE, localAET, arcAE.getQueryRetrieveView());
-        initCodes(ctx);
         if (studyUID != null)
             ctx.setStudyInstanceUIDs(studyUID);
         if (seriesUID != null)
@@ -271,11 +230,22 @@ public class RetrieveServiceImpl implements RetrieveService {
         return ctx;
     }
 
+    @Override
+    public RetrieveContext newRetrieveContext(String localAET, Sequence refSopSeq) {
+        ArchiveAEExtension arcAE = device.getApplicationEntity(localAET, true).getAEExtension(ArchiveAEExtension.class);
+        RetrieveContext ctx = new RetrieveContextImpl(this, arcAE, localAET, arcAE.getQueryRetrieveView());
+        ctx.setQueryRetrieveLevel(QueryRetrieveLevel2.IMAGE);
+        String[] uids = refSopSeq.stream()
+                .map(refSop -> refSop.getString(Tag.ReferencedSOPInstanceUID))
+                .toArray(String[]::new);
+        ctx.setSopInstanceUIDs(uids);
+        return ctx;
+    }
+
     private RetrieveContext newRetrieveContext(ArchiveAEExtension arcAE, Association as, QueryRetrieveLevel2 qrLevel, Attributes keys) {
         RetrieveContext ctx = new RetrieveContextImpl(this, arcAE, as.getLocalAET(), arcAE.getQueryRetrieveView());
         ctx.setRequestAssociation(as);
         ctx.setQueryRetrieveLevel(qrLevel);
-        initCodes(ctx);
         IDWithIssuer pid = IDWithIssuer.pidOf(keys);
         if (pid != null)
             ctx.setPatientIDs(pid);
@@ -297,14 +267,6 @@ public class RetrieveServiceImpl implements RetrieveService {
         ctx.setSeriesMetadataUpdate(metadataUpdate);
         ctx.setObjectType(null);
         return ctx;
-    }
-
-    private void initCodes(RetrieveContext ctx) {
-        QueryRetrieveView qrView = ctx.getQueryRetrieveView();
-        ctx.setHideRejectionNotesWithCode(
-                codeCache.findOrCreateEntities(qrView.getHideRejectionNotesWithCodes()));
-        ctx.setShowInstancesRejectedByCode(
-                codeCache.findOrCreateEntities(qrView.getShowInstancesRejectedByCodes()));
     }
 
     @Override
@@ -353,16 +315,14 @@ public class RetrieveServiceImpl implements RetrieveService {
 
     @Override
     public boolean calculateMatches(RetrieveContext ctx) throws DicomServiceException {
-        StatelessSession session = openStatelessSession();
+        CriteriaBuilder cb = em.getCriteriaBuilder();
         Collection<InstanceLocations> matches = ctx.getMatches();
         matches.clear();
         try {
-            HashMap<Long,InstanceLocations> instMap = new HashMap<>();
-            HashMap<Long,Attributes> seriesAttrsMap = new HashMap<>();
             HashMap<Long,StudyInfo> studyInfoMap = new HashMap<>();
             Series.MetadataUpdate metadataUpdate = ctx.getSeriesMetadataUpdate();
             if (metadataUpdate != null && metadataUpdate.instancePurgeState == Series.InstancePurgeState.PURGED) {
-                SeriesAttributes seriesAttributes = getSeriesAttributes(session, metadataUpdate.seriesPk);
+                SeriesAttributes seriesAttributes = new SeriesAttributes(em, cb, metadataUpdate.seriesPk);
                 studyInfoMap.put(seriesAttributes.studyInfo.getStudyPk(), seriesAttributes.studyInfo);
                 ctx.getSeriesInfos().add(seriesAttributes.seriesInfo);
                 addLocationsFromMetadata(ctx,
@@ -370,42 +330,9 @@ public class RetrieveServiceImpl implements RetrieveService {
                         metadataUpdate.storagePath,
                         seriesAttributes.attrs);
             } else {
-                for (Tuple tuple : createQuery(ctx, session).fetch()) {
-                    Long instPk = tuple.get(QInstance.instance.pk);
-                    InstanceLocations match = instMap.get(instPk);
-                    if (match == null) {
-                        Long seriesPk = tuple.get(QSeries.series.pk);
-                        Attributes seriesAttrs = seriesAttrsMap.get(seriesPk);
-                        if (seriesAttrs == null) {
-                            SeriesAttributes seriesAttributes = getSeriesAttributes(session, seriesPk);
-                            studyInfoMap.put(seriesAttributes.studyInfo.getStudyPk(), seriesAttributes.studyInfo);
-                            ctx.getSeriesInfos().add(seriesAttributes.seriesInfo);
-                            ctx.setPatientUpdatedTime(seriesAttributes.patientUpdatedTime);
-                            seriesAttrsMap.put(seriesPk, seriesAttrs = seriesAttributes.attrs);
-                        }
-                        Attributes instAttrs = AttributesBlob.decodeAttributes(
-                                tuple.get(QueryBuilder.instanceAttributesBlob.encodedAttributes), null);
-                        Attributes.unifyCharacterSets(seriesAttrs, instAttrs);
-                        instAttrs.addAll(seriesAttrs);
-                        match = instanceLocationsFromDB(tuple, instAttrs);
-                        matches.add(match);
-                        instMap.put(instPk, match);
-                    }
-                    addLocation(match, tuple);
-                }
-                if (ctx.isConsiderPurgedInstances()) {
-                    for (Tuple tuple : queryMetadataStoragePath(ctx, session).fetch()) {
-                        Long seriesPk = tuple.get(QSeries.series.pk);
-                        SeriesAttributes seriesAttributes = getSeriesAttributes(session, seriesPk);
-                        studyInfoMap.put(seriesAttributes.studyInfo.getStudyPk(), seriesAttributes.studyInfo);
-                        ctx.getSeriesInfos().add(seriesAttributes.seriesInfo);
-                        ctx.setPatientUpdatedTime(seriesAttributes.patientUpdatedTime);
-                        addLocationsFromMetadata(ctx,
-                                tuple.get(QMetadata.metadata.storageID),
-                                tuple.get(QMetadata.metadata.storagePath),
-                                seriesAttributes.attrs);
-                    }
-                }
+                new LocationQuery(em, cb, ctx, codeCache).execute(studyInfoMap);
+                if (ctx.isConsiderPurgedInstances())
+                    queryLocationsFromMetadata(ctx, cb, studyInfoMap);
             }
             ctx.setNumberOfMatches(matches.size());
             ctx.getStudyInfos().addAll(studyInfoMap.values());
@@ -413,20 +340,94 @@ public class RetrieveServiceImpl implements RetrieveService {
             return !matches.isEmpty();
         } catch (IOException e) {
             throw new DicomServiceException(Status.UnableToCalculateNumberOfMatches, e);
-        } finally {
-            session.close();
         }
     }
 
-    private InstanceLocations instanceLocationsFromDB(Tuple tuple, Attributes instAttrs) {
-        InstanceLocationsImpl inst = new InstanceLocationsImpl(instAttrs);
-        inst.setRetrieveAETs(tuple.get(QInstance.instance.retrieveAETs));
-        inst.setExternalRetrieveAET(tuple.get(QInstance.instance.externalRetrieveAET));
-        inst.setAvailability(tuple.get(QInstance.instance.availability));
-        inst.setCreatedTime(tuple.get(QInstance.instance.createdTime));
-        inst.setUpdatedTime(tuple.get(QInstance.instance.updatedTime));
-        inst.setRejectionCode(rejectionCode(tuple));
-        return inst;
+    private void queryLocationsFromMetadata(RetrieveContext ctx, CriteriaBuilder cb, Map<Long, StudyInfo> studyInfoMap)
+            throws IOException {
+        CriteriaQuery<Tuple> q = cb.createTupleQuery();
+        Root<Series> series = q.from(Series.class);
+        Join<Series, Study> study = series.join(Series_.study);
+        Join<Series, Metadata> metadata = series.join(Series_.metadata, JoinType.LEFT);
+        List<Predicate> predicates = new ArrayList<>();
+        QueryBuilder builder = new QueryBuilder(cb);
+        if (!QueryBuilder.isUniversalMatching(ctx.getPatientIDs())) {
+            builder.patientIDPredicate(predicates, study.join(Study_.patient), ctx.getPatientIDs());
+        }
+        builder.accessControl(predicates, study, ctx.getAccessControlIDs());
+        builder.uidsPredicate(predicates, study.get(Study_.studyInstanceUID), ctx.getStudyInstanceUIDs());
+        builder.uidsPredicate(predicates, series.get(Series_.seriesInstanceUID), ctx.getSeriesInstanceUIDs());
+        predicates.add(cb.equal(series.get(Series_.instancePurgeState), Series.InstancePurgeState.PURGED));
+        q.multiselect(
+                series.get(Series_.pk),
+                metadata.get(Metadata_.storageID),
+                metadata.get(Metadata_.storagePath));
+        q.where(predicates.toArray(new Predicate[0]));
+        for (Tuple tuple : em.createQuery(q).getResultList()) {
+            Long seriesPk = tuple.get(series.get(Series_.pk));
+            SeriesAttributes seriesAttributes = new SeriesAttributes(em, cb, seriesPk);
+            studyInfoMap.put(seriesAttributes.studyInfo.getStudyPk(), seriesAttributes.studyInfo);
+            ctx.getSeriesInfos().add(seriesAttributes.seriesInfo);
+            ctx.setPatientUpdatedTime(seriesAttributes.patientUpdatedTime);
+            addLocationsFromMetadata(ctx,
+                    tuple.get(metadata.get(Metadata_.storageID)),
+                    tuple.get(metadata.get(Metadata_.storagePath)),
+                    seriesAttributes.attrs);
+        }
+    }
+
+    @Override
+    public Collection<InstanceLocations> queryInstances(
+            StoreSession session, Attributes instanceRefs, String targetStudyIUID)
+            throws IOException {
+        Map<String, String> uidMap = session.getUIDMap();
+        String sourceStudyUID = instanceRefs.getString(Tag.StudyInstanceUID);
+        uidMap.put(sourceStudyUID, targetStudyIUID);
+        Sequence refSeriesSeq = instanceRefs.getSequence(Tag.ReferencedSeriesSequence);
+        Map<String, Set<String>> refIUIDsBySeriesIUID = new HashMap<>();
+        RetrieveContext ctx;
+        if (refSeriesSeq == null) {
+            ctx = newRetrieveContextIOCM(session.getHttpRequest(), session.getCalledAET(),
+                    sourceStudyUID);
+        } else {
+            for (Attributes item : refSeriesSeq) {
+                String seriesIUID = item.getString(Tag.SeriesInstanceUID);
+                uidMap.put(seriesIUID, UIDUtils.createUID());
+                refIUIDsBySeriesIUID.put(seriesIUID, refIUIDs(item.getSequence(Tag.ReferencedSOPSequence)));
+            }
+            ctx = newRetrieveContextIOCM(session.getHttpRequest(), session.getCalledAET(),
+                    sourceStudyUID, refIUIDsBySeriesIUID.keySet().toArray(StringUtils.EMPTY_STRING));
+        }
+        ctx.setObjectType(null);
+        if (!calculateMatches(ctx))
+            return null;
+        Collection<InstanceLocations> matches = ctx.getMatches();
+        Iterator<InstanceLocations> matchesIter = matches.iterator();
+        while (matchesIter.hasNext()) {
+            InstanceLocations il = matchesIter.next();
+            if (contains(refIUIDsBySeriesIUID, il)) {
+                uidMap.put(il.getSopInstanceUID(), UIDUtils.createUID());
+                if (refSeriesSeq == null)
+                    if (!uidMap.containsKey(il.getAttributes().getString(Tag.SeriesInstanceUID)))
+                        uidMap.put(il.getAttributes().getString(Tag.SeriesInstanceUID), UIDUtils.createUID());
+            } else
+                matchesIter.remove();
+        }
+        return matches;
+    }
+
+    private Set<String> refIUIDs(Sequence refSOPSeq) {
+        if (refSOPSeq == null)
+            return null;
+        Set<String> iuids = new HashSet<>(refSOPSeq.size() * 4 / 3 + 1);
+        for (Attributes refSOP : refSOPSeq)
+            iuids.add(refSOP.getString(Tag.ReferencedSOPInstanceUID));
+        return iuids;
+    }
+
+    private boolean contains(Map<String, Set<String>> refIUIDsBySeriesIUID, InstanceLocations il) {
+        Set<String> iuids = refIUIDsBySeriesIUID.get(il.getAttributes().getString(Tag.SeriesInstanceUID));
+        return iuids == null || iuids.contains(il.getSopInstanceUID());
     }
 
     private void addLocationsFromMetadata(
@@ -443,7 +444,7 @@ public class RetrieveServiceImpl implements RetrieveService {
                     Attributes metadata = parseJSON(zip, !ctx.isRetrieveMetadata());
                     if (qrView == null
                             || !qrView.hideRejectedInstance(
-                                metadata.getNestedDataset(ArchiveTag.PrivateCreator, ArchiveTag.RejectionCodeSequence))
+                                metadata.getNestedDataset(PrivateTag.PrivateCreator, PrivateTag.RejectionCodeSequence))
                             && !qrView.hideRejectionNote(metadata)) {
                         Attributes.unifyCharacterSets(seriesAttrs, metadata);
                         metadata.addAll(seriesAttrs);
@@ -470,55 +471,31 @@ public class RetrieveServiceImpl implements RetrieveService {
         InstanceLocationsImpl inst = new InstanceLocationsImpl(attrs);
         inst.setRetrieveAETs(StringUtils.concat(attrs.getStrings(Tag.RetrieveAETitle), '\\'));
         inst.setAvailability(Availability.valueOf(attrs.getString(Tag.InstanceAvailability)));
-        inst.setCreatedTime(attrs.getDate(ArchiveTag.PrivateCreator, ArchiveTag.InstanceReceiveDateTime));
-        inst.setUpdatedTime(attrs.getDate(ArchiveTag.PrivateCreator, ArchiveTag.InstanceUpdateDateTime));
-        inst.setRejectionCode(attrs.getNestedDataset(ArchiveTag.PrivateCreator, ArchiveTag.RejectionCodeSequence));
+        inst.setCreatedTime(attrs.getDate(PrivateTag.PrivateCreator, PrivateTag.InstanceReceiveDateTime));
+        inst.setUpdatedTime(attrs.getDate(PrivateTag.PrivateCreator, PrivateTag.InstanceUpdateDateTime));
+        inst.setRejectionCode(attrs.getNestedDataset(PrivateTag.PrivateCreator, PrivateTag.RejectionCodeSequence));
         inst.setExternalRetrieveAET(
-                attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.InstanceExternalRetrieveAETitle));
+                attrs.getString(PrivateTag.PrivateCreator, PrivateTag.InstanceExternalRetrieveAETitle));
         inst.setContainsMetadata(true);
-        inst.getLocations().add(new Location.Builder()
-                .storageID(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageID))
-                .storagePath(StringUtils.concat(attrs.getStrings(ArchiveTag.PrivateCreator, ArchiveTag.StoragePath), '/'))
-                .transferSyntaxUID(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageTransferSyntaxUID))
-                .digest(attrs.getString(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectDigest))
-                .size(attrs.getInt(ArchiveTag.PrivateCreator, ArchiveTag.StorageObjectSize, -1))
-                .build());
+        addLocationFromMetadata(inst, attrs);
+        Sequence otherStorageSeq = attrs.getSequence(PrivateTag.PrivateCreator, PrivateTag.OtherStorageSequence);
+        if (otherStorageSeq != null)
+            for (Attributes otherStorageItem : otherStorageSeq)
+                addLocationFromMetadata(inst, otherStorageItem);
         if (ctx.getSeriesMetadataUpdate() == null)
-            attrs.removePrivateAttributes(ArchiveTag.PrivateCreator, 0x7777);
+            attrs.removePrivateAttributes(PrivateTag.PrivateCreator, 0x7777);
         return inst;
     }
 
-    private Attributes rejectionCode(Tuple tuple) {
-        if (tuple.get(QCodeEntity.codeEntity.codeValue) == null)
-            return null;
-
-        Attributes item = new Attributes();
-        item.setString(Tag.CodeValue, VR.SH, tuple.get(QCodeEntity.codeEntity.codeValue));
-        item.setString(Tag.CodeMeaning, VR.LO, tuple.get(QCodeEntity.codeEntity.codeMeaning));
-        item.setString(Tag.CodingSchemeDesignator, VR.SH, tuple.get(QCodeEntity.codeEntity.codingSchemeDesignator));
-        return item;
-    }
-
-    private void addLocation(InstanceLocations match, Tuple tuple) {
-        Long pk = tuple.get(QLocation.location.pk);
-        if (pk == null)
-            return;
-
-        Location location = new Location.Builder()
-                .pk(pk)
-                .storageID(tuple.get(QLocation.location.storageID))
-                .storagePath(tuple.get(QLocation.location.storagePath))
-                .objectType(tuple.get(QLocation.location.objectType))
-                .transferSyntaxUID(tuple.get(QLocation.location.transferSyntaxUID))
-                .digest(tuple.get(QLocation.location.digest))
-                .size(tuple.get(QLocation.location.size))
-                .status(tuple.get(QLocation.location.status))
-                .build();
-        Long uidMapPk = tuple.get(QUIDMap.uIDMap.pk);
-        if (uidMapPk != null) {
-            location.setUidMap(new UIDMap(uidMapPk, tuple.get(QUIDMap.uIDMap.encodedMap)));
-        }
-        match.getLocations().add(location);
+    private void addLocationFromMetadata(InstanceLocationsImpl inst, Attributes attrs) {
+        inst.getLocations().add(new Location.Builder()
+                .storageID(attrs.getString(PrivateTag.PrivateCreator, PrivateTag.StorageID))
+                .storagePath(StringUtils.concat(attrs.getStrings(PrivateTag.PrivateCreator, PrivateTag.StoragePath), '/'))
+                .transferSyntaxUID(attrs.getString(PrivateTag.PrivateCreator, PrivateTag.StorageTransferSyntaxUID))
+                .digest(attrs.getString(PrivateTag.PrivateCreator, PrivateTag.StorageObjectDigest))
+                .size(attrs.getInt(PrivateTag.PrivateCreator, PrivateTag.StorageObjectSize, -1))
+                .status(attrs.getString(PrivateTag.PrivateCreator, PrivateTag.StorageObjectStatus))
+                .build());
     }
 
     @Override
@@ -542,149 +519,73 @@ public class RetrieveServiceImpl implements RetrieveService {
         }
     }
 
-    private static class SeriesAttributes {
-        final Attributes attrs;
-        final StudyInfo studyInfo;
-        final SeriesInfo seriesInfo;
-        final Date patientUpdatedTime;
-
-        SeriesAttributes(Attributes attrs, StudyInfo studyInfo, SeriesInfo seriesInfo, Date patientUpdatedTime) {
-            this.attrs = attrs;
-            this.studyInfo = studyInfo;
-            this.seriesInfo = seriesInfo;
-            this.patientUpdatedTime = patientUpdatedTime;
-        }
-
+    @Override
+    public StoreService getStoreService() {
+        return storeService;
     }
 
-    private SeriesAttributes getSeriesAttributes(StatelessSession session, Long seriesPk) {
-        Tuple tuple = new HibernateQuery<Void>(session).select(PATIENT_STUDY_SERIES_ATTRS)
-                .from(QSeries.series)
-                .join(QSeries.series.attributesBlob, QueryBuilder.seriesAttributesBlob)
-                .join(QSeries.series.study, QStudy.study)
-                .join(QStudy.study.attributesBlob, QueryBuilder.studyAttributesBlob)
-                .join(QStudy.study.patient, QPatient.patient)
-                .join(QPatient.patient.attributesBlob, QueryBuilder.patientAttributesBlob)
-                .where(QSeries.series.pk.eq(seriesPk))
-                .fetchOne();
-        StudyInfo studyInfo = new StudyInfoImpl(
-                tuple.get(QStudy.study.pk),
-                tuple.get(QStudy.study.studyInstanceUID),
-                tuple.get(QStudy.study.accessTime),
-                tuple.get(QStudy.study.failedRetrieves),
-                tuple.get(QStudy.study.completeness),
-                tuple.get(QStudy.study.modifiedTime),
-                tuple.get(QStudy.study.expirationDate),
-                tuple.get(QStudy.study.accessControlID));
-        SeriesInfo seriesInfo = new SeriesInfoImpl(
-                studyInfo.getStudyInstanceUID(),
-                tuple.get(QSeries.series.seriesInstanceUID),
-                tuple.get(QSeries.series.failedRetrieves),
-                tuple.get(QSeries.series.completeness),
-                tuple.get(QSeries.series.updatedTime),
-                tuple.get(QSeries.series.expirationDate),
-                tuple.get(QSeries.series.sourceAET));
-        Date patientUpdatedTime = tuple.get(QPatient.patient.updatedTime);
-        Attributes patAttrs = AttributesBlob.decodeAttributes(
-                tuple.get(QueryBuilder.patientAttributesBlob.encodedAttributes), null);
-        Attributes studyAttrs = AttributesBlob.decodeAttributes(
-                tuple.get(QueryBuilder.studyAttributesBlob.encodedAttributes), null);
-        Attributes seriesAttrs = AttributesBlob.decodeAttributes(
-                tuple.get(QueryBuilder.seriesAttributesBlob.encodedAttributes), null);
-        Attributes.unifyCharacterSets(patAttrs, studyAttrs, seriesAttrs);
-        Attributes attrs = new Attributes(patAttrs.size() + studyAttrs.size() + seriesAttrs.size() + 5);
-        attrs.addAll(patAttrs);
-        attrs.addAll(studyAttrs);
-        attrs.addAll(seriesAttrs);
-        return new SeriesAttributes(attrs, studyInfo, seriesInfo, patientUpdatedTime);
-}
-
-    private HibernateQuery<Tuple> createQuery(RetrieveContext ctx, StatelessSession session) {
-        HibernateQuery<Tuple> query = new HibernateQuery<Void>(session).select(SELECT)
-                .from(QInstance.instance)
-                .join(QInstance.instance.attributesBlob, QueryBuilder.instanceAttributesBlob)
-                .join(QInstance.instance.series, QSeries.series)
-                .join(QSeries.series.study, QStudy.study)
-                .leftJoin(QInstance.instance.rejectionNoteCode, QCodeEntity.codeEntity)
-                .leftJoin(QInstance.instance.locations, QLocation.location);
-
-        Location.ObjectType objectType = ctx.getObjectType();
-        if (objectType != null)
-            query.on(QLocation.location.objectType.eq(objectType));
-
-        query = query.leftJoin(QLocation.location.uidMap, QUIDMap.uIDMap);
-
-        if (ctx.getSeriesMetadataUpdate() != null)
-            return query.where(QSeries.series.pk.eq(ctx.getSeriesMetadataUpdate().seriesPk))
-                    .orderBy(QInstance.instance.instanceNumber.asc());
-
-        IDWithIssuer[] pids = ctx.getPatientIDs();
-        if (pids.length > 0) {
-            query = query.join(QStudy.study.patient, QPatient.patient);
-            query = QueryBuilder.applyPatientIDJoins(query, pids);
-        }
-
-        BooleanBuilder predicate = new BooleanBuilder();
-        predicate.and(QueryBuilder.patientIDPredicate(pids));
-        predicate.and(QueryBuilder.accessControl(ctx.getAccessControlIDs()));
-        predicate.and(QueryBuilder.uidsPredicate(QStudy.study.studyInstanceUID, ctx.getStudyInstanceUIDs()));
-        predicate.and(QueryBuilder.uidsPredicate(QSeries.series.seriesInstanceUID, ctx.getSeriesInstanceUIDs()));
-        predicate.and(QueryBuilder.uidsPredicate(QInstance.instance.sopInstanceUID, ctx.getSopInstanceUIDs()));
-        if (ctx.getQueryRetrieveView() != null) {
-            predicate.and(QueryBuilder.hideRejectedInstance(ctx.getShowInstancesRejectedByCode(),
-                    ctx.isHideNotRejectedInstances()));
-            predicate.and(QueryBuilder.hideRejectionNote(ctx.getHideRejectionNotesWithCode()));
-        }
-        return query.where(predicate);
-    }
-
-    private HibernateQuery<Tuple> queryMetadataStoragePath(RetrieveContext ctx, StatelessSession session) {
-        HibernateQuery<Tuple> query = new HibernateQuery<Void>(session).select(METADATA_STORAGE_PATH)
-                .from(QSeries.series)
-                .join(QSeries.series.metadata, QMetadata.metadata)
-                .join(QSeries.series.study, QStudy.study);
-
-        IDWithIssuer[] pids = ctx.getPatientIDs();
-        if (pids.length > 0) {
-            query = query.join(QStudy.study.patient, QPatient.patient);
-            query = QueryBuilder.applyPatientIDJoins(query, pids);
-        }
-
-        BooleanBuilder predicate = new BooleanBuilder();
-        predicate.and(QueryBuilder.patientIDPredicate(pids));
-        predicate.and(QueryBuilder.accessControl(ctx.getAccessControlIDs()));
-        predicate.and(QueryBuilder.uidsPredicate(QStudy.study.studyInstanceUID, ctx.getStudyInstanceUIDs()));
-        predicate.and(QueryBuilder.uidsPredicate(QSeries.series.seriesInstanceUID, ctx.getSeriesInstanceUIDs()));
-        predicate.and(QSeries.series.instancePurgeState.eq(Series.InstancePurgeState.PURGED));
-        return query.where(predicate);
+    @Override
+    public MetricsService getMetricsService() {
+        return metricsService;
     }
 
     @Override
     public Transcoder openTranscoder(RetrieveContext ctx, InstanceLocations inst,
                                      Collection<String> tsuids, boolean fmi) throws IOException {
-        LocationDicomInputStream locationInputStream = openLocationInputStream(ctx, inst);
-        String tsuid = locationInputStream.getLocation().getTransferSyntaxUID();
-        if (!tsuids.isEmpty() && !tsuids.contains(tsuid)) {
-            if (tsuids.contains(UID.ExplicitVRLittleEndian))
-                tsuid = UID.ExplicitVRLittleEndian;
-            else if (tsuids.contains(UID.ImplicitVRLittleEndian))
-                tsuid = UID.ExplicitVRLittleEndian;
-            else
-                throw new NoPresentationContextException(inst.getSopClassUID(), tsuid);
-        }
-        Transcoder transcoder = new Transcoder(locationInputStream.getDicomInputStream());
+        removeUnsupportedTransferSyntax(inst, tsuids);
+        LocationInputStream locationInputStream = openLocationInputStream(ctx, inst);
+        Transcoder transcoder = new Transcoder(toDicomInputStream(locationInputStream));
         transcoder.setIncludeBulkData(DicomInputStream.IncludeBulkData.URI);
+        ArchiveAEExtension arcAE = ctx.getArchiveAEExtension();
+        transcoder.setBulkDataDescriptor(arcAE.getBulkDataDescriptor());
+        transcoder.setBulkDataDirectory(arcAE.getBulkDataSpoolDirectoryFile());
         transcoder.setConcatenateBulkDataFiles(true);
-        transcoder.setBulkDataDirectory(ctx.getArchiveAEExtension().getBulkDataSpoolDirectoryFile());
-        transcoder.setDestinationTransferSyntax(tsuid);
+        transcoder.setDestinationTransferSyntax(selectTransferSyntax(locationInputStream, tsuids));
         transcoder.setCloseOutputStream(false);
         transcoder.setIncludeFileMetaInformation(fmi);
         return transcoder;
     }
 
+    private static void removeUnsupportedTransferSyntax(InstanceLocations inst, Collection<String> tsuids)
+            throws NoPresentationContextException {
+        if (tsuids.isEmpty()
+                || tsuids.contains(UID.ExplicitVRLittleEndian)
+                || tsuids.contains(UID.ImplicitVRLittleEndian))
+            return;
+
+        Location prev = null;
+        List<Location> locations = inst.getLocations();
+        for (Iterator<Location> iter = locations.iterator(); iter.hasNext();) {
+            Location next = iter.next();
+            if (next.getObjectType()  != Location.ObjectType.DICOM_FILE
+                    || !tsuids.contains((prev = next).getTransferSyntaxUID()))
+                iter.remove();
+        }
+        if (locations.isEmpty())
+            throw new NoPresentationContextException(inst.getSopClassUID(), prev.getTransferSyntaxUID());
+    }
+
+    private static String selectTransferSyntax(LocationInputStream lis, Collection<String> tsuids) {
+        String tsuid = lis.location.getTransferSyntaxUID();
+        return tsuids.isEmpty() || tsuids.contains(tsuid)
+                ? tsuid
+                : tsuids.contains(UID.ExplicitVRLittleEndian)
+                ? UID.ExplicitVRLittleEndian
+                : UID.ImplicitVRLittleEndian;
+    }
+
     @Override
     public DicomInputStream openDicomInputStream(RetrieveContext ctx, InstanceLocations inst) throws IOException {
-        return openLocationInputStream(ctx, inst).getDicomInputStream();
+        return toDicomInputStream(openLocationInputStream(ctx, inst));
+    }
+
+    private static DicomInputStream toDicomInputStream(LocationInputStream lis) throws IOException {
+        try {
+            return new DicomInputStream(lis.stream);
+        } catch (IOException e) {
+            SafeClose.close(lis.stream);
+            throw e;
+        }
     }
 
     @Override
@@ -720,7 +621,7 @@ public class RetrieveServiceImpl implements RetrieveService {
 
     @Override
     public AttributesCoercion getAttributesCoercion(RetrieveContext ctx, InstanceLocations inst) {
-        return uidRemap(inst, new MergeAttributesCoercion(inst.getAttributes(), coercion(ctx, inst)));
+        return uidRemap(inst, coercion(ctx, inst));
     }
 
     @Override
@@ -829,8 +730,7 @@ public class RetrieveServiceImpl implements RetrieveService {
         for (String studyIUID : ctx.getStudyInstanceUIDs()) {
             List<Attributes> studies;
             try {
-                studies = cfindscu.find(localAE, findSCP, Priority.NORMAL,
-                        QueryRetrieveLevel2.STUDY, studyIUID, null, null,
+                studies = cfindscu.findStudy(localAE, findSCP, Priority.NORMAL, studyIUID,
                         Tag.NumberOfStudyRelatedInstances);
             } catch (Exception e) {
                 LOG.warn("Failed to query Study[{}] from {} - cannot verify number of retrieved objects from {}:\n",
@@ -853,22 +753,26 @@ public class RetrieveServiceImpl implements RetrieveService {
     }
 
     private AttributesCoercion coercion(RetrieveContext ctx, InstanceLocations inst) {
+        Attributes instAttributes = inst.getAttributes();
         if (ctx.isUpdateSeriesMetadata())
-            return new SeriesMetadataAttributeCoercion(ctx, inst);
+            return new MergeAttributesCoercion(instAttributes, new SeriesMetadataAttributeCoercion(ctx, inst));
 
         ArchiveAEExtension aeExt = ctx.getArchiveAEExtension();
         ArchiveAttributeCoercion rule = aeExt.findAttributeCoercion(
-                ctx.getRequestorHostName(), ctx.getRequestorAET(), TransferCapability.Role.SCP, Dimse.C_STORE_RQ,
+                ctx.getRequestorHostName(), ctx.getDestinationAETitle(), TransferCapability.Role.SCP, Dimse.C_STORE_RQ,
                 inst.getSopClassUID());
         if (rule == null)
-            return null;
+            return new MergeAttributesCoercion(instAttributes, AttributesCoercion.NONE);
 
-        AttributesCoercion coercion = null;
+        AttributesCoercion coercion = DeIdentificationAttributesCoercion.valueOf(
+                rule.getDeIdentification(), AttributesCoercion.NONE);
         String xsltStylesheetURI = rule.getXSLTStylesheetURI();
         if (xsltStylesheetURI != null)
         try {
             Templates tpls = TemplatesCache.getDefault().get(StringUtils.replaceSystemProperties(xsltStylesheetURI));
-            coercion = new XSLTAttributesCoercion(tpls, null).includeKeyword(!rule.isNoKeywords());
+            coercion = new XSLTAttributesCoercion(tpls, coercion)
+                    .includeKeyword(!rule.isNoKeywords())
+                    .setupTransformer(setupTransformer(ctx));
         } catch (TransformerConfigurationException e) {
             LOG.error("{}: Failed to compile XSL: {}", ctx.getLocalAETitle(), xsltStylesheetURI, e);
         }
@@ -877,7 +781,20 @@ public class RetrieveServiceImpl implements RetrieveService {
             coercion = new CFindSCUAttributeCoercion(ctx.getLocalApplicationEntity(), leadingCFindSCP,
                     rule.getAttributeUpdatePolicy(), cfindscu, leadingCFindSCPQueryCache, coercion);
         }
+        if (!rule.isRetrieveAsReceived()) {
+            coercion = new MergeAttributesCoercion(instAttributes, coercion);
+        }
+        LOG.info("Coerce Attributes from rule: {}", rule);
         return coercion;
+    }
+
+    private SAXTransformer.SetupTransformer setupTransformer(RetrieveContext ctx) {
+        return t -> {
+            t.setParameter("LocalAET", ctx.getLocalAETitle());
+            if (ctx.getDestinationAETitle() != null)
+                t.setParameter("RemoteAET", ctx.getDestinationAETitle());
+            t.setParameter("RemoteHostname", ctx.getDestinationHostName());
+        };
     }
 
     private boolean isAccessable(ArchiveDeviceExtension arcDev, InstanceLocations match) {
@@ -888,33 +805,73 @@ public class RetrieveServiceImpl implements RetrieveService {
         return false;
     }
 
-    private LocationDicomInputStream openLocationInputStream(RetrieveContext ctx, InstanceLocations inst)
+    @Override
+    public LocationInputStream openLocationInputStream(RetrieveContext ctx, InstanceLocations inst)
             throws IOException {
-        IOException ex = null;
         String studyInstanceUID = inst.getAttributes().getString(Tag.StudyInstanceUID);
-        for (Location location : inst.getLocations()) {
-            if (location.getObjectType() == Location.ObjectType.DICOM_FILE)
-                try {
-                    return openLocationInputStream(getStorage(location.getStorageID(), ctx), location, studyInstanceUID);
-                } catch (IOException e) {
-                    ex = e;
-                }
+        ArchiveDeviceExtension arcdev = getArchiveDeviceExtension();
+        Map<Availability, List<Location>> locationsByAvailability = inst.getLocations()
+                .stream().filter(Location::isDicomFile)
+                .collect(Collectors.groupingBy(l -> arcdev
+                        .getStorageDescriptor(l.getStorageID()).getInstanceAvailability()));
+
+        List<Location> locations = locationsByAvailability.get(Availability.ONLINE);
+        if (locations == null)
+            locations = locationsByAvailability.get(Availability.NEARLINE);
+        else if (locationsByAvailability.containsKey(Availability.NEARLINE))
+            locations.addAll(locationsByAvailability.get(Availability.NEARLINE));
+
+        if (locations == null || locations.isEmpty()) {
+            throw new IOException("Failed to find location of " + inst);
         }
-        if (ex != null) throw ex;
-        return null;
+        IOException ex = null;
+        for (Location location : locations) {
+            try {
+                LOG.debug("Read {} from {}", inst, location);
+                return openLocationInputStream(getStorage(location.getStorageID(), ctx), location, studyInstanceUID);
+            } catch (IOException e) {
+                ex = e;
+                Location.Status errStatus = toStatus(e);
+                if (errStatus == Location.Status.MISSING_OBJECT && !exists(location)) {
+                    LOG.warn("{} of {} no longer exists", location, inst);
+                    ctx.incrementMissing();
+                } else {
+                    LOG.warn("Failed to read {} from {}:\n", inst, location, e);
+                    ctx.getUpdateLocations().add(new UpdateLocation(inst, location, errStatus, null));
+                }
+            }
+        }
+        throw ex;
     }
 
-    private LocationDicomInputStream openLocationInputStream(
+    private boolean exists(Location location) {
+        try {
+            em.createNamedQuery(Location.EXISTS).setParameter(1, location.getPk()).getSingleResult();
+            return true;
+        } catch (NoResultException e) {
+            return false;
+        }
+    }
+
+    private static Location.Status toStatus(IOException e) {
+        return e instanceof NoSuchFileException ? Location.Status.MISSING_OBJECT : Location.Status.FAILED_TO_FETCH_OBJECT;
+    }
+
+    @Override
+    public void updateLocations(RetrieveContext ctx) {
+        if (!ctx.getUpdateLocations().isEmpty()) {
+            if (ctx.isUpdateLocationStatusOnRetrieve())
+                storeService.updateLocations(ctx.getArchiveAEExtension(), ctx.getUpdateLocations());
+            retrieveFailures.fire(ctx);
+        }
+    }
+
+    private LocationInputStream openLocationInputStream(
             Storage storage, Location location, String studyInstanceUID)
             throws IOException {
         ReadContext readContext = createReadContext(storage, location.getStoragePath(), studyInstanceUID);
         InputStream stream = storage.openInputStream(readContext);
-        try {
-            return new LocationDicomInputStream(new DicomInputStream(stream), readContext, location);
-        } catch (IOException e) {
-            SafeClose.close(stream);
-            throw e;
-        }
+        return new LocationInputStream(stream, readContext, location);
     }
 
     private ReadContext createReadContext(Storage storage, String storagePath, String studyInstanceUID) {
@@ -924,7 +881,8 @@ public class RetrieveServiceImpl implements RetrieveService {
         return readContext;
     }
 
-    private Storage getStorage(String storageID, RetrieveContext ctx) {
+    @Override
+    public Storage getStorage(String storageID, RetrieveContext ctx) {
         Storage storage = ctx.getStorage(storageID);
         if (storage == null) {
             ArchiveDeviceExtension arcDev = getArchiveDeviceExtension();
@@ -961,7 +919,7 @@ public class RetrieveServiceImpl implements RetrieveService {
     }
 
     private Attributes parseJSON(InputStream in, boolean skipBulkDataURI) throws IOException {
-        JSONReader jsonReader = new JSONReader(Json.createParser(new InputStreamReader(in, "UTF-8")));
+        JSONReader jsonReader = new JSONReader(Json.createParser(new InputStreamReader(in, StandardCharsets.UTF_8)));
         jsonReader.setSkipBulkDataURI(skipBulkDataURI);
         return jsonReader.readDataset(null);
     }
@@ -970,6 +928,10 @@ public class RetrieveServiceImpl implements RetrieveService {
         Attributes attrs;
         try (DicomInputStream dis = openDicomInputStream(ctx, inst)) {
             dis.setIncludeBulkData(DicomInputStream.IncludeBulkData.URI);
+            ArchiveAEExtension arcAE = ctx.getArchiveAEExtension();
+            dis.setBulkDataDescriptor(arcAE != null
+                    ? arcAE.getBulkDataDescriptor()
+                    : getArchiveDeviceExtension().getBulkDataDescriptor());
             dis.setBulkDataCreator(new BulkDataCreator() {
                 @Override
                 public BulkData createBulkData(DicomInputStream dis) throws IOException {

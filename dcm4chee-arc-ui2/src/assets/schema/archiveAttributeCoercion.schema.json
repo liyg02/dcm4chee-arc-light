@@ -7,8 +7,10 @@
     "dcmDIMSE",
     "dicomTransferRole",
     "dcmRulePriority",
+    "dcmRetrieveAsReceived",
     "dcmNoKeywords",
-    "dcmAttributeUpdatePolicy"
+    "dcmAttributeUpdatePolicy",
+    "dcmTrimISO2022CharacterSet"
   ],
   "properties": {
     "cn": {
@@ -68,6 +70,27 @@
       },
       "format": "dcmSOPClass"
     },
+    "dcmRetrieveAsReceived": {
+      "title": "Retrieve as Received",
+      "description": "Disables merge of DB information into the retrieved Composite Object, returning the objects as received. Only effective with DIMSE = C_STORE_RQ and DICOM Transfer Role = SCP.",
+      "type": "boolean",
+      "default": false
+    },
+    "dcmDeIdentification": {
+      "title": "De-identification",
+      "description": "De-identify objects according the Basic Application Level Confidentiality Profile specified in DICOM PS3.15. Selecting any Option implicitly includes the Basic Application Level Confidentiality Profile.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "BasicApplicationConfidentialityProfile",
+          "RetainLongitudinalTemporalInformationFullDatesOption",
+          "RetainDeviceIdentityOption",
+          "RetainInstitutionIdentityOption",
+          "RetainUIDsOption"
+        ]
+      }
+    },
     "dcmURI": {
       "title": "XSL Stylesheet URI",
       "description": "Specifies URI of the XSL style sheet for Attribute Coercion",
@@ -102,13 +125,30 @@
     },
     "dcmAttributeUpdatePolicy": {
       "title": "Attribute Update Policy",
-      "description": "Specifies how attributes shall be updated with attributes fetched from Leading C-FIND SCP.",
+      "description": "Specifies how attributes shall be updated with attributes fetched from Leading C-FIND SCP. PRESERVE (= nullify attributes in the new dataset which are not present in the original dataset), SUPPLEMENT (= attributes not present in original dataset will be supplemented), REPLACE (= original dataset is completely replaced), MERGE (= attribute values will be written from new dataset), OVERWRITE (= attribute values if null in new dataset, will be nullified in original dataset)",
       "type": "string",
       "default": "MERGE",
       "enum": [
+        "PRESERVE",
         "SUPPLEMENT",
         "MERGE",
+        "REPLACE",
         "OVERWRITE"
+      ]
+    },
+    "dcmTrimISO2022CharacterSet": {
+      "title": "Trim ISO 2022 Character Set",
+      "description": "Replace single code for Single-Byte Character Sets with Code Extensions by code for Single-Byte Character Sets without Code Extensions. Only effective with DIMSE = C_STORE_RQ and DICOM Transfer Role = SCU.",
+      "type": "boolean",
+      "default": false
+    },
+    "dcmUseCallingAETitleAs": {
+      "title": "Use Calling AE Title as",
+      "description": "Identifies the attribute which is set to the value of the Calling AET if it is absent or empty. ScheduledStationAETitle (= Scheduled Station AE Title (0040,0001) in item of Scheduled Procedure Step Sequence (0040,0100)), SendingApplicationEntityTitleOfSeries (= Sending Application Entity Title of Series (7777,xx37)).",
+      "type": "string",
+      "enum": [
+        "ScheduledStationAETitle",
+        "SendingApplicationEntityTitleOfSeries"
       ]
     },
     "dcmNullifyTag": {
@@ -117,6 +157,29 @@
       "type": "array",
       "items" : { "type": "string" },
       "format": "dcmTag"
+    },
+    "dcmNullifyIssuerOfPatientID": {
+      "title": "Nullify Issuer of Patient ID",
+      "description": "Conditionally nullify Issuer of Patient ID (0010,0021) and Issuer of Patient ID Qualifiers Sequence (0010,0024) from received objects",
+      "type": "string",
+      "enum": [
+        "ALWAYS",
+        "MATCHING",
+        "NOT_MATCHING"
+      ]
+    },
+    "dcmIssuerOfPatientID": {
+      "title": "Issuer of Patient ID",
+      "description": "Issuer of Patient ID (0010,0021), and optionally also values for the Universal Entity ID (0040,0032) and the Universal Entity ID Type (0040,0033) of the Item of the Issuer of Patient ID Qualifiers Sequence (0010,0024) against values in received objects are matched, if Nullify Issuer of Patient ID is set to MATCHING or NOT_MATCHING. Format: <Issuer of Patient ID> [& <Universal Entity ID> & <Universal Entity ID Type>].",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dcmIssuerOfPatientIDFormat": {
+      "title": "Issuer Of Patient ID Format",
+      "description": "Format of Issuer of Patient ID (0010,0021) derived from other attributes. E.g. \"{00100010,hash}-{00100030}\": use hash value of Patient Name and Birth Date separated by \"-\". For coercion of existing values of Issuer of Patient ID in received objects also dcmNullifyIssuerOfPatientID must be set accordingly.",
+      "type": "string"
     },
     "dcmSupplementFromDeviceName": {
       "title": "Supplement from Device",

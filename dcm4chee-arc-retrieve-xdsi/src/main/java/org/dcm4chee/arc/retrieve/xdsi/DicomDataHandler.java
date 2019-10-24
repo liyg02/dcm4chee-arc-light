@@ -41,8 +41,8 @@ package org.dcm4chee.arc.retrieve.xdsi;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.imageio.codec.Transcoder;
 import org.dcm4che3.ws.rs.MediaTypes;
-import org.dcm4chee.arc.retrieve.InstanceLocations;
 import org.dcm4chee.arc.retrieve.RetrieveContext;
+import org.dcm4chee.arc.store.InstanceLocations;
 
 import javax.activation.DataHandler;
 import javax.enterprise.event.Event;
@@ -82,8 +82,10 @@ public class DicomDataHandler extends DataHandler {
                 }
             });
         }
-        if (retrieveEnd != null)
+        if (retrieveEnd != null) {
+            ctx.getRetrieveService().updateLocations(ctx);
             retrieveEnd.fire(ctx);
+        }
     }
 
 }

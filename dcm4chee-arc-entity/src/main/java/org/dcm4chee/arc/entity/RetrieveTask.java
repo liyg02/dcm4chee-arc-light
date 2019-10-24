@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -38,27 +38,34 @@
 
 package org.dcm4chee.arc.entity;
 
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.util.TagUtils;
 
 import javax.json.stream.JsonGenerator;
 import javax.persistence.*;
 import java.io.IOException;
+import java.io.Writer;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Oct 2017
  */
 @Entity
 @Table(name = "retrieve_task",
         indexes = {
                 @Index(columnList = "device_name"),
+                @Index(columnList = "queue_name"),
                 @Index(columnList = "local_aet"),
                 @Index(columnList = "remote_aet"),
                 @Index(columnList = "destination_aet"),
-                @Index(columnList = "study_iuid") }
+                @Index(columnList = "created_time"),
+                @Index(columnList = "updated_time"),
+                @Index(columnList = "study_iuid"),
+                @Index(columnList = "batch_id") }
 )
 @NamedQueries({
         @NamedQuery(name = RetrieveTask.UPDATE_BY_QUEUE_MESSAGE,
@@ -70,34 +77,24 @@ import java.util.Date;
                         "o.warning=?5, " +
                         "o.statusCode=?6, " +
                         "o.errorComment=?7 " +
-                        "where o.queueMessage=?1"),
-        @NamedQuery(name = RetrieveTask.DELETE_BY_QUEUE_NAME,
-                query = "delete from RetrieveTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1)"),
-        @NamedQuery(name = RetrieveTask.DELETE_BY_QUEUE_NAME_AND_STATUS,
-                query = "delete from RetrieveTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1 and o.status=?2)"),
-        @NamedQuery(name = RetrieveTask.DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE,
-                query = "delete from RetrieveTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1 and o.updatedTime<?2)"),
-        @NamedQuery(name = RetrieveTask.DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE,
-                query = "delete from RetrieveTask t where t.queueMessage in " +
-                        "(select o from QueueMessage o where o.queueName=?1 and o.status=?2 and o.updatedTime<?3)")
+                        "where o.queueMessage=?1")
 })
 public class RetrieveTask {
 
     public static final String UPDATE_BY_QUEUE_MESSAGE = "RetrieveTask.UpdateByQueueMessage";
-    public static final String DELETE_BY_QUEUE_NAME = "RetrieveTask.DeleteByQueueName";
-    public static final String DELETE_BY_QUEUE_NAME_AND_STATUS = "RetrieveTask.DeleteByQueueNameAndStatus";
-    public static final String DELETE_BY_QUEUE_NAME_AND_UPDATED_BEFORE =
-            "RetrieveTask.DeleteByQueueNameAndUpdatedBefore";
-    public static final String DELETE_BY_QUEUE_NAME_AND_STATUS_AND_UPDATED_BEFORE =
-            "RetrieveTask.DeleteByQueueNameAndStatusAndUpdatedBefore";
 
     @Id
     @GeneratedValue(strategy= GenerationType.IDENTITY)
     @Column(name = "pk")
     private long pk;
+
+    @Basic(optional = false)
+    @Column(name = "device_name")
+    private String deviceName;
+
+    @Basic(optional = false)
+    @Column(name = "queue_name")
+    private String queueName;
 
     @Basic(optional = false)
     @Temporal(TemporalType.TIMESTAMP)
@@ -108,10 +105,6 @@ public class RetrieveTask {
     @Temporal(TemporalType.TIMESTAMP)
     @Column(name = "updated_time")
     private Date updatedTime;
-
-    @Basic(optional = false)
-    @Column(name = "device_name", updatable = false)
-    private String deviceName;
 
     @Basic(optional = false)
     @Column(name = "local_aet", updatable = false)
@@ -134,6 +127,9 @@ public class RetrieveTask {
 
     @Column(name = "sop_iuid", updatable = false)
     private String sopInstanceUID;
+
+    @Column(name = "batch_id", updatable = false)
+    private String batchID;
 
     @Basic(optional = false)
     @Column(name = "remaining")
@@ -158,8 +154,8 @@ public class RetrieveTask {
     @Column(name = "error_comment")
     private String errorComment;
 
-    @OneToOne(cascade= CascadeType.ALL, orphanRemoval = true, optional = false)
-    @JoinColumn(name = "queue_msg_fk", updatable = false)
+    @OneToOne(cascade= CascadeType.ALL, orphanRemoval = true)
+    @JoinColumn(name = "queue_msg_fk")
     private QueueMessage queueMessage;
 
     @PrePersist
@@ -188,14 +184,6 @@ public class RetrieveTask {
 
     public Date getUpdatedTime() {
         return updatedTime;
-    }
-
-    public String getDeviceName() {
-        return deviceName;
-    }
-
-    public void setDeviceName(String deviceName) {
-        this.deviceName = deviceName;
     }
 
     public String getLocalAET() {
@@ -244,6 +232,30 @@ public class RetrieveTask {
 
     public void setSOPInstanceUID(String sopInstanceUID) {
         this.sopInstanceUID = sopInstanceUID;
+    }
+
+    public String getDeviceName() {
+        return deviceName;
+    }
+
+    public void setDeviceName(String deviceName) {
+        this.deviceName = deviceName;
+    }
+
+    public String getQueueName() {
+        return queueName;
+    }
+
+    public void setQueueName(String queueName) {
+        this.queueName = queueName;
+    }
+
+    public String getBatchID() {
+        return batchID;
+    }
+
+    public void setBatchID(String batchID) {
+        this.batchID = batchID;
     }
 
     public int getNumberOfRemainingSubOperations() {
@@ -302,39 +314,117 @@ public class RetrieveTask {
         this.queueMessage = queueMessage;
     }
 
-    public void writeAsJSONTo(JsonGenerator gen) throws IOException {
+    public void writeAsJSONTo(JsonGenerator gen) {
         DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        JsonWriter writer = new JsonWriter(gen);
         gen.writeStartObject();
-        gen.write("pk", pk);
-        gen.write("createdTime", df.format(createdTime));
-        gen.write("updatedTime", df.format(updatedTime));
-        gen.write("dicomDeviceName", deviceName);
-        gen.write("LocalAET", localAET);
-        gen.write("RemoteAET", remoteAET);
-        gen.write("DestinationAET", destinationAET);
-        gen.write("StudyInstanceUID", studyInstanceUID);
-        if (seriesInstanceUID != null) {
-            gen.write("SeriesInstanceUID", seriesInstanceUID);
-            if (sopInstanceUID != null) {
-                gen.write("SOPInstanceUID", sopInstanceUID);
-            }
+        writer.writeNotNullOrDef("pk", pk, null);
+        writer.writeNotNullOrDef("createdTime", df.format(createdTime), null);
+        writer.writeNotNullOrDef("updatedTime", df.format(updatedTime), null);
+        writer.writeNotNullOrDef("LocalAET", localAET, null);
+        writer.writeNotNullOrDef("RemoteAET", remoteAET, null);
+        writer.writeNotNullOrDef("DestinationAET", destinationAET, null);
+        writer.writeNotNullOrDef("StudyInstanceUID", studyInstanceUID, null);
+        writer.writeNotNullOrDef("SeriesInstanceUID", seriesInstanceUID, null);
+        writer.writeNotNullOrDef("SOPInstanceUID", sopInstanceUID, null);
+        writer.writeNotNullOrDef("remaining", remaining, 0);
+        writer.writeNotNullOrDef("completed", completed, 0);
+        writer.writeNotNullOrDef("failed", failed, 0);
+        writer.writeNotNullOrDef("warning", warning, 0);
+        writer.writeNotNullOrDef("statusCode", TagUtils.shortToHexString(statusCode), -1);
+        writer.writeNotNullOrDef("errorComment", errorComment, null);
+        if (queueMessage == null) {
+            writer.writeNotNullOrDef("batchID", batchID, null);
+            writer.writeNotNullOrDef("status", QueueMessage.Status.TO_SCHEDULE.toString(), null);
+            writer.writeNotNullOrDef("dicomDeviceName", deviceName, null);
+            writer.writeNotNullOrDef("queue", queueName, null);
         }
-        if (remaining > 0)
-            gen.write("remaining", remaining);
-        if (completed > 0)
-            gen.write("completed", completed);
-        if (failed > 0)
-            gen.write("failed", failed);
-        if (warning > 0)
-            gen.write("warning", warning);
-        if (statusCode != -1)
-            gen.write("statusCode", TagUtils.shortToHexString(statusCode));
-        if (errorComment != null)
-            gen.write("errorComment", errorComment);
-
-        queueMessage.writeStatusAsJSONTo(gen, df);
+        else
+            queueMessage.writeStatusAsJSONTo(writer, df);
         gen.writeEnd();
         gen.flush();
+    }
+
+    public static void writeCSVHeader(Writer writer, char delimiter) throws IOException {
+        writer.write("pk" + delimiter +
+                "createdTime" + delimiter +
+                "updatedTime" + delimiter +
+                "LocalAET" + delimiter +
+                "RemoteAET" + delimiter +
+                "DestinationAET" + delimiter +
+                "StudyInstanceUID" + delimiter +
+                "SeriesInstanceUID" + delimiter +
+                "SOPInstanceUID" + delimiter +
+                "remaining" + delimiter +
+                "completed" + delimiter +
+                "failed" + delimiter +
+                "warning" + delimiter +
+                "statusCode" + delimiter +
+                "errorComment" + delimiter +
+                "JMSMessageID" + delimiter +
+                "queue" + delimiter +
+                "dicomDeviceName" + delimiter +
+                "status" + delimiter +
+                "scheduledTime" + delimiter +
+                "failures" + delimiter +
+                "batchID" + delimiter +
+                "processingStartTime" + delimiter +
+                "processingEndTime" + delimiter +
+                "errorMessage" + delimiter +
+                "outcomeMessage\r\n");
+    }
+
+    public void writeAsCSVTo(Writer writer, char delimiter) throws IOException {
+        DateFormat df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ");
+        writer.write(String.valueOf(pk));
+        writer.write(delimiter);
+        writer.write(df.format(createdTime));
+        writer.write(delimiter);
+        writer.write(df.format(updatedTime));
+        writer.write(delimiter);
+        writer.write(localAET);
+        writer.write(delimiter);
+        writer.write(remoteAET);
+        writer.write(delimiter);
+        writer.write(destinationAET);
+        writer.write(delimiter);
+        writer.write(studyInstanceUID);
+        writer.write(delimiter);
+        if (seriesInstanceUID != null)
+            writer.write(seriesInstanceUID);
+        writer.write(delimiter);
+        if (sopInstanceUID != null)
+            writer.write(sopInstanceUID);
+        writer.write(delimiter);
+        writer.write(String.valueOf(remaining));
+        writer.write(delimiter);
+        writer.write(String.valueOf(completed));
+        writer.write(delimiter);
+        writer.write(String.valueOf(failed));
+        writer.write(delimiter);
+        writer.write(String.valueOf(warning));
+        writer.write(delimiter);
+        if (statusCode != -1)
+            writer.write(TagUtils.shortToHexString(statusCode));
+        writer.write(delimiter);
+        if (errorComment != null) {
+            writer.write('"');
+            writer.write(errorComment.replace("\"", "\"\""));
+            writer.write('"');
+        }
+        writer.write(delimiter);
+        if (queueMessage == null) {
+            writer.append(delimiter).write(queueName);
+            writer.append(delimiter).write(deviceName);
+            writer.append(delimiter).write("TO SCHEDULE");
+            writer.append(delimiter).append(delimiter);
+            if (batchID != null)
+                writer.write(batchID);
+            writer.append(delimiter).append(delimiter).append(delimiter).append(delimiter).append(delimiter);
+        } else
+            queueMessage.writeStatusAsCSVTo(writer, df, delimiter);
+        writer.write('\r');
+        writer.write('\n');
     }
 
     @Override

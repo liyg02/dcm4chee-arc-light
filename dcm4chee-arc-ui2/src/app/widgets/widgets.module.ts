@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { WidgetsComponent } from './widgets.component';
 import {BrowserModule} from '@angular/platform-browser';
 import {FormsModule} from '@angular/forms';
-import {MdDialogConfig} from '@angular/material';
+import {MatDialogConfig} from '@angular/material';
 import { MessagingComponent } from './messaging/messaging.component';
 import {EditPatientComponent} from './dialogs/edit-patient/edit-patient.component';
 import { EditMwlComponent } from './dialogs/edit-mwl/edit-mwl.component';
@@ -31,6 +31,15 @@ import { AttributeInfoComponent } from './attribute-info/attribute-info.componen
 import { ViewerComponent } from './dialogs/viewer/viewer.component';
 import {DicomFlatListComponent} from "./dicom-list/dicom-flat-list.component";
 import { ModalityComponent } from './modality/modality.component';
+import { RangePickerComponent } from './range-picker/range-picker.component';
+import { DynamicFieldComponent } from './dynamic-field/dynamic-field.component';
+import { DcmSelectComponent } from './dcm-select/dcm-select.component';
+import { CsvUploadComponent } from './dialogs/csv-upload/csv-upload.component';
+import { SizeRangePickerComponent } from './size-range-picker/size-range-picker.component';
+import { DropdownComponent } from './dropdown/dropdown.component';
+import {OptionComponent} from "./dropdown/option.component";
+import { DcmDropDownComponent } from './dcm-drop-down/dcm-drop-down.component';
+import { StudyTransferringOverviewComponent } from './dialogs/study-transferring-overview/study-transferring-overview.component';
 
 
 @NgModule({
@@ -42,7 +51,7 @@ import { ModalityComponent } from './modality/modality.component';
     ],
     declarations: [WidgetsComponent],
     exports: [WidgetsComponent],
-    providers: [MdDialogConfig]
+    providers: [MatDialogConfig]
 })
 export class WidgetsModule { }
 export const WidgetsComponents = [
@@ -71,5 +80,14 @@ export const WidgetsComponents = [
     AttributeInfoComponent,
     ViewerComponent,
     DicomFlatListComponent,
-    ModalityComponent
+    ModalityComponent,
+    RangePickerComponent,
+    DynamicFieldComponent,
+    DcmSelectComponent,
+    CsvUploadComponent,
+    SizeRangePickerComponent,
+    DropdownComponent,
+    OptionComponent,
+    DcmDropDownComponent,
+    StudyTransferringOverviewComponent
 ];

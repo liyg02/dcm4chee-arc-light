@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2015-2017
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -55,6 +55,8 @@ import javax.validation.constraints.Pattern;
 import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -109,28 +111,64 @@ public class DeleteRejected {
     @Produces("application/json")
     public String delete(
             @PathParam("CodeValue") String codeValue,
-            @PathParam("CodingSchemeDesignator") String designator)
-            throws Exception {
-        LOG.info("Process DELETE {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        ArchiveDeviceExtension arcDev = device.getDeviceExtension(ArchiveDeviceExtension.class);
+            @PathParam("CodingSchemeDesignator") String designator) {
+        logRequest();
+        ArchiveDeviceExtension arcDev = arcDev();
         Code code = new Code(codeValue, designator, null, "?");
         RejectionNote rjNote = arcDev.getRejectionNote(code);
         if (rjNote == null)
             throw new WebApplicationException(
-                    getResponse("Unknown Rejection Note Code: " + code, Response.Status.NOT_FOUND));
+                    errResponse("Unknown Rejection Note Code: " + code, Response.Status.NOT_FOUND));
 
-        Date before = parseDate(rejectedBefore);
-        int fetchSize = arcDev.getDeleteRejectedFetchSize();
-        int deleted = service.deleteRejectedInstancesBefore(rjNote.getRejectionNoteCode(), before, fetchSize);
-        if (!Boolean.parseBoolean(keepRejectionNote))
-            deleted += service.deleteRejectionNotesBefore(rjNote.getRejectionNoteCode(), before, fetchSize);
+        try {
+            Date before = parseDate(rejectedBefore);
+            int fetchSize = arcDev.getDeleteRejectedFetchSize();
+            int deleted = service.deleteRejectedInstancesBefore(rjNote.getRejectionNoteCode(), before, fetchSize);
+            if (!Boolean.parseBoolean(keepRejectionNote))
+                deleted += service.deleteRejectionNotesBefore(rjNote.getRejectionNoteCode(), before, fetchSize);
 
-        LOG.info("Deleted {} instances permanently", deleted);
-        return "{\"deleted\":" + deleted + '}';
+            LOG.info("Deleted {} instances permanently", deleted);
+            return "{\"deleted\":" + deleted + '}';
+        } catch (Exception e) {
+            throw new WebApplicationException(
+                    errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR));
+        }
     }
 
-    private Response getResponse(String errorMessage, Response.Status status) {
-        Object entity = "{\"errorMessage\":\"" + errorMessage + "\"}";
-        return Response.status(status).entity(entity).build();
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
+    private ArchiveDeviceExtension arcDev() {
+        try {
+            return device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+        } catch (IllegalStateException e) {
+            throw new WebApplicationException(
+                    errResponse("Archive Device Extension not configured for device: " + device.getDeviceName(),
+                    Response.Status.NOT_FOUND));
+        }
+    }
+
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

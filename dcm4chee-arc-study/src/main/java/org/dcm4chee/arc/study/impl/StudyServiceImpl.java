@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2013-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,14 +42,15 @@ package org.dcm4chee.arc.study.impl;
 
 import org.dcm4che3.net.ApplicationEntity;
 import org.dcm4che3.net.Device;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.study.StudyMgtContext;
 import org.dcm4chee.arc.study.StudyService;
 
 import javax.enterprise.context.ApplicationScoped;
 import javax.enterprise.event.Event;
 import javax.inject.Inject;
-import javax.persistence.NoResultException;
 import javax.servlet.http.HttpServletRequest;
+import java.net.Socket;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -69,7 +70,12 @@ public class StudyServiceImpl implements StudyService {
 
     @Override
     public StudyMgtContext createStudyMgtContextWEB(HttpServletRequest httpRequest, ApplicationEntity ae) {
-        return new StudyMgtContextImpl(device, httpRequest, ae);
+        return new StudyMgtContextImpl(device).withHttpRequest(httpRequest).withApplicationEntity(ae);
+    }
+
+    @Override
+    public StudyMgtContext createStudyMgtContextHL7(Socket socket, UnparsedHL7Message msg) {
+        return new StudyMgtContextImpl(device).withSocket(socket).withUnparsedHL7Message(msg);
     }
 
     @Override
@@ -86,20 +92,31 @@ public class StudyServiceImpl implements StudyService {
     }
 
     @Override
-    public void updateExpirationDate(StudyMgtContext ctx) throws NoResultException {
+    public void updateExpirationDate(StudyMgtContext ctx) {
         try {
-            if (ctx.getSeriesInstanceUID() != null)
-                ejb.updateSeriesExpirationDate(ctx);
-            else
-                ejb.updateStudyExpirationDate(ctx);
+            ejb.updateExpirationDate(ctx);
         } catch (Exception e) {
-            if (ctx.getEventActionCode() != null)
-                ctx.setException(new Exception(e.getMessage() + " : " + ctx.getStudyInstanceUID()));
+            ctx.setException(e);
             throw e;
         } finally {
             if (ctx.getEventActionCode() != null)
                 updateStudyEvent.fire(ctx);
         }
+    }
+
+    @Override
+    public int updateAccessControlID(StudyMgtContext ctx) {
+        int updated = 0;
+        try {
+            updated = ejb.updateAccessControlID(ctx);
+        } catch (Exception e) {
+            ctx.setException(e);
+            throw e;
+        } finally {
+            if (updated > 0)
+                updateStudyEvent.fire(ctx);
+        }
+        return updated;
     }
 
 }

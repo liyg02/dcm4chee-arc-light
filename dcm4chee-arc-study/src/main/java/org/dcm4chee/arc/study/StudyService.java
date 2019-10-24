@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2013-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,8 +41,10 @@
 package org.dcm4chee.arc.study;
 
 import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4che3.net.hl7.UnparsedHL7Message;
 
 import javax.servlet.http.HttpServletRequest;
+import java.net.Socket;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
@@ -52,7 +54,11 @@ import javax.servlet.http.HttpServletRequest;
 public interface StudyService {
     StudyMgtContext createStudyMgtContextWEB(HttpServletRequest httpRequest, ApplicationEntity ae);
 
+    StudyMgtContext createStudyMgtContextHL7(Socket socket, UnparsedHL7Message msg);
+
     void updateStudy(StudyMgtContext ctx);
 
     void updateExpirationDate(StudyMgtContext ctx) throws Exception;
+
+    int updateAccessControlID(StudyMgtContext ctx) throws Exception;
 }

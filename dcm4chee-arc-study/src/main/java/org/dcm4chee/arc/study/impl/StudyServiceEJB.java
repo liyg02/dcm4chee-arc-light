@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2015-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,12 +42,15 @@ package org.dcm4chee.arc.study.impl;
 
 import org.dcm4che3.audit.AuditMessages;
 import org.dcm4che3.data.*;
+import org.dcm4che3.net.Device;
 import org.dcm4chee.arc.code.CodeCache;
 import org.dcm4chee.arc.conf.AttributeFilter;
 import org.dcm4chee.arc.entity.*;
 import org.dcm4chee.arc.issuer.IssuerService;
 import org.dcm4chee.arc.patient.PatientMismatchException;
 import org.dcm4chee.arc.study.StudyMgtContext;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.ejb.Stateless;
 import javax.inject.Inject;
@@ -56,6 +59,7 @@ import javax.persistence.NoResultException;
 import javax.persistence.PersistenceContext;
 import java.time.LocalDate;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 
 /**
@@ -65,6 +69,8 @@ import java.util.List;
  */
 @Stateless
 public class StudyServiceEJB {
+    private static final Logger LOG = LoggerFactory.getLogger(StudyServiceEJB.class);
+
     @PersistenceContext(unitName="dcm4chee-arc")
     private EntityManager em;
 
@@ -74,11 +80,16 @@ public class StudyServiceEJB {
     @Inject
     private IssuerService issuerService;
 
+    @Inject
+    private Device device;
+
     public void updateStudy(StudyMgtContext ctx) {
         AttributeFilter filter = ctx.getStudyAttributeFilter();
         Study study = findStudy(ctx);
-        Attributes attrs = new Attributes(ctx.getAttributes(), filter.getSelection());
-        if (attrs.equals(study.getAttributes()))
+        Attributes attrs = study.getAttributes();
+        Attributes newAttrs = new Attributes(ctx.getAttributes(), filter.getSelection(false));
+        Attributes modified = new Attributes();
+        if (attrs.diff(newAttrs, filter.getSelection(false), modified, true) == 0)
             return;
 
         ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
@@ -87,7 +98,16 @@ public class StudyServiceEJB {
             throw new PatientMismatchException("" + ctx.getPatient() + " does not match " +
                     study.getPatient() + " in existing " + study);
 
-        study.setAttributes(attrs, filter, ctx.getFuzzyStr());
+        newAttrs.addSelected(attrs, null, Tag.OriginalAttributesSequence);
+        attrs = newAttrs;
+        study.setAttributes(
+                attrs.addOriginalAttributes(
+                    null,
+                    new Date(),
+                    Attributes.CORRECT,
+                    device.getDeviceName(),
+                    modified),
+                filter, ctx.getFuzzyStr());
         study.setIssuerOfAccessionNumber(
                 findOrCreateIssuer(attrs.getNestedDataset(Tag.IssuerOfAccessionNumberSequence)));
         setCodes(study.getProcedureCodes(), attrs.getSequence(Tag.ProcedureCodeSequence));
@@ -114,6 +134,7 @@ public class StudyServiceEJB {
         Study study = new Study();
         study.setCompleteness(Completeness.COMPLETE);
         study.setRejectionState(RejectionState.EMPTY);
+        study.setExpirationState(ExpirationState.UPDATEABLE);
         study.setAccessControlID(ctx.getArchiveAEExtension().storeAccessControlID(
                 ctx.getRemoteHostName(), null, ctx.getApplicationEntity().getAETitle(), ctx.getAttributes()));
         study.setAttributes(attrs, ctx.getStudyAttributeFilter(), ctx.getFuzzyStr());
@@ -126,42 +147,121 @@ public class StudyServiceEJB {
         return study;
     }
 
-    public void updateStudyExpirationDate(StudyMgtContext ctx) throws NoResultException {
-        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
+    private void updateStudyExpirationDate(StudyMgtContext ctx) {
         List<Series> seriesOfStudy = em.createNamedQuery(Series.FIND_SERIES_OF_STUDY, Series.class)
                 .setParameter(1, ctx.getStudyInstanceUID()).getResultList();
-        LocalDate studyExpireDate = ctx.getExpirationDate();
-        Study study;
-        if (!seriesOfStudy.isEmpty()) {
-            study = seriesOfStudy.get(0).getStudy();
-            study.setExpirationDate(studyExpireDate);
-            for (Series series : seriesOfStudy) {
-                LocalDate seriesExpirationDate = series.getExpirationDate();
-                if (seriesExpirationDate != null && seriesExpirationDate.isAfter(studyExpireDate))
-                    series.setExpirationDate(studyExpireDate);
-            }
-        } else {
-            study = em.createNamedQuery(Study.FIND_BY_STUDY_IUID, Study.class)
+        Study study = !seriesOfStudy.isEmpty()
+                ? seriesOfStudy.get(0).getStudy()
+                : em.createNamedQuery(Study.FIND_BY_STUDY_IUID, Study.class)
                     .setParameter(1, ctx.getStudyInstanceUID()).getSingleResult();
-            study.setExpirationDate(studyExpireDate);
-        }
+
         ctx.setStudy(study);
         ctx.setAttributes(study.getAttributes());
+        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
+
+        ExpirationOperation expirationOp = ExpirationOperation.compute(ctx, study);
+        if (expirationOp == ExpirationOperation.Protect) {
+            studyExpirationTo(expirationOp, ctx, study);
+            seriesOfStudy.forEach(series ->
+                    seriesExpirationTo(expirationOp, ctx, series));
+            return;
+        }
+        if (expirationOp == ExpirationOperation.Skip) {
+            LOG.info("{} updating {} Study[UID={}, ExpirationDate[={}]] with ExpirationDate[={}]",
+                    expirationOp.name(), expirationOp.expirationState,
+                    study.getStudyInstanceUID(), study.getExpirationDate(), ctx.getExpirationDate());
+            ctx.setEventActionCode(null);
+            return;
+        }
+
+        studyExpirationTo(expirationOp, ctx, study);
+        if (expirationOp == ExpirationOperation.Update) {
+            seriesOfStudy.forEach(series -> {
+                LocalDate seriesExpirationDate = series.getExpirationDate();
+                if (seriesExpirationDate != null && seriesExpirationDate.isAfter(ctx.getExpirationDate()))
+                    seriesExpirationTo(expirationOp, ctx, series);
+            });
+        } else
+            seriesOfStudy.forEach(series -> seriesExpirationTo(expirationOp, ctx, series));
     }
 
-    public void updateSeriesExpirationDate(StudyMgtContext ctx) throws NoResultException {
+    enum ExpirationOperation {
+        Freeze(ExpirationState.FROZEN),
+        Unfreeze(ExpirationState.UPDATEABLE),
+        Protect(ExpirationState.FROZEN),
+        Update(ExpirationState.UPDATEABLE),
+        Skip(ExpirationState.FROZEN);
+
+        final ExpirationState expirationState;
+
+        ExpirationOperation(ExpirationState expirationState) {
+            this.expirationState = expirationState;
+        }
+
+        static ExpirationOperation compute(StudyMgtContext ctx, Study study) {
+            return ctx.getExpirationDate() == null
+                    ? ExpirationOperation.Protect
+                    : study.getExpirationState() == ExpirationState.FROZEN
+                        ? ctx.isUnfreezeExpirationDate()
+                            ? ExpirationOperation.Unfreeze
+                            : ExpirationOperation.Skip
+                        : ctx.isFreezeExpirationDate()
+                            ? ExpirationOperation.Freeze
+                            : ExpirationOperation.Update;
+        }
+    }
+
+    private void studyExpirationTo(ExpirationOperation expirationOp, StudyMgtContext ctx, Study study) {
+        LOG.info("{} Study[UID={}] with ExpirationDate[={}] and ExpirationState[={}]",
+                expirationOp.name(), study.getStudyInstanceUID(), ctx.getExpirationDate(), expirationOp.expirationState);
+        study.setExpirationDate(ctx.getExpirationDate());
+        study.setExpirationExporterID(ctx.getExpirationExporterID());
+        study.setExpirationState(expirationOp.expirationState);
+    }
+
+    private void seriesExpirationTo(ExpirationOperation expirationOp, StudyMgtContext ctx, Series series) {
+        LOG.info("{} Series[UID={}] with ExpirationDate[={}] and ExpirationState[={}]",
+                expirationOp.name(), series.getSeriesInstanceUID(), ctx.getExpirationDate(), expirationOp.expirationState);
+        series.setExpirationDate(ctx.getExpirationDate());
+        series.setExpirationExporterID(ctx.getExpirationExporterID());
+        series.setExpirationState(expirationOp.expirationState);
+    }
+
+    private void updateSeriesExpirationDate(StudyMgtContext ctx) {
         Series series = em.createNamedQuery(Series.FIND_BY_SERIES_IUID, Series.class)
                 .setParameter(1, ctx.getStudyInstanceUID())
                 .setParameter(2, ctx.getSeriesInstanceUID()).getSingleResult();
-        LocalDate studyExpirationDate = series.getStudy().getExpirationDate();
-        series.setExpirationDate(ctx.getExpirationDate());
-        if (studyExpirationDate == null || studyExpirationDate.isBefore(ctx.getExpirationDate())) {
-            Study study = series.getStudy();
-            study.setExpirationDate(ctx.getExpirationDate());
-            ctx.setStudy(study);
-            ctx.setAttributes(study.getAttributes());
-            ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
+        Study study = series.getStudy();
+        LocalDate expirationDate = ctx.getExpirationDate();
+        if (series.getExpirationState() == ExpirationState.FROZEN) {
+            LOG.info("Skip updating frozen Series[UID={}, ExpirationDate={}] of Study[UID={}] with ExpirationDate[={}]",
+                    series.getSeriesInstanceUID(), series.getExpirationDate(),
+                    study.getStudyInstanceUID(), expirationDate);
+            return;
         }
+
+        LocalDate studyExpirationDate = study.getExpirationDate();
+        seriesExpirationTo(ExpirationOperation.Update, ctx, series);
+        ctx.setStudy(study);
+        ctx.setAttributes(study.getAttributes());
+        if (studyExpirationDate == null || studyExpirationDate.isBefore(expirationDate))
+            studyExpirationTo(ExpirationOperation.Update, ctx, study);
+        ctx.setEventActionCode(AuditMessages.EventActionCode.Update);
+    }
+
+    public void updateExpirationDate(StudyMgtContext ctx) {
+        if (ctx.getSeriesInstanceUID() != null) {
+            updateSeriesExpirationDate(ctx);
+            return;
+        }
+        updateStudyExpirationDate(ctx);
+    }
+
+    public int updateAccessControlID(StudyMgtContext ctx) {
+        return em.createNamedQuery(Study.UPDATE_ACCESS_CONTROL_ID)
+                    .setParameter(1, ctx.getStudyInstanceUID())
+                    .setParameter(2, ctx.getAccessControlID())
+                    .executeUpdate();
     }
 
     private void setCodes(Collection<CodeEntity> codes, Sequence seq) {

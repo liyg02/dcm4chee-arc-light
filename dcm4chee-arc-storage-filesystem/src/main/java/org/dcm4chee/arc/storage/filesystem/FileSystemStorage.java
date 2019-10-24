@@ -42,6 +42,7 @@ package org.dcm4chee.arc.storage.filesystem;
 
 import org.dcm4che3.util.AttributesFormat;
 import org.dcm4chee.arc.conf.StorageDescriptor;
+import org.dcm4chee.arc.metrics.MetricsService;
 import org.dcm4chee.arc.storage.AbstractStorage;
 import org.dcm4chee.arc.storage.ReadContext;
 import org.dcm4chee.arc.storage.WriteContext;
@@ -67,8 +68,8 @@ public class FileSystemStorage extends AbstractStorage {
     private final AttributesFormat pathFormat;
     private final Path checkMountFilePath;
 
-    public FileSystemStorage(StorageDescriptor descriptor) {
-        super(descriptor);
+    public FileSystemStorage(StorageDescriptor descriptor, MetricsService metricsService) {
+        super(descriptor, metricsService);
         rootURI = ensureTrailingSlash(descriptor.getStorageURI());
         pathFormat = new AttributesFormat(descriptor.getProperty("pathFormat", DEFAULT_PATH_FORMAT));
         String checkMountFile = descriptor.getProperty("checkMountFile", null);
@@ -83,6 +84,18 @@ public class FileSystemStorage extends AbstractStorage {
     @Override
     public boolean isAccessable() {
         return checkMountFilePath == null || Files.notExists(checkMountFilePath);
+    }
+
+    @Override
+    public boolean exists(ReadContext ctx) {
+        Path path = Paths.get(rootURI.resolve(ctx.getStoragePath()));
+        return Files.exists(path);
+    }
+
+    @Override
+    public long getContentLength(ReadContext ctx) throws IOException {
+        Path path = Paths.get(rootURI.resolve(ctx.getStoragePath()));
+        return Files.size(path);
     }
 
     @Override
@@ -118,13 +131,28 @@ public class FileSystemStorage extends AbstractStorage {
     }
 
     @Override
+    protected void copyA(InputStream in, WriteContext ctx) throws IOException {
+        Path path = Paths.get(rootURI.resolve(pathFormat.format(ctx.getAttributes())));
+        Path dir = path.getParent();
+        Files.createDirectories(dir);
+        long copy = 0L;
+        while (copy == 0L)
+            try {
+                copy = Files.copy(in, path);
+            } catch (FileAlreadyExistsException e) {
+                path = dir.resolve(String.format("%08X", ThreadLocalRandom.current().nextInt()));
+            }
+        ctx.setStoragePath(rootURI.relativize(path.toUri()).toString());
+    }
+
+    @Override
     protected InputStream openInputStreamA(ReadContext ctx) throws IOException {
         Path path = Paths.get(rootURI.resolve(ctx.getStoragePath()));
         return Files.newInputStream(path);
     }
 
     @Override
-    public void deleteObject(String storagePath) throws IOException {
+    protected void deleteObjectA(String storagePath) throws IOException {
         Path path = Paths.get(rootURI.resolve(storagePath));
         Files.delete(path);
         deleteEmptyDirectories(path);

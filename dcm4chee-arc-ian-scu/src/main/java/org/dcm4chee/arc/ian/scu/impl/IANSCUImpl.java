@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2013-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -60,6 +60,7 @@ import java.io.IOException;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Apr 2016
  */
 @ApplicationScoped
@@ -98,12 +99,28 @@ public class IANSCUImpl implements IANSCU {
         }
     }
 
+    @Override
+    public DimseRSP sendIANRQ(ApplicationEntity localAE, ApplicationEntity remoteAE, String sopInstanceUID, Attributes ian)
+            throws Exception {
+        AAssociateRQ aarq = mkAAssociateRQ(localAE);
+        Association as = localAE.connect(remoteAE, aarq);
+        try {
+            return as.ncreate(UID.InstanceAvailabilityNotificationSOPClass, sopInstanceUID, ian, null);
+        } finally {
+            try {
+                as.release();
+            } catch (IOException e) {
+                LOG.info("{}: Failed to release association to {}", as, remoteAE.getAETitle());
+            }
+        }
+    }
+
     private AAssociateRQ mkAAssociateRQ(ApplicationEntity localAE) {
         AAssociateRQ aarq = new AAssociateRQ();
         TransferCapability tc = localAE.getTransferCapabilityFor(UID.InstanceAvailabilityNotificationSOPClass,
                 TransferCapability.Role.SCU);
         if (tc == null)
-            LOG.warn("No Transfer Capability for Instance Availability Notification SOP Class as SCU configured for {}",
+            LOG.warn("No Transfer ServiceClass for Instance Availability Notification SOP Class as SCU configured for {}",
                     localAE.getAETitle());
         aarq.addPresentationContext(new PresentationContext(1, UID.InstanceAvailabilityNotificationSOPClass,
                 tc != null ? tc.getTransferSyntaxes() : new String[] { UID.ImplicitVRLittleEndian }));

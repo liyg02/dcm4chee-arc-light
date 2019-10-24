@@ -1,10 +1,15 @@
 package org.dcm4chee.arc.store;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.data.Code;
+import org.dcm4chee.arc.conf.ArchiveCompressionRule;
 import org.dcm4chee.arc.conf.Availability;
+import org.dcm4chee.arc.conf.ExportPriorsRule;
 import org.dcm4chee.arc.conf.RejectionNote;
 import org.dcm4chee.arc.entity.Instance;
 import org.dcm4chee.arc.entity.Location;
+import org.dcm4chee.arc.entity.RejectedInstance;
+import org.dcm4chee.arc.storage.ReadContext;
 import org.dcm4chee.arc.storage.WriteContext;
 
 import java.time.LocalDate;
@@ -38,6 +43,10 @@ public interface StoreContext {
 
     void setStoreTranferSyntax(String storeTranferSyntaxUID);
 
+    ArchiveCompressionRule getCompressionRule();
+
+    void setCompressionRule(ArchiveCompressionRule compressionRule);
+
     String getAcceptedStudyInstanceUID();
 
     void setAcceptedStudyInstanceUID(String acceptedStudyInstanceUID);
@@ -54,9 +63,15 @@ public interface StoreContext {
 
     void setAttributes(Attributes dataset);
 
+    ReadContext getReadContext();
+
+    void setReadContext(ReadContext readContext);
+
     Collection<WriteContext> getWriteContexts();
 
     Attributes getCoercedAttributes();
+
+    void setCoercedAttributes(Attributes coercedAttributes);
 
     String getStudyInstanceUID();
 
@@ -69,6 +84,10 @@ public interface StoreContext {
     RejectionNote getRejectionNote();
 
     void setRejectionNote(RejectionNote rejectionNote);
+
+    RejectedInstance getRejectedInstance();
+
+    void setRejectedInstance(RejectedInstance rejectedInstance);
 
     Exception getException();
 
@@ -99,4 +118,10 @@ public interface StoreContext {
     boolean isPreviousDifferentStudy();
 
     boolean isPreviousDifferentSeries();
+
+    Code getImpaxReportPatientMismatch();
+
+    void setImpaxReportPatientMismatch(Code impaxReportPatientMismatch);
+
+    boolean isExportReoccurredInstances(ExportPriorsRule rule);
 }

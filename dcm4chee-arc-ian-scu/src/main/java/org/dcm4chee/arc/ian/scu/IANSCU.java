@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2013
+ * Portions created by the Initial Developer are Copyright (C) 2013-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -41,15 +41,20 @@
 package org.dcm4chee.arc.ian.scu;
 
 import org.dcm4che3.data.Attributes;
+import org.dcm4che3.net.ApplicationEntity;
+import org.dcm4che3.net.DimseRSP;
 import org.dcm4chee.arc.qmgt.Outcome;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Apr 2016
  */
 public interface IANSCU {
     String QUEUE_NAME = "IANSCU";
-    String JNDI_NAME = "jms/queue/IANSCU";
 
     Outcome sendIAN(String localAET, String remoteAET, String sopInstanceUID, Attributes attrs) throws Exception;
+
+    DimseRSP sendIANRQ(ApplicationEntity localAE, ApplicationEntity remoteAE, String sopInstanceUID, Attributes ian)
+            throws Exception;
 }

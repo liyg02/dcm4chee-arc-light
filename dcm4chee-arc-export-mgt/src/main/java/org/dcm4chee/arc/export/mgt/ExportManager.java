@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016-2017
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -42,14 +42,14 @@ package org.dcm4chee.arc.export.mgt;
 
 import org.dcm4chee.arc.conf.ExporterDescriptor;
 import org.dcm4chee.arc.entity.ExportTask;
-import org.dcm4chee.arc.entity.QueueMessage;
-import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
-import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
-import org.dcm4chee.arc.store.StoreContext;
-import org.dcm4chee.arc.qmgt.HttpServletRequestInfo;
+import org.dcm4chee.arc.event.QueueMessageEvent;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
+import org.dcm4chee.arc.qmgt.*;
+import org.dcm4chee.arc.query.util.TaskQueryParam;
 
-import javax.enterprise.event.Observes;
+import javax.persistence.Tuple;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -58,22 +58,48 @@ import java.util.List;
  * @since Feb 2016
  */
 public interface ExportManager {
-    void onStore(@Observes StoreContext ctx);
+    void createOrUpdateStudyExportTask(String exporterID, String studyIUID, Date scheduledTime);
+
+    void createOrUpdateSeriesExportTask(
+            String exporterID, String studyIUID, String seriesIUID, Date scheduledTime);
+
+    void createOrUpdateInstanceExportTask(
+            String exporterID, String studyIUID, String seriesIUID, String sopIUID, Date scheduledTime);
 
     int scheduleExportTasks(int fetchSize);
 
     void scheduleExportTask(String studyUID, String seriesUID, String objectUID, ExporterDescriptor exporter,
-                            HttpServletRequestInfo httpServletRequestInfo) throws QueueSizeLimitExceededException;
+                            HttpServletRequestInfo httpServletRequestInfo, String batchID)
+        throws QueueSizeLimitExceededException;
 
-    void updateExportTask(Long pk);
+    void scheduleStudyExportTasks(ExporterDescriptor exporter, HttpServletRequestInfo httpServletRequestInfo,
+                                  String batchID, String... studyUID)
+            throws QueueSizeLimitExceededException;
 
-    List<ExportTask> search(
-            String deviceName, String exporterID, String studyUID, Date updatedBefore, QueueMessage.Status status,
-            int offset, int limit);
+    boolean scheduleStudyExport(String suid, ExporterDescriptor exporter, Date notExportedAfter, String batchID);
 
-    boolean deleteExportTask(Long pk);
+    boolean deleteExportTask(Long pk, QueueMessageEvent queueEvent);
 
-    boolean cancelProcessing(Long pk) throws IllegalTaskStateException;
+    boolean cancelExportTask(Long pk, QueueMessageEvent queueEvent) throws IllegalTaskStateException;
 
-    boolean rescheduleExportTask(Long pk, ExporterDescriptor exporter) throws IllegalTaskStateException;
+    long cancelExportTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam exportTaskQueryParam);
+
+    String findDeviceNameByPk(Long pk);
+
+    void rescheduleExportTask(Long pk, ExporterDescriptor exporter, QueueMessageEvent queueEvent) throws IllegalTaskStateException;
+
+    int deleteTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam exportTaskQueryParam, int deleteTasksFetchSize);
+
+    List<String> listDistinctDeviceNames(TaskQueryParam exportTaskQueryParam);
+
+    List<ExportBatch> listExportBatches(
+            TaskQueryParam queueBatchQueryParam, TaskQueryParam exportBatchQueryParam, int offset, int limit);
+
+    long countTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam exportTaskQueryParam);
+
+    Iterator<ExportTask> listExportTasks(
+            TaskQueryParam queueTaskQueryParam, TaskQueryParam exportTaskQueryParam, int offset, int limit);
+
+    List<Tuple> exportTaskPksAndExporterIDs(
+            TaskQueryParam queueTaskQueryParam, TaskQueryParam exportTaskQueryParam, int limit);
 }

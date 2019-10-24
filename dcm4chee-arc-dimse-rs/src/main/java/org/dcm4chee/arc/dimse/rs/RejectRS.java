@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2017-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -38,6 +38,7 @@
 
 package org.dcm4chee.arc.dimse.rs;
 
+import org.dcm4che3.conf.api.ConfigurationException;
 import org.dcm4che3.conf.api.IApplicationEntityCache;
 import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.data.Attributes;
@@ -45,7 +46,6 @@ import org.dcm4che3.data.Code;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.net.*;
 import org.dcm4che3.net.service.DicomServiceException;
-import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.TagUtils;
 import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.dcm4chee.arc.conf.RejectionNote;
@@ -67,8 +67,8 @@ import javax.ws.rs.*;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.List;
 
 /**
@@ -120,33 +120,33 @@ public class RejectRS {
     @POST
     @Path("/studies/{StudyUID}/reject/{CodeValue}^{CodingSchemeDesignator}")
     @Produces("application/json")
-    public Response exportStudy(
+    public Response rejectStudy(
             @PathParam("StudyUID") String studyUID,
             @PathParam("CodeValue") String codeValue,
-            @PathParam("CodingSchemeDesignator") String designator) throws Exception {
+            @PathParam("CodingSchemeDesignator") String designator) {
         return reject(studyUID, null, null,codeValue, designator);
     }
 
     @POST
     @Path("/studies/{StudyUID}/series/{SeriesUID}/reject/{CodeValue}^{CodingSchemeDesignator}")
     @Produces("application/json")
-    public Response exportSeries(
+    public Response rejectSeries(
             @PathParam("StudyUID") String studyUID,
             @PathParam("SeriesUID") String seriesUID,
             @PathParam("CodeValue") String codeValue,
-            @PathParam("CodingSchemeDesignator") String designator) throws Exception {
+            @PathParam("CodingSchemeDesignator") String designator) {
         return reject(studyUID, seriesUID, null, codeValue, designator);
     }
 
     @POST
     @Path("/studies/{StudyUID}/series/{SeriesUID}/instances/{ObjectUID}/reject/{CodeValue}^{CodingSchemeDesignator}")
     @Produces("application/json")
-    public Response exportSeries(
+    public Response rejectSeries(
             @PathParam("StudyUID") String studyUID,
             @PathParam("SeriesUID") String seriesUID,
             @PathParam("ObjectUID") String objectUID,
             @PathParam("CodeValue") String codeValue,
-            @PathParam("CodingSchemeDesignator") String designator) throws Exception {
+            @PathParam("CodingSchemeDesignator") String designator) {
         return reject(studyUID, seriesUID, objectUID, codeValue, designator);
     }
 
@@ -158,69 +158,85 @@ public class RejectRS {
         return s != null ? Integer.parseInt(s) : defval;
     }
 
-    private Response reject(String studyUID, String seriesUID, String objectUID,String codeValue, String designator)
-            throws Exception {
-        LOG.info("Process POST {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        ApplicationEntity localAE = getApplicationEntity();
-        ArchiveDeviceExtension arcDev = localAE.getDevice().getDeviceExtension(ArchiveDeviceExtension.class);
-        Code code = new Code(codeValue, designator, null, "?");
-        RejectionNote rjNote = arcDev.getRejectionNote(code);
-        if (rjNote == null)
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
-
-        List<Attributes> matches = null;
+    private Response reject(String studyUID, String seriesUID, String objectUID,String codeValue, String designator) {
+        logRequest();
+        ApplicationEntity localAE = device.getApplicationEntity(aet, true);
+        if (localAE == null || !localAE.isInstalled())
+            return errResponse("No such Application Entity: " + aet, Response.Status.NOT_FOUND);
         try {
-            matches = findSCU.find(localAE, externalAET, priority(), QueryRetrieveLevel2.IMAGE,
-                    studyUID, seriesUID, objectUID,
-                    Tag.SOPClassUID,
-                    Tag.SOPInstanceUID,
-                    Tag.StudyDate,
-                    Tag.StudyTime,
-                    Tag.AccessionNumber,
-                    Tag.IssuerOfAccessionNumberSequence,
-                    Tag.PatientID,
-                    Tag.IssuerOfPatientID,
-                    Tag.PatientName,
-                    Tag.PatientBirthDate,
-                    Tag.PatientSex,
-                    Tag.StudyID,
-                    Tag.StudyInstanceUID,
-                    Tag.SeriesInstanceUID);
-        } catch (DicomServiceException e) {
-            return failed(e.getStatus(), e.getMessage(), null);
-        } catch (Exception e) {
-            return failed(Status.ProcessingFailure, e.getMessage(), null);
-        }
-        if (matches.isEmpty())
-            throw new WebApplicationException(Response.Status.NOT_FOUND);
+            ApplicationEntity remoteAE = storescp != null
+                    ? aeCache.findApplicationEntity(storescp)
+                    : aeCache.findApplicationEntity(externalAET);
+            ArchiveDeviceExtension arcDev = localAE.getDevice().getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+            Code code = new Code(codeValue, designator, null, "?");
+            RejectionNote rjNote = arcDev.getRejectionNote(code);
+            if (rjNote == null)
+                return errResponse("No such Rejection Note : " + code, Response.Status.NOT_FOUND);
 
-        KOSBuilder builder = new KOSBuilder(rjNote.getRejectionNoteCode(), 999, 1);
-
-        for (Attributes match : matches)
-            builder.addInstanceRef(match);
-
-        Attributes kos = builder.getAttributes();
-        try {
-            String remoteAET = storescp != null ? storescp : externalAET;
-            ApplicationEntity remoteAE = aeCache.get(remoteAET);
-            Attributes cmd = storeSCU.store(localAE, remoteAE, priority(), kos);
-            int status = cmd.getInt(Tag.Status, -1);
-            String errorComment = cmd.getString(Tag.ErrorComment);
-            boolean studyDeleted = seriesUID == null;
-            rejectionNoteSentEvent.fire(
-                    new RejectionNoteSent(request, localAE, remoteAE, kos, studyDeleted, status, errorComment));
-            switch (status) {
-                case Status.Success:
-                case Status.CoercionOfDataElements:
-                case Status.ElementsDiscarded:
-                case Status.DataSetDoesNotMatchSOPClassWarning:
-                    return success(status, errorComment, matches);
-                default:
-                    return failed(status, errorComment, matches);
+            List<Attributes> matches;
+            try {
+                matches = findSCU.findInstance(localAE, externalAET, priority(),
+                        studyUID, seriesUID, objectUID,
+                        Tag.SOPClassUID,
+                        Tag.SOPInstanceUID,
+                        Tag.StudyDate,
+                        Tag.StudyTime,
+                        Tag.AccessionNumber,
+                        Tag.IssuerOfAccessionNumberSequence,
+                        Tag.PatientID,
+                        Tag.IssuerOfPatientID,
+                        Tag.PatientName,
+                        Tag.PatientBirthDate,
+                        Tag.PatientSex,
+                        Tag.StudyID,
+                        Tag.StudyInstanceUID,
+                        Tag.SeriesInstanceUID);
+            } catch (DicomServiceException e) {
+                return failed(e.getStatus(), e.getMessage(), null);
+            } catch (Exception e) {
+                return failed(Status.ProcessingFailure, e.getMessage(), null);
             }
+            if (matches.isEmpty())
+                return errResponse("No matches found for rejection", Response.Status.NOT_FOUND);
+
+            KOSBuilder builder = new KOSBuilder(rjNote.getRejectionNoteCode(), 999, 1);
+
+            matches.forEach(builder::addInstanceRef);
+
+            Attributes kos = builder.getAttributes();
+            try {
+                Attributes cmd = storeSCU.store(localAE, remoteAE, priority(), kos);
+                int status = cmd.getInt(Tag.Status, -1);
+                String errorComment = cmd.getString(Tag.ErrorComment);
+                boolean studyDeleted = seriesUID == null;
+                rejectionNoteSentEvent.fire(
+                        new RejectionNoteSent(request, localAE, remoteAE, kos, studyDeleted, status, errorComment));
+                switch (status) {
+                    case Status.Success:
+                    case Status.CoercionOfDataElements:
+                    case Status.ElementsDiscarded:
+                    case Status.DataSetDoesNotMatchSOPClassWarning:
+                        return success(status, errorComment, matches);
+                    default:
+                        return failed(status, errorComment, matches);
+                }
+            } catch (Exception e) {
+                return failed(Status.ProcessingFailure, e.getMessage(), matches);
+            }
+        } catch (ConfigurationException e) {
+            return errResponse(e.getMessage(), Response.Status.NOT_FOUND);
         } catch (Exception e) {
-            return failed(Status.ProcessingFailure, e.getMessage(), matches);
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
     }
 
     private Response success(int status, String errorComment, List<Attributes> matches) {
@@ -228,8 +244,10 @@ public class RejectRS {
     }
 
     private Response failed(int status, String errorComment, List<Attributes> matches) {
+        String warning = warning(status);
+        LOG.warn("Response status : Bad Gateway. Warning : {}", warning);
         return Response.status(Response.Status.BAD_GATEWAY)
-                .header("Warning", warning(status))
+                .header("Warning", warning)
                 .entity(entity(status, errorComment, 0, matches != null ? matches.size() : 0))
                 .build();
     }
@@ -237,20 +255,17 @@ public class RejectRS {
     private String warning(int status) {
         return TagUtils.shortToHexString(status)
                 + (status == Status.ProcessingFailure
-                ? ": Error: Processing Failure"
-                : (status & Status.OutOfResources) == Status.OutOfResources
-                ? ": Refused: Out of Resources"
-                : (status & Status.DataSetDoesNotMatchSOPClassError) == Status.DataSetDoesNotMatchSOPClassError
-                ? ": Error: Data Set does not match SOP Class"
-                : (status & Status.CannotUnderstand) == Status.CannotUnderstand
-                ? ": Cannot Understand"
-                : ": Unexpected status code");
+                    ? ": Error: Processing Failure"
+                    : (status & Status.OutOfResources) == Status.OutOfResources
+                        ? ": Refused: Out of Resources"
+                        : (status & Status.DataSetDoesNotMatchSOPClassError) == Status.DataSetDoesNotMatchSOPClassError
+                            ? ": Error: Data Set does not match SOP Class"
+                            : (status & Status.CannotUnderstand) == Status.CannotUnderstand
+                                ? ": Cannot Understand" : ": Unexpected status code");
     }
 
-    private Object entity(int status, String error, int rejected, int failed) {
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    private StreamingOutput entity(int status, String error, int rejected, int failed) {
+        return out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 JsonWriter writer = new JsonWriter(gen);
                 gen.writeStartObject();
@@ -260,17 +275,24 @@ public class RejectRS {
                 writer.writeNotDef("failed", failed, 0);
                 gen.writeEnd();
                 gen.flush();
-            }
         };
     }
 
-    private ApplicationEntity getApplicationEntity() {
-        ApplicationEntity ae = device.getApplicationEntity(aet, true);
-        if (ae == null || !ae.isInstalled())
-            throw new WebApplicationException(
-                    "No such Application Entity: " + aet,
-                    Response.Status.NOT_FOUND);
-        return ae;
+    private Response errResponse(String msg, Response.Status status) {
+        return errResponseAsTextPlain("{\"errorMessage\":\"" + msg + "\"}", status);
     }
 
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
+    }
 }

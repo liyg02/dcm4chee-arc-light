@@ -48,12 +48,14 @@ import org.dcm4che3.net.hl7.UnparsedHL7Message;
 import org.dcm4chee.arc.conf.AcceptConflictingPatientID;
 import org.dcm4chee.arc.conf.AcceptMissingPatientID;
 import org.dcm4chee.arc.conf.ArchiveAEExtension;
+import org.dcm4chee.arc.conf.ExportPriorsRule;
 import org.dcm4chee.arc.entity.Series;
 import org.dcm4chee.arc.entity.Study;
 import org.dcm4chee.arc.entity.UIDMap;
+import org.dcm4chee.arc.keycloak.HttpServletRequestInfo;
 import org.dcm4chee.arc.storage.Storage;
+import org.dcm4chee.arc.storage.StorageFactory;
 
-import javax.servlet.http.HttpServletRequest;
 import java.io.Closeable;
 import java.net.Socket;
 import java.util.Map;
@@ -68,7 +70,7 @@ public interface StoreSession extends Closeable {
 
     Association getAssociation();
 
-    HttpServletRequest getHttpRequest();
+    HttpServletRequestInfo getHttpRequest();
 
     Socket getSocket();
 
@@ -82,7 +84,7 @@ public interface StoreSession extends Closeable {
 
     StoreService getStoreService();
 
-    Storage getStorage(String storageID);
+    Storage getStorage(String storageID, StorageFactory storageFactory);
 
     void putStorage(String storageID, Storage storage);
 
@@ -98,13 +100,17 @@ public interface StoreSession extends Closeable {
 
     void cacheSeries(Series series);
 
+    boolean isNotProcessed(ExportPriorsRule rule);
+
+    boolean markAsProcessed(ExportPriorsRule rule);
+
     Map<Long, UIDMap> getUIDMapCache();
 
     Map<String, String> getUIDMap();
 
     String getObjectStorageID();
 
-    void setObjectStorageID(String objectStorageID);
+    StoreSession withObjectStorageID(String objectStorageID);
 
     String getMetadataStorageID();
 
@@ -123,4 +129,8 @@ public interface StoreSession extends Closeable {
     Attributes.UpdatePolicy getStudyUpdatePolicy();
 
     void setStudyUpdatePolicy(Attributes.UpdatePolicy studyUpdatePolicy);
+
+    String getImpaxReportEndpoint();
+
+    void setImpaxReportEndpoint(String impaxReportEndpoint);
 }

@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -56,10 +56,10 @@ import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.core.StreamingOutput;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.util.Arrays;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.util.Comparator;
 
 /**
@@ -81,19 +81,20 @@ public class QueryAETs {
     @GET
     @NoCache
     @Produces("application/json")
-    public StreamingOutput query() throws Exception {
-        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        return new StreamingOutput() {
-            @Override
-            public void write(OutputStream out) throws IOException {
+    public Response query() {
+        logRequest();
+        try {
+            return Response.ok((StreamingOutput) out -> {
                 JsonGenerator gen = Json.createGenerator(out);
                 gen.writeStartArray();
                 for (ApplicationEntity ae : sortedApplicationEntities())
                     writeTo(ae, gen);
                 gen.writeEnd();
                 gen.flush();
-            }
-        };
+            }).build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
     }
 
     private void writeTo(ApplicationEntity ae, JsonGenerator gen) {
@@ -112,14 +113,38 @@ public class QueryAETs {
             writer.writeNotNullOrDef("dcmInvokeImageDisplayStudyURL",
                     arcAE.invokeImageDisplayStudyURL(), null);
             writer.writeNotEmpty("dcmAcceptedUserRole", arcAE.getAcceptedUserRoles());
+            writer.writeNotNullOrDef("dcmAllowDeletePatient", arcAE.allowDeletePatient(), null);
+            writer.writeNotNullOrDef("dcmAllowDeleteStudyPermanently", arcAE.allowDeleteStudy(), null);
         }
         gen.writeEnd();
     }
 
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
     private ApplicationEntity[] sortedApplicationEntities() {
-        ApplicationEntity[] applicationEntities = device.getApplicationEntities().toArray(
-                new ApplicationEntity[device.getApplicationEntities().size()]);
-        Arrays.sort(applicationEntities, Comparator.comparing(ApplicationEntity::getAETitle));
-        return applicationEntities;
+        return device.getApplicationEntities().stream()
+                .sorted(Comparator.comparing(ApplicationEntity::getAETitle))
+                .toArray(ApplicationEntity[]::new);
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

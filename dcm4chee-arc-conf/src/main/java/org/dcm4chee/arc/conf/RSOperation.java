@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -54,15 +54,14 @@ public enum RSOperation {
     MergePatients,
     UpdateStudy,
     DeleteStudy,
-    CopyInstances,
-    MoveInstances,
     RejectStudy,
     RejectSeries,
     RejectInstance,
+    ApplyRetentionPolicy,
     UpdateStudyExpirationDate,
     UpdateSeriesExpirationDate,
     CreateMWL,
     UpdateMWL,
     DeleteMWL,
-    LinkInstancesWithMWL
+    UpdateStudyAccessControlID
 }

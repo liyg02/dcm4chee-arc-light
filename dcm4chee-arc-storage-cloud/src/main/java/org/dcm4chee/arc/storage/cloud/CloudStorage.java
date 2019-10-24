@@ -40,9 +40,12 @@
 
 package org.dcm4chee.arc.storage.cloud;
 
+import com.google.common.hash.HashCode;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.util.AttributesFormat;
+import org.dcm4chee.arc.conf.BinaryPrefix;
 import org.dcm4chee.arc.conf.StorageDescriptor;
+import org.dcm4chee.arc.metrics.MetricsService;
 import org.dcm4chee.arc.storage.AbstractStorage;
 import org.dcm4chee.arc.storage.ReadContext;
 import org.dcm4chee.arc.storage.WriteContext;
@@ -50,11 +53,13 @@ import org.jclouds.ContextBuilder;
 import org.jclouds.blobstore.BlobStore;
 import org.jclouds.blobstore.BlobStoreContext;
 import org.jclouds.blobstore.domain.Blob;
+import org.jclouds.blobstore.domain.BlobMetadata;
 import org.jclouds.io.Payload;
 import org.jclouds.io.payloads.InputStreamPayload;
 import org.jclouds.logging.slf4j.config.SLF4JLoggingModule;
 
 import java.io.*;
+import java.nio.file.NoSuchFileException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Properties;
@@ -71,11 +76,13 @@ import java.util.concurrent.ThreadLocalRandom;
 public class CloudStorage extends AbstractStorage {
 
     private static final String DEFAULT_CONTAINER = "org.dcm4chee.arc";
-    private static final Uploader DEFAULT_UPLOADER = new Uploader() {
+    private static final Uploader STREAMING_UPLOADER = new Uploader() {
         @Override
-        public void upload(BlobStoreContext context, InputStream in, BlobStore blobStore, String container,
-                           String storagePath) throws IOException {
+        public void upload(BlobStoreContext context, InputStream in, long length,
+                           BlobStore blobStore, String container, String storagePath) {
             Payload payload = new InputStreamPayload(in);
+            if (length >= 0)
+                payload.getContentMetadata().setContentLength(length);
             Blob blob = blobStore.blobBuilder(storagePath).payload(payload).build();
             blobStore.putBlob(container, blob);
         }
@@ -84,7 +91,8 @@ public class CloudStorage extends AbstractStorage {
     private final AttributesFormat pathFormat;
     private final String container;
     private final BlobStoreContext context;
-    private final Uploader uploader;
+    private final boolean streamingUpload;
+    private final long maxPartSize;
     private int count;
 
     @Override
@@ -92,8 +100,8 @@ public class CloudStorage extends AbstractStorage {
         return new CloudWriteContext(this);
     }
 
-    protected CloudStorage(StorageDescriptor descriptor, Device device) {
-        super(descriptor);
+    protected CloudStorage(StorageDescriptor descriptor, MetricsService metricsService, Device device) {
+        super(descriptor, metricsService);
         this.device = device;
         pathFormat = new AttributesFormat(descriptor.getProperty("pathFormat", DEFAULT_PATH_FORMAT));
         container = descriptor.getProperty("container", DEFAULT_CONTAINER);
@@ -105,7 +113,8 @@ public class CloudStorage extends AbstractStorage {
             endpoint = api.substring(endApi + 1);
             api = api.substring(0, endApi);
         }
-        this.uploader = api.endsWith("s3") ? new S3Uploader() : DEFAULT_UPLOADER;
+        this.streamingUpload = Boolean.parseBoolean(descriptor.getProperty("streamingUpload", null));
+        this.maxPartSize = BinaryPrefix.parse(descriptor.getProperty("maxPartSize", "5G"));
         ContextBuilder ctxBuilder = ContextBuilder.newBuilder(api);
         String identity = descriptor.getProperty("identity", null);
         if (identity != null)
@@ -126,6 +135,7 @@ public class CloudStorage extends AbstractStorage {
     @Override
     protected OutputStream openOutputStreamA(final WriteContext ctx) throws IOException {
         final PipedInputStream in = new PipedInputStream();
+        PipedOutputStream out = new PipedOutputStream(in);
         FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
             @Override
             public Void call() throws Exception {
@@ -139,7 +149,12 @@ public class CloudStorage extends AbstractStorage {
         });
         ((CloudWriteContext) ctx).setUploadTask(task);
         device.execute(task);
-        return new PipedOutputStream(in);
+        return out;
+    }
+
+    @Override
+    protected void copyA(InputStream in, WriteContext ctx) throws IOException {
+        upload(ctx, in);
     }
 
     @Override
@@ -158,6 +173,15 @@ public class CloudStorage extends AbstractStorage {
     }
 
     private void upload(WriteContext ctx, InputStream in) throws IOException {
+        if (isSynchronizeUpload())
+            synchronized (descriptor) {
+                upload(in, ctx);
+            }
+        else
+            upload(in, ctx);
+    }
+
+    private void upload(InputStream in, WriteContext ctx) throws IOException {
         BlobStore blobStore = context.getBlobStore();
         String storagePath = pathFormat.format(ctx.getAttributes());
         if (count++ == 0 && !blobStore.containerExists(container))
@@ -167,8 +191,15 @@ public class CloudStorage extends AbstractStorage {
                 storagePath = storagePath.substring(0, storagePath.lastIndexOf('/') + 1)
                         .concat(String.format("%08X", ThreadLocalRandom.current().nextInt()));
         }
-        uploader.upload(context, in, blobStore, container, storagePath);
+        long length = ctx.getContentLength();
+        Uploader uploader = streamingUpload || length >= 0 && length <= maxPartSize
+                ? STREAMING_UPLOADER : new S3Uploader();
+        uploader.upload(context, in, length, blobStore, container, storagePath);
         ctx.setStoragePath(storagePath);
+    }
+
+    private boolean isSynchronizeUpload() {
+        return "true".equals(descriptor.getProperty("synchronizeUpload", "false"));
     }
 
     @Override
@@ -181,7 +212,34 @@ public class CloudStorage extends AbstractStorage {
     }
 
     @Override
-    public void deleteObject(String storagePath) throws IOException {
+    public boolean exists(ReadContext ctx) {
+        BlobStore blobStore = context.getBlobStore();
+        return blobStore.blobExists(container, ctx.getStoragePath());
+    }
+
+    @Override
+    public long getContentLength(ReadContext ctx) throws IOException {
+        BlobStore blobStore = context.getBlobStore();
+        BlobMetadata blobMetadata = blobStore.blobMetadata(container, ctx.getStoragePath());
+        if (blobMetadata == null)
+            throw objectNotFound(ctx.getStoragePath());
+
+        return blobMetadata.getContentMetadata().getContentLength();
+    }
+
+    @Override
+    public byte[] getContentMD5(ReadContext ctx) throws IOException {
+        BlobStore blobStore = context.getBlobStore();
+        BlobMetadata blobMetadata = blobStore.blobMetadata(container, ctx.getStoragePath());
+        if (blobMetadata == null)
+            throw objectNotFound(ctx.getStoragePath());
+
+        HashCode hashCode = blobMetadata.getContentMetadata().getContentMD5AsHashCode();
+        return hashCode != null ? hashCode.asBytes() : null;
+    }
+
+    @Override
+    protected void deleteObjectA(String storagePath) throws IOException {
         BlobStore blobStore = context.getBlobStore();
         if (!blobStore.blobExists(container, storagePath))
             throw objectNotFound(storagePath);
@@ -189,10 +247,9 @@ public class CloudStorage extends AbstractStorage {
     }
 
     private IOException objectNotFound(String storagePath) {
-        return new IOException("No Object[" + storagePath
+        return new NoSuchFileException("No Object[" + storagePath
                 + "] in Container[" + container
-                + "] on Storage[" + getStorageDescriptor().getStorageURI()
-                + "]");
+                + "] on " + getStorageDescriptor());
     }
 
     @Override

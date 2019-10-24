@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -38,21 +38,30 @@
 
 package org.dcm4chee.arc.conf.rs;
 
+import org.dcm4che3.conf.json.JsonWriter;
 import org.dcm4che3.net.Device;
+import org.dcm4chee.arc.conf.ArchiveDeviceExtension;
 import org.jboss.resteasy.annotations.cache.NoCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.enterprise.context.RequestScoped;
 import javax.inject.Inject;
+import javax.json.Json;
+import javax.json.stream.JsonGenerator;
 import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Context;
+import javax.ws.rs.core.Response;
+import javax.ws.rs.core.StreamingOutput;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Jun 2016
  */
 @Path("devicename")
@@ -69,8 +78,49 @@ public class QueryDeviceName {
     @GET
     @NoCache
     @Produces("application/json")
-    public String devicename() {
-        LOG.info("Process GET {} from {}@{}", request.getRequestURI(), request.getRemoteUser(), request.getRemoteHost());
-        return "{\"dicomDeviceName\":\"" + device.getDeviceName() + "\"}";
+    public Response devicename() {
+        logRequest();
+        try {
+            ArchiveDeviceExtension arcDev = device.getDeviceExtensionNotNull(ArchiveDeviceExtension.class);
+            return Response.ok((StreamingOutput) out -> {
+                JsonGenerator gen = Json.createGenerator(out);
+                JsonWriter writer = new JsonWriter(gen);
+                gen.writeStartObject();
+                gen.write("dicomDeviceName", device.getDeviceName());
+                gen.write("super-user-role", System.getProperty("super-user-role", "admin"));
+                if (arcDev != null) {
+                    writer.writeNotNullOrDef("xRoad", arcDev.hasXRoadProperties(), false);
+                    writer.writeNotNullOrDef("impaxReport", arcDev.hasImpaxReportProperties(), false);
+                    writer.writeNotNullOrDef("UIConfigurationDeviceName", arcDev.getUiConfigurationDeviceName(), null);
+                }
+                gen.writeEnd();
+                gen.flush();
+            }).build();
+        } catch (Exception e) {
+            return errResponseAsTextPlain(exceptionAsString(e), Response.Status.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private void logRequest() {
+        LOG.info("Process {} {}?{} from {}@{}",
+                request.getMethod(),
+                request.getRequestURI(),
+                request.getQueryString(),
+                request.getRemoteUser(),
+                request.getRemoteHost());
+    }
+
+    private Response errResponseAsTextPlain(String errorMsg, Response.Status status) {
+        LOG.warn("Response {} caused by {}", status, errorMsg);
+        return Response.status(status)
+                .entity(errorMsg)
+                .type("text/plain")
+                .build();
+    }
+
+    private String exceptionAsString(Exception e) {
+        StringWriter sw = new StringWriter();
+        e.printStackTrace(new PrintWriter(sw));
+        return sw.toString();
     }
 }

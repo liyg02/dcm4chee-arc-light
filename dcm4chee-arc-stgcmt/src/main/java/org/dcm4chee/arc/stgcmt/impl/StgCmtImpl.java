@@ -17,7 +17,7 @@
  *
  * The Initial Developer of the Original Code is
  * J4Care.
- * Portions created by the Initial Developer are Copyright (C) 2016
+ * Portions created by the Initial Developer are Copyright (C) 2016-2019
  * the Initial Developer. All Rights Reserved.
  *
  * Contributor(s):
@@ -53,10 +53,12 @@ import org.dcm4che3.net.pdu.RoleSelection;
 import org.dcm4che3.net.service.AbstractDicomService;
 import org.dcm4che3.net.service.DicomService;
 import org.dcm4che3.net.service.DicomServiceException;
+import org.dcm4che3.net.service.QueryRetrieveLevel2;
 import org.dcm4che3.util.TagUtils;
 import org.dcm4chee.arc.conf.ExporterDescriptor;
 import org.dcm4chee.arc.entity.QueueMessage;
 import org.dcm4chee.arc.entity.StgCmtResult;
+import org.dcm4chee.arc.exporter.DefaultExportContext;
 import org.dcm4chee.arc.exporter.ExportContext;
 import org.dcm4chee.arc.qmgt.Outcome;
 import org.dcm4chee.arc.qmgt.QueueManager;
@@ -139,13 +141,37 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
             throws QueueSizeLimitExceededException {
         String stgCmtSCPAETitle = descriptor.getStgCmtSCPAETitle();
         if (stgCmtSCPAETitle != null) {
-            Attributes actionInfo = createActionInfo(ctx);
-            scheduleNAction(ctx.getAETitle(), stgCmtSCPAETitle, actionInfo, ctx, descriptor.getExporterID());
+            ApplicationEntity ae = device.getApplicationEntity(ctx.getAETitle(), true);
+            Attributes actionInfo = createActionInfo(ctx, ae);
+            scheduleNAction(ae.getCallingAETitle(stgCmtSCPAETitle), stgCmtSCPAETitle, actionInfo, ctx, descriptor.getExporterID());
         }
     }
 
-    private Attributes createActionInfo(ExportContext ctx) {
-        ApplicationEntity ae = device.getApplicationEntity(ctx.getAETitle(), true);
+    @Override
+    public void scheduleStorageCommit(
+            String localAET, String remoteAET, Attributes match, String batchID, QueryRetrieveLevel2 qrLevel)
+            throws QueueSizeLimitExceededException {
+        ExportContext ctx = createExportContext(localAET, match, batchID, qrLevel);
+        ApplicationEntity ae = device.getApplicationEntity(localAET, true);
+        Attributes actionInfo = createActionInfo(ctx, ae);
+        scheduleNAction(ae.getCallingAETitle(remoteAET), remoteAET, actionInfo, ctx, null);
+    }
+
+    private ExportContext createExportContext(String localAET, Attributes match, String batchID, QueryRetrieveLevel2 qrLevel) {
+        ExportContext ctx = new DefaultExportContext(null);
+        ctx.setStudyInstanceUID(match.getString(Tag.StudyInstanceUID));
+        switch (qrLevel) {
+            case IMAGE:
+                ctx.setSopInstanceUID(match.getString(Tag.SOPInstanceUID));
+            case SERIES:
+                ctx.setSeriesInstanceUID(match.getString(Tag.SeriesInstanceUID));
+        }
+        ctx.setAETitle(localAET);
+        ctx.setBatchID(batchID);
+        return ctx;
+    }
+
+    private Attributes createActionInfo(ExportContext ctx, ApplicationEntity ae) {
         return queryService.createActionInfo(
                 ctx.getStudyInstanceUID(), ctx.getSeriesInstanceUID(), ctx.getSopInstanceUID(), ae);
     }
@@ -160,7 +186,7 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
         String localAET = as.getLocalAET();
         String remoteAET = as.getRemoteAET();
         try {
-            as.getApplicationEntity().findCompatibelConnection(aeCache.findApplicationEntity(remoteAET));
+            as.getApplicationEntity().findCompatibleConnection(aeCache.findApplicationEntity(remoteAET));
             scheduleNEventReport(localAET, remoteAET, actionInfo);
         } catch (ConfigurationNotFoundException e) {
             throw new DicomServiceException(Status.ProcessingFailure, "Unknown Calling AET: " + remoteAET);
@@ -195,9 +221,10 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
             msg.setStringProperty("RemoteAET", remoteAET);
             msg.setStringProperty("StudyInstanceUID", ctx.getStudyInstanceUID());
             msg.setStringProperty("SeriesInstanceUID", ctx.getSeriesInstanceUID());
-            msg.setStringProperty("SopInstanceUID", ctx.getSopInstanceUID());
+            msg.setStringProperty("SOPInstanceUID", ctx.getSopInstanceUID());
             msg.setStringProperty("ExporterID", exporterID);
-            queueManager.scheduleMessage(StgCmtSCU.QUEUE_NAME, msg, Message.DEFAULT_PRIORITY);
+            msg.setStringProperty("MessageID", ctx.getMessageID());
+            queueManager.scheduleMessage(StgCmtSCU.QUEUE_NAME, msg, Message.DEFAULT_PRIORITY, ctx.getBatchID(), 0L);
         } catch (JMSException e) {
             throw QueueMessage.toJMSRuntimeException(e);
         }
@@ -209,7 +236,7 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
             ObjectMessage msg = queueManager.createObjectMessage(eventInfo);
             msg.setStringProperty("LocalAET", localAET);
             msg.setStringProperty("RemoteAET", remoteAET);
-            queueManager.scheduleMessage(StgCmtSCP.QUEUE_NAME, msg, Message.DEFAULT_PRIORITY);
+            queueManager.scheduleMessage(StgCmtSCP.QUEUE_NAME, msg, Message.DEFAULT_PRIORITY, null, 0L);
         } catch (JMSException e) {
             throw QueueMessage.toJMSRuntimeException(e);
         }
@@ -217,7 +244,25 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
 
     @Override
     public Outcome sendNAction(String localAET, String remoteAET, String studyInstanceUID, String seriesInstanceUID,
-                               String sopInstanceUID, String exporterID, Attributes actionInfo) throws Exception  {
+            String sopInstanceUID, String exporterID, String messageID, String batchID, Attributes actionInfo)
+            throws Exception  {
+            DimseRSP dimseRSP = sendNActionRQ(localAET, remoteAET, studyInstanceUID, seriesInstanceUID, sopInstanceUID,
+                    exporterID, messageID, batchID, actionInfo);
+            Attributes cmd = dimseRSP.getCommand();
+            int status = cmd.getInt(Tag.Status, -1);
+            if (status != Status.Success) {
+                return new Outcome(QueueMessage.Status.WARNING,
+                        "Request Storage Commitment from AE: " + remoteAET
+                                + " failed with status: " + TagUtils.shortToHexString(status)
+                                + "H, error comment: " + cmd.getString(Tag.ErrorComment));
+            }
+            return new Outcome(QueueMessage.Status.COMPLETED, "Request Storage Commitment from AE: " + remoteAET);
+    }
+
+    @Override
+    public DimseRSP sendNActionRQ(String localAET, String remoteAET, String studyInstanceUID, String seriesInstanceUID,
+            String sopInstanceUID, String exporterID, String messageID, String batchID, Attributes actionInfo)
+            throws Exception  {
         ApplicationEntity localAE = device.getApplicationEntity(localAET, true);
         ApplicationEntity remoteAE = aeCache.findApplicationEntity(remoteAET);
         AAssociateRQ aarq = mkAAssociateRQ(localAE, localAET, TransferCapability.Role.SCU);
@@ -229,6 +274,8 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
             result.setSeriesInstanceUID(seriesInstanceUID);
             result.setSopInstanceUID(sopInstanceUID);
             result.setExporterID(exporterID);
+            result.setMessageID(messageID);
+            result.setBatchID(batchID);
             result.setDeviceName(device.getDeviceName());
             ejb.persistStgCmtResult(result);
             DimseRSP dimseRSP = as.naction(
@@ -236,16 +283,9 @@ class StgCmtImpl extends AbstractDicomService implements StgCmtSCP, StgCmtSCU {
                     UID.StorageCommitmentPushModelSOPInstance,
                     1, actionInfo, null);
             dimseRSP.next();
-            Attributes cmd = dimseRSP.getCommand();
-            int status = cmd.getInt(Tag.Status, -1);
-            if (status != Status.Success) {
+            if (dimseRSP.getCommand().getInt(Tag.Status, -1) != Status.Success)
                 ejb.deleteStgCmt(actionInfo.getString(Tag.TransactionUID));
-                return new Outcome(QueueMessage.Status.WARNING,
-                        "Request Storage Commitment Request from AE: " + remoteAET
-                                + " failed with status: " + TagUtils.shortToHexString(status)
-                                + "H, error comment: " + cmd.getString(Tag.ErrorComment));
-            }
-            return new Outcome(QueueMessage.Status.COMPLETED, "Request Storage Commitment Request from AE: " + remoteAET);
+            return dimseRSP;
         } catch (Exception e) {
             ejb.deleteStgCmt(actionInfo.getString(Tag.TransactionUID));
             throw e;

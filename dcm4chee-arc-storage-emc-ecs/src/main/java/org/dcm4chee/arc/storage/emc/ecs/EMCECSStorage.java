@@ -43,19 +43,24 @@ package org.dcm4chee.arc.storage.emc.ecs;
 import com.emc.object.s3.S3Client;
 import com.emc.object.s3.S3Config;
 import com.emc.object.s3.S3Exception;
+import com.emc.object.s3.S3ObjectMetadata;
 import com.emc.object.s3.bean.GetObjectResult;
 import com.emc.object.s3.jersey.S3JerseyClient;
+import com.emc.object.s3.request.PutObjectRequest;
 import com.sun.jersey.client.urlconnection.URLConnectionClientHandler;
 import org.dcm4che3.net.Device;
 import org.dcm4che3.util.AttributesFormat;
+import org.dcm4che3.util.TagUtils;
+import org.dcm4chee.arc.conf.BinaryPrefix;
 import org.dcm4chee.arc.conf.StorageDescriptor;
+import org.dcm4chee.arc.metrics.MetricsService;
 import org.dcm4chee.arc.storage.AbstractStorage;
 import org.dcm4chee.arc.storage.ReadContext;
 import org.dcm4chee.arc.storage.WriteContext;
 
 import java.io.*;
 import java.net.URI;
-import java.util.concurrent.Callable;
+import java.nio.file.NoSuchFileException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.ThreadLocalRandom;
@@ -66,14 +71,16 @@ import java.util.concurrent.ThreadLocalRandom;
  */
 public class EMCECSStorage extends AbstractStorage {
 
-    public static final String PROPERTY_STREAMING = "emc-ecs-s3.streaming";
     public static final String PROPERTY_URL_CONNECTION_CLIENT_HANDLER = "emc-ecs-s3.URLConnectionClientHandler";
 
     private static final String DEFAULT_CONTAINER = "org.dcm4chee.arc";
     private static final Uploader STREAMING_UPLOADER = new Uploader() {
         @Override
-        public void upload(S3Client s3, InputStream in, String container,  String storagePath) throws IOException {
-            s3.putObject(container, storagePath, in, null);
+        public void upload(S3Client s3, InputStream in, long length, String container, String storagePath) {
+            PutObjectRequest payload = new PutObjectRequest(container, storagePath, this);
+            if (length >= 0)
+                payload.withObjectMetadata(new S3ObjectMetadata().withContentLength(length));
+            s3.putObject(payload);
         }
     };
 
@@ -81,11 +88,12 @@ public class EMCECSStorage extends AbstractStorage {
     private final AttributesFormat pathFormat;
     private final String container;
     private final S3Client s3;
-    private final Uploader uploader;
+    private final boolean streamingUpload;
+    private final long maxPartSize;
     private int count;
 
-    public EMCECSStorage(StorageDescriptor descriptor, Device device) {
-        super(descriptor);
+    public EMCECSStorage(StorageDescriptor descriptor, MetricsService metricsService, Device device) {
+        super(descriptor, metricsService);
         this.device = device;
         pathFormat = new AttributesFormat(descriptor.getProperty("pathFormat", DEFAULT_PATH_FORMAT));
         container = descriptor.getProperty("container", DEFAULT_CONTAINER);
@@ -95,9 +103,8 @@ public class EMCECSStorage extends AbstractStorage {
         String identity = descriptor.getProperty("identity", null);
         if (identity != null)
             config.withIdentity(identity).withSecretKey(descriptor.getProperty("credential", null));
-        this.uploader = Boolean.parseBoolean(descriptor.getProperty(PROPERTY_STREAMING, null))
-                ? STREAMING_UPLOADER
-                : new S3Uploader();
+        this.streamingUpload = Boolean.parseBoolean(descriptor.getProperty("streamingUpload", null));
+        this.maxPartSize = BinaryPrefix.parse(descriptor.getProperty("maxPartSize", "5G"));
         s3 = new S3JerseyClient(config,
                 Boolean.parseBoolean(descriptor.getProperty(PROPERTY_URL_CONNECTION_CLIENT_HANDLER, null))
                         ? new URLConnectionClientHandler()
@@ -110,22 +117,31 @@ public class EMCECSStorage extends AbstractStorage {
     }
 
     @Override
+    public boolean exists(ReadContext ctx) {
+        return exists(ctx.getStoragePath());
+    }
+
+    @Override
+    public long getContentLength(ReadContext ctx) throws IOException {
+        return getObjectMetadata(ctx.getStoragePath()).getContentLength();
+    }
+
+    @Override
+    public byte[] getContentMD5(ReadContext ctx) throws IOException {
+        String contentMd5 = getObjectMetadata(ctx.getStoragePath()).getContentMd5();
+        return contentMd5 != null ? TagUtils.fromHexString(contentMd5) : null;
+    }
+
+    @Override
     protected OutputStream openOutputStreamA(final WriteContext ctx) throws IOException {
         final PipedInputStream in = new PipedInputStream();
-        FutureTask<Void> task = new FutureTask<>(new Callable<Void>() {
-            @Override
-            public Void call() throws Exception {
-                try {
-                    upload(ctx, in);
-                } finally {
-                    in.close();
-                }
-                return null;
-            }
-        });
-        ((EMCECSWriteContext) ctx).setUploadTask(task);
-        device.execute(task);
+        copy(in, ctx);
         return new PipedOutputStream(in);
+    }
+
+    @Override
+    protected void copyA(InputStream in, WriteContext ctx) throws IOException {
+        upload(ctx, in);
     }
 
     @Override
@@ -147,21 +163,35 @@ public class EMCECSStorage extends AbstractStorage {
         String storagePath = pathFormat.format(ctx.getAttributes());
         if (count++ == 0 && !s3.bucketExists(container))
             s3.createBucket(container);
-        else while (exits(storagePath)) {
+        else while (exists(storagePath)) {
             storagePath = storagePath.substring(0, storagePath.lastIndexOf('/') + 1)
                     .concat(String.format("%08X", ThreadLocalRandom.current().nextInt()));
         }
-        uploader.upload(s3, in, container, storagePath);
+        long length = ctx.getContentLength();
+        Uploader uploader = streamingUpload || length >= 0 && length <= maxPartSize
+                ? STREAMING_UPLOADER : new S3Uploader();
+        uploader.upload(s3, in, length, container, storagePath);
         ctx.setStoragePath(storagePath);
     }
 
-    private boolean exits(String storagePath) {
+    private boolean exists(String storagePath) {
         try {
-            s3.getObjectMetadata(container, storagePath);
-            return true;
+            return s3.getObjectMetadata(container, storagePath) != null;
         } catch (S3Exception e) {
         }
         return false;
+    }
+
+    private S3ObjectMetadata getObjectMetadata(String storagePath) throws IOException {
+        try {
+            S3ObjectMetadata metadata = s3.getObjectMetadata(container, storagePath);
+            if (metadata == null)
+                throw objectNotFound(storagePath);
+
+            return metadata;
+        } catch (S3Exception e) {
+            throw failedToAccess(storagePath, e);
+        }
     }
 
     @Override
@@ -174,14 +204,20 @@ public class EMCECSStorage extends AbstractStorage {
     }
 
     private IOException objectNotFound(String storagePath) {
-        return new IOException("No Object[" + storagePath
+        return new NoSuchFileException("No Object[" + storagePath
                 + "] in Container[" + container
-                + "] on Storage[" + getStorageDescriptor().getStorageURI()
-                + "]");
+                + "] on " + getStorageDescriptor());
+    }
+
+    private IOException failedToAccess(String storagePath, S3Exception e) {
+        return new IOException("Failed to access Object[" + storagePath
+                + "] in Container[" + container
+                + "] on " + getStorageDescriptor(),
+                e);
     }
 
     @Override
-    public void deleteObject(String storagePath) throws IOException {
+    protected void deleteObjectA(String storagePath) throws IOException {
         s3.deleteObject(container, storagePath);
     }
 

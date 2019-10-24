@@ -7,7 +7,7 @@
                 <li role="presentation" [ngClass]="{'active':activetab==='createdevice'}" (click)="changeTabAERegister('createdevice')"><a>Create new device</a></li>
                 <li role="presentation" [ngClass]="{'active':activetab==='selectdevice'}" (click)="changeTabAERegister('selectdevice')"><a>Select existing device</a></li>
             </ul>
-            <div md-dialog-content>
+            <div mat-dialog-content>
                 <div class="createdevice tabcontain">
                     <div class="tab_body" [hidden]="!(activetab === 'createdevice')">
                         <h4 (click)="showdevice=!showdevice;showconn=false">New Device <span *ngIf="newAetModel.dicomDeviceName && !showdevice"> <b>{{newAetModel.dicomDeviceName}}</b></span></h4>
@@ -21,6 +21,59 @@
                                 <label class="title">Device Description</label>
                                 <textarea [(ngModel)]="newAetModel.dicomDescription"></textarea>
                                 <span class="description">Unconstrained text description of the device</span>
+                            </div>
+                            <div class="inputblock">
+                                <label class="title">Station Name</label>
+                                <input type="text" [(ngModel)]="newAetModel.dicomStationName">
+                                <span class="description">Should be the same as the value of Station Name (0008,1010) in SOP instances created by this device</span>
+                            </div>
+                            <div class="dynamicform">
+                                <div class="title">
+                                    <label>Institution Name</label>
+                                </div>
+                                <div class="form_content arrayelement">
+                                    <div class="inputblock array_parent">
+                                        <div class="array_single" *ngFor="let el of newAetModel.dicomInstitutionName;let i = index;trackBy:trackByFn">
+                                            <input type="text" [(ngModel)]="newAetModel.dicomInstitutionName[i]"><span class="delete" (click)="removeElemnt(newAetModel.dicomInstitutionName,i)"><i class="material-icons">clear</i></span>
+                                        </div>
+                                        <div class="add" (click)="addArrayElement(newAetModel, 'dicomInstitutionName')"><i class="material-icons">add</i> <span>Add</span></div>
+                                    </div>
+                                </div>
+                                <div class="description_parent">
+                                    <span class="description">Should be the same as the value of Institution Name (0008,0080) in SOP Instances created by this device</span>
+                                </div>
+                            </div>
+                            <div class="dynamicform">
+                                <div class="title">
+                                    <label>Institution Department Name</label>
+                                </div>
+                                <div class="form_content arrayelement">
+                                    <div class="inputblock array_parent">
+                                        <div class="array_single" *ngFor="let el of newAetModel.dicomInstitutionDepartmentName;let i = index;trackBy:trackByFn">
+                                            <input type="text" [(ngModel)]="newAetModel.dicomInstitutionDepartmentName[i]"><span class="delete" (click)="removeElemnt(newAetModel.dicomInstitutionDepartmentName,i)"><i class="material-icons">clear</i></span>
+                                        </div>
+                                        <div class="add" (click)="addArrayElement(newAetModel, 'dicomInstitutionDepartmentName')"><i class="material-icons">add</i> <span>Add</span></div>
+                                    </div>
+                                </div>
+                                <div class="description_parent">
+                                    <span class="description">Should be the same as the value of Institutional Department Name (0008,1040) in SOP Instances created by this device</span>
+                                </div>
+                            </div>
+                            <div class="dynamicform">
+                                <div class="title">
+                                    <label>Primary Device Type</label>
+                                </div>
+                                <div class="form_content arrayelement">
+                                    <div class="inputblock array_parent">
+                                        <div class="array_single" *ngFor="let el of newAetModel.dicomPrimaryDeviceType;let i = index;trackBy:trackByFn">
+                                            <input type="text" [(ngModel)]="newAetModel.dicomPrimaryDeviceType[i]"><span class="delete" (click)="removeElemnt(newAetModel.dicomPrimaryDeviceType,i)"><i class="material-icons">clear</i></span>
+                                        </div>
+                                        <div class="add" (click)="addArrayElement(newAetModel, 'dicomPrimaryDeviceType')"><i class="material-icons">add</i> <span>Add</span></div>
+                                    </div>
+                                </div>
+                                <div class="description_parent">
+                                    <span class="description">Represents the kind of device and is most applicable for acquisition modalities</span>
+                                </div>
                             </div>
                             <div class="inputblock">
                                 <label class="title">Installed</label>
@@ -141,13 +194,82 @@
                                 <textarea name="dicomDescription" [(ngModel)]="newAetModel.dicomNetworkAE[0].dicomDescription"></textarea>
                                 <span class="description">Unconstrained text description of the application entity</span>
                             </div>
+                            <div class="dynamicform">
+                                <div class="title">
+                                    <label>Application Cluster</label>
+                                </div>
+                                <div class="form_content arrayelement">
+                                    <div class="inputblock array_parent">
+                                        <div class="array_single" *ngFor="let el of newAetModel.dicomNetworkAE[0].dicomApplicationCluster;let i = index;trackBy:trackByFn">
+                                            <input type="text" [(ngModel)]="newAetModel.dicomNetworkAE[0].dicomApplicationCluster[i]"><span class="delete" (click)="removeElemnt(newAetModel.dicomNetworkAE[0].dicomApplicationCluster,i)"><i class="material-icons">clear</i></span>
+                                        </div>
+                                        <div class="add" (click)="addArrayElement(newAetModel.dicomNetworkAE[0], 'dicomApplicationCluster')"><i class="material-icons">add</i> <span>Add</span></div>
+                                    </div>
+                                </div>
+                                <div class="description_parent">
+                                    <span class="description">Locally defined names for a subset of related applications</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tab_body" [hidden]="!(activetab === 'createdevice')">
+                        <h4 (click)="showAetList=true;showae=false;showselectdevice=false;showconnselecteddevice=false;showconn=false;showdevice=false">Set the new Application Entity as 'Accepted Calling AE Title' to following AETs:</h4>
+                        <div class="content" *ngIf="showAetList">
+                            <div class="inputblock">
+                                <label class="title">AE Title</label>
+                                <div class="input_part">
+<!--                                    <j4care-select [(model)]="selectedForAcceptedCallingAET" [placeholder]="'Select AET'" [multiSelectMode]="true" [maxSelectedValueShown]="1" [showSearchField]="true">
+                                        <j4care-option [value]="''" [title]="'Clear selection'">Clear</j4care-option>
+                                        <j4care-option *ngFor="let el of configuredAetList" [value]="el.value" [title]="el.text">{{el.text}}</j4care-option>
+                                    </j4care-select>-->
+                                    <dcm-drop-down
+                                            [(model)]="selectedForAcceptedCallingAET"
+                                            [placeholder]="'Select AET'"
+                                            [maxSelectedValueShown]="1"
+                                            [options]="configuredAetList"
+                                            [showSearchField]="true"
+                                            [multiSelectMode]="true"
+                                            [showStar]="true"
+                                    ></dcm-drop-down>
+                                </div>
+                                <span class="description">Already available AETs</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="test">
+                        <h4 (click)="showTestBlock=!showTestBlock">Test Connection</h4>
+                        <div class="content" *ngIf="showTestBlock && newAetModel.dicomNetworkAE[0].dicomAETitle && newAetModel.dicomNetworkConnection[0].dicomHostname && newAetModel.dicomNetworkConnection[0].dicomPort">
+                            <div class="block" *ngIf="dicomConnectionns.length > 1">
+                                <div class="label_part">
+                                    Select one of the DICOM connections:
+                                </div>
+                                <div class="input_part">
+                                    <mat-select [(ngModel)]="selectedDicomConnection">
+                                        <mat-option value="">*</mat-option>
+                                        <mat-option *ngFor="let connection of dicomConnectionns" [value]="connection">{{connection.cn}}({{connection.dicomHostname}}:{{connection.dicomPort}})</mat-option>
+                                    </mat-select>
+                                </div>
+                            </div>
+                            <div class="block">
+                                <div class="label_part">
+                                    Calling AET:
+                                </div>
+                                <div class="input_part">
+                                    <mat-select [(ngModel)]="selectedCallingAet">
+                                        <mat-option *ngFor="let obj of aes" [value]="obj.dicomAETitle">{{obj.dicomAETitle}}</mat-option>
+                                    </mat-select>
+                                </div>
+                                <div class="test_button">
+                                    <button (click)="testConnection()" title="Verify AET, host and port before saving" [disabled]="!selectedCallingAet">TEST</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
         <div class="dialogbuttons">
-            <button class="save" type="button" (click)="dialogRef.close({device:selctedDeviceObject,newaetmodel:newAetModel,mode:activetab})" [disabled]="!validAeForm()">APPLY</button>
+            <button class="save" type="button" (click)="dialogRef.close({device:selctedDeviceObject,newaetmodel:newAetModel,mode:activetab,selectedForAcceptedCallingAET:selectedForAcceptedCallingAET})" [disabled]="!validAeForm()">APPLY</button>
             <button class="cancle" type="button" (click)="dialogRef.close(null)">CANCEL</button>
         </div>
     </div>

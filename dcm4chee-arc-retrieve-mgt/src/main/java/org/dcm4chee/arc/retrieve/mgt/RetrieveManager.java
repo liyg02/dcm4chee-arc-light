@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -40,40 +40,52 @@ package org.dcm4chee.arc.retrieve.mgt;
 
 import org.dcm4chee.arc.entity.QueueMessage;
 import org.dcm4chee.arc.entity.RetrieveTask;
-import org.dcm4chee.arc.qmgt.IllegalTaskStateException;
-import org.dcm4chee.arc.qmgt.Outcome;
-import org.dcm4chee.arc.qmgt.QueueSizeLimitExceededException;
+import org.dcm4chee.arc.event.QueueMessageEvent;
+import org.dcm4chee.arc.qmgt.*;
+import org.dcm4chee.arc.query.util.TaskQueryParam;
 import org.dcm4chee.arc.retrieve.ExternalRetrieveContext;
 
+import javax.persistence.Tuple;
 import java.util.Date;
+import java.util.Iterator;
 import java.util.List;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since Oct 2017
  */
 public interface RetrieveManager {
-    String QUEUE_NAME = "CMoveSCU";
-    String JNDI_NAME = "jms/queue/CMoveSCU";
-
     Outcome cmove(int priority, ExternalRetrieveContext ctx, QueueMessage queueMessage) throws Exception;
 
-    void scheduleRetrieveTask(int priority, ExternalRetrieveContext ctx) throws QueueSizeLimitExceededException;
+    int createRetrieveTask(ExternalRetrieveContext ctx);
 
-    List<RetrieveTask> search(
-            String deviceName,
-            String localAET,
-            String remoteAET,
-            String destinationAET,
-            String studyUID,
-            Date updatedBefore,
-            QueueMessage.Status status,
-            int offset,
-            int limit);
+    int scheduleRetrieveTask(int priority, ExternalRetrieveContext ctx, Date notRetrievedAfter,
+                             long delay) throws QueueSizeLimitExceededException;
 
-    boolean deleteRetrieveTask(Long pk);
+    boolean deleteRetrieveTask(Long pk, QueueMessageEvent queueEvent);
 
-    boolean cancelProcessing(Long pk) throws IllegalTaskStateException;
+    boolean cancelRetrieveTask(Long pk, QueueMessageEvent queueEvent) throws IllegalTaskStateException;
 
-    boolean rescheduleRetrieveTask(Long pk) throws IllegalTaskStateException;
+    long cancelRetrieveTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam retrieveTaskQueryParam);
+
+    void rescheduleRetrieveTask(Long pk, String newQueueName, QueueMessageEvent queueEvent);
+
+    int deleteTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam retrieveTaskQueryParam, int deleteTasksFetchSize);
+
+    List<RetrieveBatch> listRetrieveBatches(
+            TaskQueryParam queueBatchQueryParam, TaskQueryParam retrieveBatchQueryParam, int offset, int limit);
+
+    List<String> listDistinctDeviceNames(TaskQueryParam retrieveTaskQueryParam);
+
+    List<Long> listRetrieveTaskPks(TaskQueryParam queueTaskQueryParam, TaskQueryParam retrieveTaskQueryParam, int limit);
+
+    List<Tuple> listRetrieveTaskPkAndLocalAETs(TaskQueryParam queueTaskQueryParam, TaskQueryParam retrieveTaskQueryParam, int limit);
+
+    long countTasks(TaskQueryParam queueTaskQueryParam, TaskQueryParam retrieveTaskQueryParam);
+
+    Iterator<RetrieveTask> listRetrieveTasks(
+            TaskQueryParam queueTaskQueryParam, TaskQueryParam retrieveTaskQueryParam, int offset, int limit);
+
+    Tuple findDeviceNameAndLocalAETByPk(Long pk);
 }

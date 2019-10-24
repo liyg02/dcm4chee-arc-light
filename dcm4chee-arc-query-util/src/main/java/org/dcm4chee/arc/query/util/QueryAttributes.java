@@ -16,7 +16,7 @@
  *
  *  The Initial Developer of the Original Code is
  *  J4Care.
- *  Portions created by the Initial Developer are Copyright (C) 2015-2017
+ *  Portions created by the Initial Developer are Copyright (C) 2015-2019
  *  the Initial Developer. All Rights Reserved.
  *
  *  Contributor(s):
@@ -38,20 +38,29 @@
 
 package org.dcm4chee.arc.query.util;
 
-import com.querydsl.core.types.Order;
 import org.dcm4che3.data.Attributes;
 import org.dcm4che3.data.ElementDictionary;
 import org.dcm4che3.data.Tag;
 import org.dcm4che3.data.VR;
+import org.dcm4che3.dict.archive.PrivateTag;
 import org.dcm4che3.util.StringUtils;
 import org.dcm4che3.util.TagUtils;
+import org.dcm4chee.arc.conf.AttributeSet;
+import org.dcm4chee.arc.conf.AttributesBuilder;
 
+import javax.ws.rs.core.MultivaluedHashMap;
 import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.UriInfo;
-import java.util.*;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author Gunter Zeilinger <gunterze@gmail.com>
+ * @author Vrinda Nayak <vrinda.nayak@j4care.com>
  * @since May 2017
  */
 public class QueryAttributes {
@@ -62,22 +71,45 @@ public class QueryAttributes {
     private boolean includeAll;
 
     private final ArrayList<OrderByTag> orderByTags = new ArrayList<>();
-    private boolean orderByPatientName;
 
-    public QueryAttributes(UriInfo info) {
-        MultivaluedMap<String, String> map = info.getQueryParameters();
+    public QueryAttributes(UriInfo info, Map<String, AttributeSet> attributeSetMap) {
+        this(splitAndDecode(info.getQueryParameters(false)), attributeSetMap);
+    }
+
+    private static MultivaluedMap<String, String> splitAndDecode(MultivaluedMap<String, String> queryParameters) {
+        MultivaluedHashMap<String, String> map = new MultivaluedHashMap<>();
+        for (Map.Entry<String, List<String>> entry : queryParameters.entrySet())
+            for (String values : entry.getValue())
+                for (String value : StringUtils.split(values, ','))
+                    map.add(entry.getKey(), decodeURL(value));
+        return map;
+    }
+
+    private static String decodeURL(String s) {
+        try {
+            return URLDecoder.decode(s, StandardCharsets.UTF_8.name());
+        } catch (UnsupportedEncodingException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    public QueryAttributes(MultivaluedMap<String, String> map, Map<String, AttributeSet> attributeSetMap) {
         for (Map.Entry<String, List<String>> entry : map.entrySet()) {
             String key = entry.getKey();
             switch (key) {
                 case "includefield":
-                    addIncludeTag(entry.getValue());
+                    addIncludeTag(entry.getValue(), attributeSetMap);
                     break;
                 case "orderby":
                     addOrderByTag(entry.getValue());
                     break;
+                case "accept":
                 case "access_token":
+                case "charset":
                 case "comparefield":
                 case "count":
+                case "deletionlock":
+                case "workitem":
                 case "different":
                 case "missing":
                 case "offset":
@@ -85,14 +117,45 @@ public class QueryAttributes {
                 case "priority":
                 case "withoutstudies":
                 case "fuzzymatching":
-                case "returnempty":
-                case "expired":
                 case "retrievefailed":
+                case "compressionfailed":
+                case "patientVerificationStatus":
+                case "metadataUpdateFailed":
+                case "storageVerificationFailed":
+                case "storageVerificationPolicy":
+                case "storageVerificationUpdateLocationStatus":
+                case "storageVerificationStorageID":
                 case "incomplete":
-                case "SendingApplicationEntityTitleOfSeries":
-                case "StudyReceiveDateTime":
                 case "ExternalRetrieveAET":
                 case "ExternalRetrieveAET!":
+                case "only-stgcmt":
+                case "only-ian":
+                case "batchID":
+                case "dicomDeviceName":
+                case "queue":
+                case "dcmQueueName":
+                case "SplitStudyDateRange":
+                case "ForceQueryByStudyUID":
+                case "includedefaults":
+                case "ExpirationDate":
+                case "storageID":
+                case "storageClustered":
+                case "storageExported":
+                case "allOfModalitiesInStudy":
+                case "StudySizeInKB":
+                case "ExpirationState":
+                    break;
+                case "SendingApplicationEntityTitleOfSeries":
+                    keys.setString(PrivateTag.PrivateCreator, PrivateTag.SendingApplicationEntityTitleOfSeries, VR.AE,
+                            entry.getValue().toArray(StringUtils.EMPTY_STRING));
+                    break;
+                case "StudyReceiveDateTime":
+                    keys.setString(PrivateTag.PrivateCreator, PrivateTag.StudyReceiveDateTime, VR.DT,
+                            entry.getValue().toArray(StringUtils.EMPTY_STRING));
+                    break;
+                case "StudyAccessDateTime":
+                    keys.setString(PrivateTag.PrivateCreator, PrivateTag.StudyAccessDateTime, VR.DT,
+                            entry.getValue().toArray(StringUtils.EMPTY_STRING));
                     break;
                 default:
                     addQueryKey(key, entry.getValue());
@@ -101,20 +164,33 @@ public class QueryAttributes {
         }
     }
 
-    private void addIncludeTag(List<String> includefields) {
+    private void addIncludeTag(List<String> includefields, Map<String, AttributeSet> attributeSetMap) {
         for (String s : includefields) {
             if (s.equals("all")) {
                 includeAll = true;
                 break;
             }
             for (String field : StringUtils.split(s, ','))
-                try {
-                    int[] tagPath = TagUtils.parseTagPath(field);
-                    builder.setNullIfAbsent(tagPath);
-                } catch (IllegalArgumentException e2) {
-                    throw new IllegalArgumentException("includefield=" + s);
-                }
+                if (!includeAttributeSet(s, attributeSetMap))
+                    try {
+                        int[] tagPath = TagUtils.parseTagPath(field);
+                        builder.setNullIfAbsent(tagPath);
+                    } catch (IllegalArgumentException e2) {
+                        throw new IllegalArgumentException("includefield=" + s);
+                    }
         }
+    }
+
+    private boolean includeAttributeSet(String includefield, Map<String, AttributeSet> attributeSetMap) {
+        if (attributeSetMap != null) {
+            AttributeSet attributeSet = attributeSetMap.get(includefield);
+            if (attributeSet != null) {
+                for (int tag : attributeSet.getSelection())
+                    builder.setNullIfAbsent(tag);
+                return true;
+            }
+        }
+        return false;
     }
 
     public void addReturnTags(int... tags) {
@@ -128,9 +204,8 @@ public class QueryAttributes {
                 for (String field : StringUtils.split(s, ',')) {
                     boolean desc = field.charAt(0) == '-';
                     int tags[] = TagUtils.parseTagPath(desc ? field.substring(1) : field);
-                    orderByTags.add(new OrderByTag(tags[tags.length - 1], desc ? Order.DESC : Order.ASC));
-                    if (tags[0] == Tag.PatientName)
-                        orderByPatientName = true;
+                    int tag = tags[tags.length - 1];
+                    orderByTags.add(desc ? OrderByTag.desc(tag) : OrderByTag.asc(tag));
                 }
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("orderby=" + s);
@@ -142,14 +217,15 @@ public class QueryAttributes {
         return includeAll;
     }
 
+    public boolean isIncludePrivate() {
+        return includeAll || keys.contains(0x77770010);
+    }
+
     public Attributes getQueryKeys() {
         return keys;
     }
 
     public Attributes getReturnKeys(int[] includetags) {
-        if (includeAll)
-            return null;
-
         Attributes returnKeys = new Attributes(keys.size() + 4 + includetags.length);
         returnKeys.addAll(keys);
         returnKeys.setNull(Tag.SpecificCharacterSet, VR.CS);
@@ -160,23 +236,9 @@ public class QueryAttributes {
             returnKeys.setNull(tag, DICT.vrOf(tag));
         return returnKeys;
     }
-
+    
     public ArrayList<OrderByTag> getOrderByTags() {
         return orderByTags;
-    }
-
-    public boolean isOrderByPatientName() {
-        return orderByPatientName;
-    }
-
-    public static class OrderByTag {
-        public final int tag;
-        public final Order order;
-
-        private OrderByTag(int tag, Order order) {
-            this.tag = tag;
-            this.order = order;
-        }
     }
 
     private void addQueryKey(String attrPath, List<String> values) {
